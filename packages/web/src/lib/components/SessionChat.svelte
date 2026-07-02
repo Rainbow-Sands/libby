@@ -54,7 +54,7 @@
 </script>
 
 <section class="chat" aria-label="Ask about this session">
-  <h2>Ask the Chronicler</h2>
+  <h2>Ask Libby</h2>
   <p class="muted hint">
     Ask questions about what happened this session. Answers come only from the
     recording.
@@ -75,7 +75,7 @@
     {/each}
     {#if awaitingResponse}
       <div class="message assistant">
-        <p class="thinking">The Chronicler consults the record…</p>
+        <p class="thinking">Libby searches the mirrorways…</p>
       </div>
     {/if}
     {#if chat.error}

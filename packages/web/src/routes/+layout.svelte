@@ -8,7 +8,7 @@
 </script>
 
 <header>
-  <a href="/" class="brand">Rainbot</a>
+  <a href="/" class="brand">Libby</a>
   <nav>
     {#if data.user}
       <span class="who">{data.user.username}</span>

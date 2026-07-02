@@ -5,21 +5,21 @@
   let { data }: { data: PageData } = $props();
 </script>
 
-<svelte:head><title>Rainbot</title></svelte:head>
+<svelte:head><title>Libby</title></svelte:head>
 
 {#if data.campaigns.length === 0}
   <div class="panel hero">
-    <p class="eyebrow">Chronicle of the Realms</p>
+    <p class="eyebrow">Keeper of the Mirrorways</p>
     <h1>Welcome, adventurer</h1>
     <TaperedRule />
     <p class="muted">
-      Log in with Discord to consult the chronicles of your campaigns — their
-      sessions, transcripts, and recaps.
+      Log in with Discord and let Libby draw your campaigns from the mirrorways —
+      their sessions, transcripts, and recaps.
     </p>
     <p><a class="btn" href="/auth/login">Log in with Discord</a></p>
   </div>
 {:else}
-  <p class="eyebrow">Your Chronicles</p>
+  <p class="eyebrow">From the Mirrorways</p>
   <h1>Campaigns</h1>
   <TaperedRule />
   <ul class="campaigns">

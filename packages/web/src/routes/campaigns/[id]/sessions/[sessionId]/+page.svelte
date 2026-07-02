@@ -28,7 +28,7 @@
 <p><a href="/campaigns/{data.session.campaignId}">← Campaign</a></p>
 
 <div class="panel">
-  <p class="eyebrow">Session Chronicle</p>
+  <p class="eyebrow">A Reflection in the Mirrorways</p>
   <h1>{data.session.title ?? formatDate(data.session.startedAt)}</h1>
   {#if data.session.title}
     <p class="muted session-date">{formatDate(data.session.startedAt)}</p>
@@ -43,7 +43,7 @@
     />
   {:else}
     <p class="empty chat-pending">
-      The Chronicler can answer questions once this session finishes processing.
+      Libby can answer questions once this session finishes processing.
     </p>
   {/if}
 
