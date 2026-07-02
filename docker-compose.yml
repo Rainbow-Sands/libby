@@ -119,6 +119,7 @@ services:
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET}
       SESSION_SECRET: ${SESSION_SECRET}
       ORIGIN: ${ORIGIN}
+      LLAMA_URL: ${LLAMA_URL}
     ports:
       - "3000:3000"
     restart: unless-stopped

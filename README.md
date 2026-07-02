@@ -60,5 +60,6 @@ pnpm dev:web       # SvelteKit frontend
 | `MEDIA_PATH` | discord | Directory for audio clips and transcripts |
 | `TEMPORAL_URL` | discord, temporal | Temporal server address (e.g. `localhost:7233`) |
 | `WHISPER_URL` | temporal | whisper.cpp server URL |
-| `LLAMA_URL` | temporal | llama.cpp server URL |
+| `LLAMA_URL` | temporal, web | llama.cpp server URL (web uses it for the session chatbot) |
+| `LLAMA_MODEL` | web | Optional model id sent to llama.cpp's OpenAI-compatible API (defaults to `local-model`) |
 | `DATABASE_URL` | db | PostgreSQL connection string |
