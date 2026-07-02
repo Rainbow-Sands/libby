@@ -2,9 +2,7 @@
   "name": "rainbot-sands",
   "private": true,
   "scripts": {
-    "dev:discord": "pnpm --filter @rainbot/discord dev",
-    "dev:temporal": "pnpm --filter @rainbot/temporal dev",
-    "dev:web": "pnpm --filter @rainbot/web dev",
+    "dev": "pnpm --recursive dev",
     "format": "oxfmt",
     "format:fix": "oxfmt --write",
     "lint": "oxlint",
