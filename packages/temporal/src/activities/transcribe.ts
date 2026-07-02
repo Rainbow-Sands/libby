@@ -4,7 +4,7 @@ import path from "path";
 import type { SegmentRef } from "../types.ts";
 import { WHISPER_URL, LLAMA_URL } from "../env.ts";
 import { SUMMARIZE_SYSTEM, TITLE_SYSTEM, RECAP_SYSTEM } from "../prompts.ts";
-import { stripCodeFence, normalizeTitle } from "../text.ts";
+import { stripCodeFence, stripLeadingTitle, normalizeTitle } from "../text.ts";
 import { getCampaignCast } from "@rainbot/db";
 
 interface WhisperResponse {
@@ -221,7 +221,7 @@ export async function summarize(
 ): Promise<string> {
   const transcript = readFileSync(path.join(sessionDir, transcriptKey), "utf8");
 
-  const text = await llamaComplete(transcript, SUMMARIZE_SYSTEM);
+  const text = stripLeadingTitle(await llamaComplete(transcript, SUMMARIZE_SYSTEM));
 
   const outPath = path.join(sessionDir, "summary.txt");
   writeFileSync(outPath, text, "utf8");
@@ -248,7 +248,7 @@ export async function recap(
 ): Promise<string> {
   const summary = readFileSync(path.join(sessionDir, summaryKey), "utf8");
 
-  const text = await llamaComplete(summary, RECAP_SYSTEM);
+  const text = stripLeadingTitle(await llamaComplete(summary, RECAP_SYSTEM));
 
   const outPath = path.join(sessionDir, "recap.txt");
   writeFileSync(outPath, text, "utf8");

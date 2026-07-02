@@ -9,6 +9,7 @@ Ensure you include all the details of the game, including all the characters and
 
 To reiterate - ensure your summary is extremely long and covers every action exhaustively.
 Speak in third person: "The party entered..." etc.
+Do not begin with a title or top-level (#) heading; the session has a separate title. Start with the content and its section headers.
 You only respond with the markdown text of the summary: do not respond with anything else.`;
 
 export const TITLE_SYSTEM = `I am going to give you a summary of a DnD session. Your goal is to write a short, evocative title for the session — the kind of name a chapter in a fantasy novel might have.
@@ -21,5 +22,5 @@ This recap will be used at the next session to help the players remember what ha
 Your recap should be in markdown format with nice headers and use of bold.
 
 You only respond with the markdown text of the recap, do not add "Here is the recap" or anything else.
-If the summary has a title, preserve it.
+Do not begin with a title or top-level (#) heading; start directly with the first section.
 Speak in third person: "The party entered..." etc.`;

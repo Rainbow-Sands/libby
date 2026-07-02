@@ -13,7 +13,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import { SUMMARIZE_SYSTEM, TITLE_SYSTEM, RECAP_SYSTEM } from "../prompts.ts";
-import { stripCodeFence, normalizeTitle } from "../text.ts";
+import { stripCodeFence, stripLeadingTitle, normalizeTitle } from "../text.ts";
 
 const LLAMA_URL = process.env.LLAMA_URL;
 if (!LLAMA_URL) {
@@ -94,12 +94,13 @@ try {
   const overall = performance.now();
 
   const summary = await stage("Summary", SUMMARIZE_SYSTEM, transcript);
-  writeFileSync(`${base}.summary.md`, summary.content, "utf8");
+  const summaryText = stripLeadingTitle(summary.content);
+  writeFileSync(`${base}.summary.md`, summaryText, "utf8");
 
-  const recap = await stage("Recap", RECAP_SYSTEM, summary.content);
-  writeFileSync(`${base}.recap.md`, recap.content, "utf8");
+  const recap = await stage("Recap", RECAP_SYSTEM, summaryText);
+  writeFileSync(`${base}.recap.md`, stripLeadingTitle(recap.content), "utf8");
 
-  const titleResult = await stage("Title", TITLE_SYSTEM, summary.content);
+  const titleResult = await stage("Title", TITLE_SYSTEM, summaryText);
   const title = normalizeTitle(titleResult.content);
   writeFileSync(`${base}.title.txt`, title, "utf8");
 

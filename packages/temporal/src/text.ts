@@ -9,6 +9,14 @@ export function stripCodeFence(text: string): string {
   return match ? match[1].trim() : text;
 }
 
+// Models often lead a "document" with a redundant H1 title that duplicates —
+// and can contradict — the separately generated title. Drop a single leading
+// level-1 heading; section headers (##, ###) start with more than one #, so the
+// (?!#) lookahead leaves them untouched.
+export function stripLeadingTitle(text: string): string {
+  return text.replace(/^\s*#(?!#)\s+[^\n]*\n+/, "");
+}
+
 // Models sometimes wrap a title in quotes despite being told not to.
 export function normalizeTitle(text: string): string {
   return text
