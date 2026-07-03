@@ -59,7 +59,8 @@ pnpm dev:web       # SvelteKit frontend
 | `DISCORD_APPLICATION_ID` | discord | Application ID |
 | `MEDIA_PATH` | discord | Directory for audio clips and transcripts |
 | `TEMPORAL_URL` | discord, temporal | Temporal server address (e.g. `localhost:7233`) |
-| `WHISPER_URL` | temporal | whisper.cpp server URL |
-| `LLAMA_URL` | temporal, web | llama.cpp server URL (web uses it for the session chatbot) |
-| `LLAMA_MODEL` | web | Optional model id sent to llama.cpp's OpenAI-compatible API (defaults to `local-model`) |
+| `INFERENCE_TRANSCRIBE_URL` | temporal | whisper.cpp server URL (transcription) |
+| `INFERENCE_SUMMARIZE_URL` | temporal | llama.cpp server URL for the background pipeline (summary, recap, title) |
+| `INFERENCE_CHAT_URL` | web | llama.cpp server URL for the interactive session chatbot — point at a lighter/faster model for low latency |
+| `INFERENCE_CHAT_MODEL` | web | Optional model id sent to the chat server's OpenAI-compatible API (defaults to `local-model`) |
 | `DATABASE_URL` | db | PostgreSQL connection string |

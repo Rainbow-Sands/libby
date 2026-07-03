@@ -5,5 +5,5 @@ function get(name: string): string {
 }
 
 export const TEMPORAL_URL = get("TEMPORAL_URL");
-export const WHISPER_URL = get("WHISPER_URL");
-export const LLAMA_URL = get("LLAMA_URL");
+export const INFERENCE_TRANSCRIBE_URL = get("INFERENCE_TRANSCRIBE_URL");
+export const INFERENCE_SUMMARIZE_URL = get("INFERENCE_SUMMARIZE_URL");

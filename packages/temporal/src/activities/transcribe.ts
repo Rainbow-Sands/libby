@@ -2,7 +2,7 @@ import { Context, ApplicationFailure } from "@temporalio/activity";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import path from "path";
 import type { SegmentRef } from "../types.ts";
-import { WHISPER_URL, LLAMA_URL } from "../env.ts";
+import { INFERENCE_TRANSCRIBE_URL, INFERENCE_SUMMARIZE_URL } from "../env.ts";
 import { SUMMARIZE_SYSTEM, TITLE_SYSTEM, RECAP_SYSTEM } from "../prompts.ts";
 import { stripCodeFence, stripLeadingTitle, normalizeTitle } from "../text.ts";
 import { getCampaignCast } from "@rainbot/db";
@@ -27,7 +27,7 @@ export async function transcribeSegment(
   sessionDir: string,
   ref: SegmentRef,
 ): Promise<string | null> {
-  const whisperUrl = WHISPER_URL;
+  const whisperUrl = INFERENCE_TRANSCRIBE_URL;
 
   const audioPath = path.join(sessionDir, ref.audioFile);
   if (!existsSync(audioPath)) {
@@ -178,7 +178,7 @@ async function buildCastLegend(
 // ── Post-session pipeline ─────────────────────────────────────────────────────
 
 async function llamaComplete(prompt: string, system: string): Promise<string> {
-  const llamaUrl = LLAMA_URL;
+  const llamaUrl = INFERENCE_SUMMARIZE_URL;
 
   const abortController = new AbortController();
   Context.current().cancelled.catch(() => abortController.abort());

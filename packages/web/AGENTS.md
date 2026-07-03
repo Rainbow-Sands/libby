@@ -38,8 +38,9 @@ flag so assertions don't fire during `vite build`. Never import server env (or
 `+server.ts`, and `hooks.server.ts`.
 
 Required vars: `DATABASE_URL`, `DISCORD_APPLICATION_ID`, `DISCORD_CLIENT_SECRET`,
-`SESSION_SECRET`, and `ORIGIN` (SvelteKit needs it for CSRF/form-action origin
-checks in production).
+`SESSION_SECRET`, `INFERENCE_CHAT_URL` (llama.cpp server for the session chatbot;
+optional `INFERENCE_CHAT_MODEL`), and `ORIGIN` (SvelteKit needs it for
+CSRF/form-action origin checks in production).
 
 ## Notes
 

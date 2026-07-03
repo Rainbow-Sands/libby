@@ -4,8 +4,8 @@
 // ../text.ts), so what you see here is what the workflow would produce.
 //
 // Usage:
-//   LLAMA_URL=http://localhost:8080 node src/scripts/test-summarize.ts <transcript.txt>
-//   pnpm test:summarize <transcript.txt>          # loads LLAMA_URL from root .env
+//   INFERENCE_SUMMARIZE_URL=http://localhost:8080 node src/scripts/test-summarize.ts <transcript.txt>
+//   pnpm test:summarize <transcript.txt>          # loads INFERENCE_SUMMARIZE_URL from root .env
 //
 // Writes <transcript>.summary.md / .recap.md / .title.txt next to the input so
 // outputs persist for comparing prompts or models across runs.
@@ -15,9 +15,9 @@ import { performance } from "node:perf_hooks";
 import { SUMMARIZE_SYSTEM, TITLE_SYSTEM, RECAP_SYSTEM } from "../prompts.ts";
 import { stripCodeFence, stripLeadingTitle, normalizeTitle } from "../text.ts";
 
-const LLAMA_URL = process.env.LLAMA_URL;
-if (!LLAMA_URL) {
-  console.error("Missing required environment variable: LLAMA_URL");
+const INFERENCE_SUMMARIZE_URL = process.env.INFERENCE_SUMMARIZE_URL;
+if (!INFERENCE_SUMMARIZE_URL) {
+  console.error("Missing required environment variable: INFERENCE_SUMMARIZE_URL");
   process.exit(1);
 }
 
@@ -35,7 +35,7 @@ interface Completion {
 }
 
 async function complete(system: string, user: string): Promise<Completion> {
-  const res = await fetch(`${LLAMA_URL}/v1/chat/completions`, {
+  const res = await fetch(`${INFERENCE_SUMMARIZE_URL}/v1/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

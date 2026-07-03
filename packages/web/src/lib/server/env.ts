@@ -12,7 +12,7 @@ function get(name: string): string {
 export const DISCORD_APPLICATION_ID = get("DISCORD_APPLICATION_ID");
 export const DISCORD_CLIENT_SECRET = get("DISCORD_CLIENT_SECRET");
 export const SESSION_SECRET = get("SESSION_SECRET");
-export const LLAMA_URL = get("LLAMA_URL");
+export const INFERENCE_CHAT_URL = get("INFERENCE_CHAT_URL");
 // llama.cpp serves a single model, so the id is mostly cosmetic; override only if
 // your server exposes a specific model name via /v1/models.
-export const LLAMA_MODEL = env.LLAMA_MODEL ?? "local-model";
+export const INFERENCE_CHAT_MODEL = env.INFERENCE_CHAT_MODEL ?? "local-model";
