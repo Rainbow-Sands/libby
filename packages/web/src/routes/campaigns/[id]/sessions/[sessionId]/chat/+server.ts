@@ -8,15 +8,17 @@ import {
   type UIMessage,
 } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { INFERENCE_CHAT_MODEL, INFERENCE_CHAT_URL } from "$lib/server/env";
+import { INFERENCE_URL } from "$lib/server/env";
 import { buildSessionContext } from "$lib/server/chat-context";
 import type { RequestHandler } from "./$types";
+
+const CHAT_MODEL = "qwen3.5-9b";
 
 // llama.cpp exposes an OpenAI-compatible API at /v1 and requires no auth; the
 // apiKey is a placeholder so the SDK doesn't send an empty Authorization header.
 const llama = createOpenAICompatible({
   name: "llama",
-  baseURL: `${INFERENCE_CHAT_URL}/v1`,
+  baseURL: `${INFERENCE_URL}/v1`,
   apiKey: "-",
 });
 
@@ -41,7 +43,7 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
   }
 
   const result = streamText({
-    model: llama(INFERENCE_CHAT_MODEL),
+    model: llama(CHAT_MODEL),
     system: buildSessionContext(session),
     messages: await convertToModelMessages(messages),
   });

@@ -55,12 +55,12 @@ the built-in `ExecutionStatus` instead.
   Don't re-inline prompt strings in the activities.
 - Iterate on prompts/models without recording a session:
   `pnpm --filter @rainbot/temporal test:summarize <transcript.txt>`. Swapping the
-  llama model is a llama.cpp concern — everything here just talks to
-  `INFERENCE_SUMMARIZE_URL`.
+  llama model is an inference-server concern — everything here just talks to
+  `INFERENCE_URL`.
 
 ## Transcript format
 
 `aggregateTranscript` produces `transcript.txt`: a **cast legend** (`- <name>
 plays <character>`) followed by the body, timestamps dropped, consecutive
 same-speaker turns merged. `env.ts` asserts `TEMPORAL_URL`,
-`INFERENCE_TRANSCRIBE_URL`, `INFERENCE_SUMMARIZE_URL`.
+`INFERENCE_URL`.

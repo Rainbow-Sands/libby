@@ -100,8 +100,7 @@ services:
         condition: service_completed_successfully
     environment:
       TEMPORAL_URL: temporal:7233
-      INFERENCE_TRANSCRIBE_URL: ${INFERENCE_TRANSCRIBE_URL}
-      INFERENCE_SUMMARIZE_URL: ${INFERENCE_SUMMARIZE_URL}
+      INFERENCE_URL: ${INFERENCE_URL}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       MEDIA_PATH: /media
     volumes:
@@ -119,8 +118,7 @@ services:
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET}
       SESSION_SECRET: ${SESSION_SECRET}
       ORIGIN: ${ORIGIN}
-      INFERENCE_CHAT_URL: ${INFERENCE_CHAT_URL}
-      INFERENCE_CHAT_MODEL: ${INFERENCE_CHAT_MODEL:-local-model}
+      INFERENCE_URL: ${INFERENCE_URL}
     ports:
       - "3000:3000"
     restart: unless-stopped

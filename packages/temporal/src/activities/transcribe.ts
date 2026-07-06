@@ -2,7 +2,7 @@ import { Context, ApplicationFailure } from "@temporalio/activity";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import path from "path";
 import type { SegmentRef } from "../types.ts";
-import { INFERENCE_TRANSCRIBE_URL, INFERENCE_SUMMARIZE_URL } from "../env.ts";
+import { INFERENCE_URL } from "../env.ts";
 import { SUMMARIZE_SYSTEM, TITLE_SYSTEM, RECAP_SYSTEM } from "../prompts.ts";
 import { stripCodeFence, stripLeadingTitle, normalizeTitle } from "../text.ts";
 import { getCampaignCast } from "@rainbot/db";
@@ -20,6 +20,8 @@ interface TranscriptFragment {
 }
 
 const NO_SPEECH_THRESHOLD = 0.6;
+const TRANSCRIPTION_MODEL = "whisper-large-v3-turbo";
+const SUMMARIZATION_MODEL = "qwen3.6-35b-a3b";
 
 // ── Transcription ─────────────────────────────────────────────────────────────
 
@@ -27,8 +29,6 @@ export async function transcribeSegment(
   sessionDir: string,
   ref: SegmentRef,
 ): Promise<string | null> {
-  const whisperUrl = INFERENCE_TRANSCRIBE_URL;
-
   const audioPath = path.join(sessionDir, ref.audioFile);
   if (!existsSync(audioPath)) {
     throw ApplicationFailure.nonRetryable(
@@ -51,8 +51,9 @@ export async function transcribeSegment(
       path.basename(audioPath),
     );
     form.append("response_format", "verbose_json");
+    form.append("model", TRANSCRIPTION_MODEL);
 
-    const res = await fetch(`${whisperUrl}/inference`, {
+    const res = await fetch(`${INFERENCE_URL}/v1/audio/transcriptions`, {
       method: "POST",
       body: form,
       signal: abortController.signal,
@@ -178,18 +179,17 @@ async function buildCastLegend(
 // ── Post-session pipeline ─────────────────────────────────────────────────────
 
 async function llamaComplete(prompt: string, system: string): Promise<string> {
-  const llamaUrl = INFERENCE_SUMMARIZE_URL;
-
   const abortController = new AbortController();
   Context.current().cancelled.catch(() => abortController.abort());
 
   const heartbeat = setInterval(() => Context.current().heartbeat(), 10_000);
 
   try {
-    const res = await fetch(`${llamaUrl}/v1/chat/completions`, {
+    const res = await fetch(`${INFERENCE_URL}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        model: SUMMARIZATION_MODEL,
         messages: [
           { role: "system", content: system },
           { role: "user", content: prompt },
