@@ -1,5 +1,10 @@
 import { error, redirect } from "@sveltejs/kit";
-import { getSessionDetail, isCampaignMember } from "@rainbot/db";
+import {
+  getCampaignCast,
+  getSessionDetail,
+  isCampaignMember,
+  simplifyTranscript,
+} from "@rainbot/db";
 import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params, locals }) => {
@@ -13,5 +18,12 @@ export const load: PageServerLoad = async ({ params, locals }) => {
   const member = await isCampaignMember(session.campaignId, locals.user.id);
   if (!member) throw error(403, "You are not a member of this campaign.");
 
-  return { session };
+  const transcriptText = session.transcript
+    ? simplifyTranscript(
+        session.transcript,
+        await getCampaignCast(session.campaignId),
+      )
+    : null;
+
+  return { session, transcriptText };
 };

@@ -1,5 +1,5 @@
 import { error, json } from "@sveltejs/kit";
-import { getSessionDetail, isCampaignMember } from "@rainbot/db";
+import { getCampaignCast, getSessionDetail, isCampaignMember } from "@rainbot/db";
 import {
   convertToModelMessages,
   createUIMessageStreamResponse,
@@ -42,9 +42,11 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
     return json({ error: "Expected a `messages` array." }, { status: 400 });
   }
 
+  const cast = await getCampaignCast(session.campaignId);
+
   const result = streamText({
     model: llama(CHAT_MODEL),
-    system: buildSessionContext(session),
+    system: buildSessionContext(session, cast),
     messages: await convertToModelMessages(messages),
   });
 

@@ -7,8 +7,8 @@ workspace-wide conventions.
 
 - `worker.ts` — process entrypoint; starts the workers.
 - `workflows/session.ts` — the durable session workflow (orchestration only).
-- `activities/transcribe.ts` — whisper transcription, transcript aggregation +
-  cast legend, and the llama summarize/recap/title calls.
+- `activities/transcribe.ts` — whisper transcription, transcript aggregation,
+  and the llama summarize/recap/title calls.
 - `activities/persist.ts` — writes pipeline output to Postgres via `@rainbot/db`.
 - `prompts.ts` / `text.ts` — LLM system prompts and response cleanup.
 - `scripts/test-summarize.ts` — standalone summarization harness.
@@ -60,7 +60,13 @@ the built-in `ExecutionStatus` instead.
 
 ## Transcript format
 
-`aggregateTranscript` produces `transcript.txt`: a **cast legend** (`- <name>
-plays <character>`) followed by the body, timestamps dropped, consecutive
-same-speaker turns merged. `env.ts` asserts `TEMPORAL_URL`,
-`INFERENCE_URL`.
+`aggregateTranscript` no longer simplifies anything — it just collects every
+segment's raw data (timestamp, userId, username, text, whisper's own
+per-segment metadata) into `transcript.json`, sorted by timestamp, and that's
+exactly what gets persisted to `sessions.transcript` (jsonb). Simplification
+for the LLM — dropping wall-clock timing, merging consecutive same-speaker
+turns, prepending the cast legend (`- <name> plays <character>`) — happens
+**inside `summarize`**, via `simplifyTranscript` from `@rainbot/db`. Keeping the
+DB copy lossless means improvements to that formatting can be re-run over
+already-recorded sessions later without re-transcribing. `env.ts` asserts
+`TEMPORAL_URL`, `INFERENCE_URL`.

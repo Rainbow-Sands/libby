@@ -5,18 +5,16 @@ import type { SegmentRef } from "../types.ts";
 import { INFERENCE_URL } from "../env.ts";
 import { SUMMARIZE_SYSTEM, TITLE_SYSTEM, RECAP_SYSTEM } from "../prompts.ts";
 import { stripCodeFence, stripLeadingTitle, normalizeTitle } from "../text.ts";
-import { getCampaignCast } from "@rainbot/db";
+import {
+  getCampaignCast,
+  simplifyTranscript,
+  type Transcript,
+  type TranscriptSegment,
+} from "@rainbot/db";
 
 interface WhisperResponse {
   text: string;
   segments: { no_speech_prob: number }[];
-}
-
-interface TranscriptFragment {
-  timestamp: string;
-  userId: string;
-  username?: string;
-  text: string;
 }
 
 const NO_SPEECH_THRESHOLD = 0.6;
@@ -83,17 +81,21 @@ export async function transcribeSegment(
     const text = result.text.trim();
     if (!text) return null;
 
-    const fragment: TranscriptFragment = {
+    const segment: TranscriptSegment = {
+      segmentId: ref.segmentId,
+      audioFile: ref.audioFile,
       timestamp: ref.timestamp,
       userId: ref.userId,
       username: ref.username,
       text,
+      noSpeechProb,
+      whisper: result,
     };
 
     const outDir = path.join(sessionDir, "transcripts");
     mkdirSync(outDir, { recursive: true });
     const outPath = path.join(outDir, `${ref.segmentId}.json`);
-    writeFileSync(outPath, JSON.stringify(fragment, null, 2), "utf8");
+    writeFileSync(outPath, JSON.stringify(segment, null, 2), "utf8");
 
     return `transcripts/${ref.segmentId}.json`;
   } finally {
@@ -103,77 +105,28 @@ export async function transcribeSegment(
 
 // ── Aggregation ───────────────────────────────────────────────────────────────
 
+// Collects every segment's raw data into one ordered, lossless record. No
+// simplification happens here — that's deferred to summarization time so
+// improvements to LLM-facing formatting can be re-run over this same data
+// later without re-transcribing.
 export async function aggregateTranscript(
   sessionDir: string,
   keys: string[],
-  campaignId: string,
 ): Promise<string> {
-  const fragments: TranscriptFragment[] = keys
+  const segments = keys
     .map((key) => {
       const p = path.join(sessionDir, key);
       if (!existsSync(p)) return null;
-      return JSON.parse(readFileSync(p, "utf8")) as TranscriptFragment;
+      return JSON.parse(readFileSync(p, "utf8")) as TranscriptSegment;
     })
-    .filter((f): f is TranscriptFragment => f !== null)
+    .filter((s): s is TranscriptSegment => s !== null)
     .toSorted((a, b) => a.timestamp.localeCompare(b.timestamp));
 
-  // Wall-clock timing isn't relevant to summarization, so we drop it. Consecutive
-  // lines from the same speaker are merged onto one labelled line to avoid
-  // repeating the speaker on every utterance.
-  const lines: string[] = [];
-  let speaker: string | null = null;
-  let buffer: string[] = [];
-  // Track the label actually used per speaker so the cast legend below can reuse
-  // the same name (the body uses displayName, which may differ from the account).
-  const labelByUserId = new Map<string, string>();
+  const transcript: Transcript = { version: 1, segments };
 
-  const flush = () => {
-    if (speaker !== null && buffer.length > 0) {
-      lines.push(`${speaker}: ${buffer.join(" ")}`);
-    }
-  };
-
-  for (const fragment of fragments) {
-    const text = fragment.text.trim();
-    if (!text) continue;
-    const name = fragment.username ?? fragment.userId;
-    if (!labelByUserId.has(fragment.userId)) {
-      labelByUserId.set(fragment.userId, name);
-    }
-    if (name !== speaker) {
-      flush();
-      speaker = name;
-      buffer = [text];
-    } else {
-      buffer.push(text);
-    }
-  }
-  flush();
-
-  const legend = await buildCastLegend(campaignId, labelByUserId);
-  const content = legend + lines.join("\n") + "\n";
-
-  const outPath = path.join(sessionDir, "transcript.txt");
-  writeFileSync(outPath, content, "utf8");
-  return "transcript.txt";
-}
-
-// Prepends a "who plays whom" cast list so the model can attribute dialogue to
-// characters. Each player is labelled with the same name used in the transcript
-// body (falling back to their account username if they never spoke).
-async function buildCastLegend(
-  campaignId: string,
-  labelByUserId: Map<string, string>,
-): Promise<string> {
-  const cast = await getCampaignCast(campaignId);
-  if (cast.length === 0) return "";
-
-  const entries = cast.map((member) => {
-    const label = labelByUserId.get(member.userId) ?? member.username;
-    return `- ${label} plays ${member.characterName}`;
-  });
-
-  return `Cast — the players and the characters they play:\n${entries.join("\n")}\n\nTranscript:\n`;
+  const outPath = path.join(sessionDir, "transcript.json");
+  writeFileSync(outPath, JSON.stringify(transcript), "utf8");
+  return "transcript.json";
 }
 
 // ── Post-session pipeline ─────────────────────────────────────────────────────
@@ -218,10 +171,15 @@ async function llamaComplete(prompt: string, system: string): Promise<string> {
 export async function summarize(
   sessionDir: string,
   transcriptKey: string,
+  campaignId: string,
 ): Promise<string> {
-  const transcript = readFileSync(path.join(sessionDir, transcriptKey), "utf8");
+  const transcript = JSON.parse(
+    readFileSync(path.join(sessionDir, transcriptKey), "utf8"),
+  ) as Transcript;
+  const cast = await getCampaignCast(campaignId);
+  const simplified = simplifyTranscript(transcript, cast);
 
-  const text = stripLeadingTitle(await llamaComplete(transcript, SUMMARIZE_SYSTEM));
+  const text = stripLeadingTitle(await llamaComplete(simplified, SUMMARIZE_SYSTEM));
 
   const outPath = path.join(sessionDir, "summary.txt");
   writeFileSync(outPath, text, "utf8");

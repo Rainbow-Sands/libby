@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "./client.ts";
 import { sessions } from "./schema.ts";
+import type { Transcript } from "./transcript.ts";
 
 export interface UpsertSessionInput {
   id: string;
@@ -55,7 +56,7 @@ export async function setSessionTitle(
 
 export async function saveTranscript(
   sessionId: string,
-  transcript: string
+  transcript: Transcript
 ): Promise<void> {
   await db
     .update(sessions)

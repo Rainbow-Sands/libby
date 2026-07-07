@@ -1,4 +1,5 @@
 import {
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -6,6 +7,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import type { Transcript } from "./transcript.ts";
 
 export const guilds = pgTable("guilds", {
   id: varchar("id", { length: 20 }).primaryKey(),
@@ -52,7 +54,10 @@ export const campaignMembers = pgTable(
 //
 // transcript, summary, recap, and title are each 1:1 with a session and written
 // independently by the pipeline as they become ready, so they live here as
-// nullable columns (Postgres TOASTs the large text out-of-line automatically).
+// nullable columns (Postgres TOASTs the large values out-of-line automatically).
+//
+// transcript stores the full per-segment recording (see transcript.ts) as
+// jsonb, so it can be re-simplified for the LLM later without re-transcribing.
 export const sessions = pgTable("sessions", {
   id: varchar("id", { length: 30 }).primaryKey(),
   campaignId: uuid("campaign_id")
@@ -63,7 +68,7 @@ export const sessions = pgTable("sessions", {
   sessionDir: text("session_dir").notNull(),
   workflowId: text("workflow_id").notNull(),
   status: varchar("status", { length: 20 }).notNull().default("recording"),
-  transcript: text("transcript"),
+  transcript: jsonb("transcript").$type<Transcript>(),
   summary: text("summary"),
   recap: text("recap"),
   startedAt: timestamp("started_at").defaultNow().notNull(),

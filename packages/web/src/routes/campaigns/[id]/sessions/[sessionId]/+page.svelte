@@ -85,8 +85,8 @@
   </div>
 
   <div role="tabpanel" hidden={activeTab !== "transcript"}>
-    {#if data.session.transcript}
-      <pre class="transcript">{data.session.transcript}</pre>
+    {#if data.transcriptText}
+      <pre class="transcript">{data.transcriptText}</pre>
     {:else}
       <p class="empty">Not yet available.</p>
     {/if}

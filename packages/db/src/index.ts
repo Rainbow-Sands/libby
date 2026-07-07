@@ -1,6 +1,11 @@
 export { db } from "./client.ts";
 export * from "./schema.ts";
 export {
+  simplifyTranscript,
+  type Transcript,
+  type TranscriptSegment,
+} from "./transcript.ts";
+export {
   createCampaign,
   addCampaignMember,
   removeCampaignMember,

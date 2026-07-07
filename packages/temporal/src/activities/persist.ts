@@ -8,6 +8,7 @@ import {
   saveSummary,
   saveRecap,
   type UpsertSessionInput,
+  type Transcript,
 } from "@rainbot/db";
 
 export async function recordSessionStart(
@@ -45,7 +46,8 @@ export async function persistTranscript(
 ): Promise<void> {
   const p = path.join(sessionDir, transcriptKey);
   if (!existsSync(p)) return;
-  await saveTranscript(sessionId, readFileSync(p, "utf8"));
+  const transcript = JSON.parse(readFileSync(p, "utf8")) as Transcript;
+  await saveTranscript(sessionId, transcript);
 }
 
 export async function persistSummary(

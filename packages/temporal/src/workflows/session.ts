@@ -154,14 +154,13 @@ export async function sessionWorkflow(
     const transcriptKey = await aggregateTranscript(
       input.sessionDir,
       allKeys,
-      input.campaignId,
     );
     await persistTranscript(input.sessionDir, input.sessionId, transcriptKey);
 
     phase = "summarizing";
     await updateSessionStatus(input.sessionId, "summarizing");
 
-    const summaryKey = await summarize(input.sessionDir, transcriptKey);
+    const summaryKey = await summarize(input.sessionDir, transcriptKey, input.campaignId);
     await persistSummary(input.sessionDir, input.sessionId, summaryKey);
 
     const recapKey = await recap(input.sessionDir, summaryKey);

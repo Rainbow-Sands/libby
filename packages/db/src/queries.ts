@@ -6,6 +6,7 @@ import {
   sessions,
   users,
 } from "./schema.ts";
+import type { Transcript } from "./transcript.ts";
 
 export async function getCampaignsForGuild(guildId: string) {
   return db
@@ -176,7 +177,7 @@ export interface SessionDetail {
   status: string;
   startedAt: Date;
   endedAt: Date | null;
-  transcript: string | null;
+  transcript: Transcript | null;
   summary: string | null;
   recap: string | null;
 }

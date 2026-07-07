@@ -10,6 +10,9 @@ Drizzle ORM schema, Postgres client, and all shared queries. See the root
 - `campaigns.ts` — campaign/member mutations.
 - `sessions.ts` — session upserts + summary/recap/title/transcript writes.
 - `queries.ts` — read queries used by web and Temporal.
+- `transcript.ts` — the `Transcript`/`TranscriptSegment` JSON shape stored in
+  `sessions.transcript`, plus `simplifyTranscript` (the LLM-facing formatting
+  transform, shared by Temporal's `summarize` activity and web's chat context).
 - `index.ts` — the package's **public API**. Export anything other packages need
   from here; consumers import from `@rainbot/db`, never deep paths.
 
@@ -43,6 +46,15 @@ pnpm --filter @rainbot/db db:migrate    # applies to the DB in DATABASE_URL
 - `sessions` holds `transcript`, `summary`, `recap`, and `title` as **nullable
   columns directly on the row** (not side tables) — they're 1:1 with a session
   and written independently as the pipeline produces them.
+- `sessions.transcript` is `jsonb`, typed as `Transcript` (see `transcript.ts`):
+  every recorded segment, lossless (timestamp, userId, username, text,
+  whisper's own per-segment metadata). LLM-facing simplification (dropping
+  timestamps, merging same-speaker turns, prepending the cast legend) happens
+  in `simplifyTranscript`, not at write time — so improving that formatting
+  later can be re-run over already-recorded sessions without re-transcribing.
+  No backwards compatibility with the old plain-text format: the migration
+  that introduced this column type cleared existing rows (`USING NULL`) rather
+  than carrying a legacy-string code path — pre-production, nothing to keep.
 - `campaign_members` has `role` (`dm` | `player`) and `characterName` (null for
   the DM). The cast legend and player management depend on these.
 - Writes are idempotent upserts so Temporal activity retries are safe.

@@ -1,4 +1,4 @@
-import type { SessionDetail } from "@rainbot/db";
+import { simplifyTranscript, type CampaignCastMember, type SessionDetail } from "@rainbot/db";
 
 /**
  * Grounding instructions for the session chatbot. Libby answers questions
@@ -22,7 +22,10 @@ Rules:
  * future replaces this with a `buildCampaignContext` + a `searchSessions` tool,
  * without touching the endpoint or UI.
  */
-export function buildSessionContext(session: SessionDetail): string {
+export function buildSessionContext(
+  session: SessionDetail,
+  cast: CampaignCastMember[],
+): string {
   const parts: string[] = [SESSION_CHAT_SYSTEM, "", "--- SESSION MATERIAL ---"];
 
   if (session.title) {
@@ -35,7 +38,7 @@ export function buildSessionContext(session: SessionDetail): string {
     parts.push("", "Summary:", session.summary);
   }
   if (session.transcript) {
-    parts.push("", "Transcript:", session.transcript);
+    parts.push("", "Transcript:", simplifyTranscript(session.transcript, cast));
   }
 
   return parts.join("\n");
