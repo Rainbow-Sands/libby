@@ -57,6 +57,22 @@ function startActivation(
     console.error(`ffmpeg error (${userId}):`, err)
   );
 
+  // A malformed Opus packet (packet loss, jitter, etc.) is a normal occurrence
+  // on a live voice connection. Without a listener here, Node treats it as an
+  // unhandled 'error' event and crashes the whole process. Instead, just end
+  // this activation early — same as a normal end-of-speech — so the rest of
+  // the session keeps recording.
+  const onStreamError = (err: unknown) => {
+    console.error(`audio stream error (${userId}):`, err);
+    audioStream.unpipe(opusDecoder as any);
+    opusDecoder.unpipe(ffmpegProcess.stdin! as any);
+    audioStream.destroy();
+    opusDecoder.destroy();
+    ffmpegProcess.stdin?.end();
+  };
+  audioStream.on("error", onStreamError);
+  opusDecoder.on("error", onStreamError);
+
   audioStream.pipe(opusDecoder as any);
   opusDecoder.pipe(ffmpegProcess.stdin! as any);
 
