@@ -2,6 +2,7 @@ packages:
   - 'packages/*'
 
 allowBuilds:
+  '@discordjs/opus': true
   "@swc/core": true
   esbuild: true
   protobufjs: true

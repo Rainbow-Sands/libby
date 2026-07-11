@@ -1,6 +1,10 @@
 FROM node:24
 
-RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+
+# python3/make/g++ are for @discordjs/opus's native build: no prebuilt binary
+# covers this Node ABI yet, so its postinstall falls back to compiling
+# libopus from source (bundled in the package, no system libopus needed).
+RUN apt-get update && apt-get install -y ffmpeg python3 make g++ && rm -rf /var/lib/apt/lists/*
 RUN corepack enable
 
 WORKDIR /app
