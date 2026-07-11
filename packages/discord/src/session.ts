@@ -6,7 +6,7 @@ import {
 } from "discord.js";
 import { joinVoiceChannel, EndBehaviorType } from "@discordjs/voice";
 import prism from "prism-media";
-import { mkdirSync } from "fs";
+import { mkdirSync, statSync } from "fs";
 import { spawn } from "child_process";
 import path from "path";
 import type { WorkflowHandle } from "@temporalio/client";
@@ -19,6 +19,24 @@ import type { SegmentRef } from "@rainbot/temporal";
 
 const SAMPLE_RATE = 48000;
 const CHANNELS = 2;
+const FRAME_SIZE = 960; // 20ms at 48kHz — Discord's standard Opus frame duration
+// One 20ms frame of silence, substituted for a packet the decoder couldn't
+// parse so a single bad packet doesn't leave an audible gap or resync issue.
+const SILENT_FRAME = Buffer.alloc(FRAME_SIZE * CHANNELS * 2);
+// An Ogg Opus file with only its mandatory header pages (OpusHead/OpusTags)
+// and no real audio is well under this. A stream error that fires almost
+// immediately after an activation starts can leave ffmpeg with ~0 bytes of
+// PCM before its stdin is closed — it still exits 0 and writes a header-only
+// file, which the transcription server then fails to do anything with.
+const MIN_CLIP_BYTES = 1024;
+
+function hasMeaningfulAudio(filePath: string): boolean {
+  try {
+    return statSync(filePath).size >= MIN_CLIP_BYTES;
+  } catch {
+    return false;
+  }
+}
 
 function startActivation(
   sessionDir: string,
@@ -40,12 +58,6 @@ function startActivation(
     end: { behavior: EndBehaviorType.AfterSilence, duration: 2000 },
   });
 
-  const opusDecoder = new prism.opus.Decoder({
-    rate: SAMPLE_RATE,
-    channels: CHANNELS,
-    frameSize: 960,
-  });
-
   const ffmpegProcess = spawn("ffmpeg", [
     "-f", "s16le", "-ar", String(SAMPLE_RATE), "-ac", String(CHANNELS),
     "-i", "pipe:0",
@@ -58,27 +70,49 @@ function startActivation(
   );
 
   // A malformed Opus packet (packet loss, jitter, etc.) is a normal occurrence
-  // on a live voice connection. Without a listener here, Node treats it as an
-  // unhandled 'error' event and crashes the whole process. Instead, just end
-  // this activation early — same as a normal end-of-speech — so the rest of
-  // the session keeps recording.
-  const onStreamError = (err: unknown) => {
+  // on a live voice connection. Once a Decoder's _transform callback fires
+  // with an error, Node permanently destroys that stream — it can't process
+  // any further chunks — so we swap in a fresh decoder and keep going rather
+  // than ending the whole activation over one bad packet.
+  let opusDecoder: InstanceType<typeof prism.opus.Decoder>;
+
+  const wireDecoder = () => {
+    opusDecoder = new prism.opus.Decoder({
+      rate: SAMPLE_RATE,
+      channels: CHANNELS,
+      frameSize: FRAME_SIZE,
+    });
+    opusDecoder.on("error", (err) => {
+      console.error(`opus decode error (${userId}), skipping packet:`, err);
+      opusDecoder.unpipe(ffmpegProcess.stdin! as any);
+      opusDecoder.destroy();
+      if (ffmpegProcess.stdin?.writable) {
+        ffmpegProcess.stdin.write(SILENT_FRAME);
+      }
+      wireDecoder();
+      audioStream.pipe(opusDecoder as any);
+    });
+    // Ending ffmpeg's stdin is handled separately (below), since decoders get
+    // swapped out mid-activation and shouldn't each end the shared stdin.
+    opusDecoder.pipe(ffmpegProcess.stdin! as any, { end: false });
+  };
+  wireDecoder();
+
+  // A receiver-level error means no more audio will ever arrive for this
+  // activation (unlike a per-packet decode error) — finalize the clip.
+  audioStream.on("error", (err) => {
     console.error(`audio stream error (${userId}):`, err);
     audioStream.unpipe(opusDecoder as any);
-    opusDecoder.unpipe(ffmpegProcess.stdin! as any);
-    audioStream.destroy();
     opusDecoder.destroy();
     ffmpegProcess.stdin?.end();
-  };
-  audioStream.on("error", onStreamError);
-  opusDecoder.on("error", onStreamError);
+  });
+  audioStream.on("end", () => ffmpegProcess.stdin?.end());
 
-  audioStream.pipe(opusDecoder as any);
-  opusDecoder.pipe(ffmpegProcess.stdin! as any);
+  audioStream.pipe(opusDecoder! as any);
 
   ffmpegProcess.on("close", (code) => {
     activeUsers.delete(userId);
-    if (code === 0) {
+    if (code === 0 && hasMeaningfulAudio(outputPath)) {
       onDone({ segmentId, audioFile, timestamp, userId, username });
     }
   });
