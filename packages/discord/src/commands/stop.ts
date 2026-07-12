@@ -21,7 +21,7 @@ export const stop = {
     await session.end();
 
     await interaction.reply(
-      `Recording stopped. ${segmentCount} segment(s) recorded. Transcript and recap will be saved to \`${sessionDir}\`.`
+      `Recording stopped. ${segmentCount} segment(s) recorded. Transcript and recap will be saved to \`${sessionDir}\`.`,
     );
   },
 };

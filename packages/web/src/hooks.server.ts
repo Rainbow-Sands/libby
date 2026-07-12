@@ -9,8 +9,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   // theme with no flash. With no cookie, the attribute is omitted and the CSS
   // media query follows the system preference.
   const theme = event.cookies.get("theme");
-  const themeAttr =
-    theme === "dark" || theme === "light" ? ` data-theme="${theme}"` : "";
+  const themeAttr = theme === "dark" || theme === "light" ? ` data-theme="${theme}"` : "";
 
   return resolve(event, {
     transformPageChunk: ({ html }) => html.replace("%theme%", themeAttr),

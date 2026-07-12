@@ -1,7 +1,4 @@
-import {
-  SlashCommandBuilder,
-  type ChatInputCommandInteraction,
-} from "discord.js";
+import { SlashCommandBuilder, type ChatInputCommandInteraction } from "discord.js";
 import { removeCampaignMember } from "@rainbot/db";
 import { campaignAutocomplete } from "./autocomplete.ts";
 import { requireDmOfCampaign } from "./guard.ts";
@@ -15,13 +12,10 @@ export const removePlayer = {
         .setName("campaign")
         .setDescription("Which campaign to remove the player from")
         .setRequired(true)
-        .setAutocomplete(true)
+        .setAutocomplete(true),
     )
     .addUserOption((option) =>
-      option
-        .setName("player")
-        .setDescription("The player to remove")
-        .setRequired(true)
+      option.setName("player").setDescription("The player to remove").setRequired(true),
     ),
   autocomplete: campaignAutocomplete,
   handler: async (interaction: ChatInputCommandInteraction) => {

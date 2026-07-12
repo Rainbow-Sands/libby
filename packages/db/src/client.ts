@@ -9,8 +9,7 @@ let instance: DB | null = null;
 function getDb(): DB {
   if (!instance) {
     const url = process.env.DATABASE_URL;
-    if (!url)
-      throw new Error("Missing required environment variable: DATABASE_URL");
+    if (!url) throw new Error("Missing required environment variable: DATABASE_URL");
     instance = drizzle(postgres(url), { schema });
   }
   return instance;

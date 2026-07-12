@@ -119,8 +119,13 @@ services:
       SESSION_SECRET: ${SESSION_SECRET}
       ORIGIN: ${ORIGIN}
       INFERENCE_URL: ${INFERENCE_URL}
+      TEMPORAL_URL: temporal:7233
+      MEDIA_PATH: /media
+      BODY_SIZE_LIMIT: 10G
     ports:
       - "3000:3000"
+    volumes:
+      - media:/media
     restart: unless-stopped
 
 volumes:

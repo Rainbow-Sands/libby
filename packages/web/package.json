@@ -12,6 +12,7 @@
     "@ai-sdk/openai-compatible": "latest",
     "@ai-sdk/svelte": "latest",
     "@rainbot/db": "workspace:*",
+    "@rainbot/temporal": "workspace:*",
     "@sveltejs/kit": "latest",
     "ai": "latest",
     "marked": "^18.0.5",

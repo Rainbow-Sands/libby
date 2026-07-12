@@ -22,10 +22,7 @@ Rules:
  * future replaces this with a `buildCampaignContext` + a `searchSessions` tool,
  * without touching the endpoint or UI.
  */
-export function buildSessionContext(
-  session: SessionDetail,
-  cast: CampaignCastMember[],
-): string {
+export function buildSessionContext(session: SessionDetail, cast: CampaignCastMember[]): string {
   const parts: string[] = [SESSION_CHAT_SYSTEM, "", "--- SESSION MATERIAL ---"];
 
   if (session.title) {

@@ -4,12 +4,12 @@ Discord bot that records tabletop RPG sessions, transcribes them with whisper.cp
 
 ## Packages
 
-| Package | Description |
-|---|---|
-| `@rainbot/discord` | Discord bot — joins voice channels, records audio, triggers workflows |
-| `@rainbot/temporal` | Temporal workers — transcription, aggregation, summarization, recap |
-| `@rainbot/db` | Drizzle schema and PostgreSQL client |
-| `@rainbot/web` | SvelteKit frontend |
+| Package             | Description                                                           |
+| ------------------- | --------------------------------------------------------------------- |
+| `@rainbot/discord`  | Discord bot — joins voice channels, records audio, triggers workflows |
+| `@rainbot/temporal` | Temporal workers — transcription, aggregation, summarization, recap   |
+| `@rainbot/db`       | Drizzle schema and PostgreSQL client                                  |
+| `@rainbot/web`      | SvelteKit frontend                                                    |
 
 ## Requirements
 
@@ -53,11 +53,11 @@ pnpm dev:web       # SvelteKit frontend
 
 ## Environment variables
 
-| Variable | Used by | Description |
-|---|---|---|
-| `DISCORD_TOKEN` | discord | Bot token |
-| `DISCORD_APPLICATION_ID` | discord | Application ID |
-| `MEDIA_PATH` | discord | Directory for audio clips and transcripts |
-| `TEMPORAL_URL` | discord, temporal | Temporal server address (e.g. `localhost:7233`) |
-| `INFERENCE_URL` | temporal, web | Shared llama-swap base URL; the app requests `whisper-large-v3-turbo` for transcription, `qwen3.6-35b-a3b` for summary/recap/title, and `qwen3.5-9b` for chat |
-| `DATABASE_URL` | db | PostgreSQL connection string |
+| Variable                 | Used by                | Description                                                                                                                                                   |
+| ------------------------ | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DISCORD_TOKEN`          | discord                | Bot token                                                                                                                                                     |
+| `DISCORD_APPLICATION_ID` | discord                | Application ID                                                                                                                                                |
+| `MEDIA_PATH`             | discord, temporal, web | Directory for audio clips, imported files, and transcripts                                                                                                    |
+| `TEMPORAL_URL`           | discord, temporal, web | Temporal server address (e.g. `localhost:7233`)                                                                                                               |
+| `INFERENCE_URL`          | temporal, web          | Shared llama-swap base URL; the app requests `whisper-large-v3-turbo` for transcription, `qwen3.6-35b-a3b` for summary/recap/title, and `qwen3.5-9b` for chat |
+| `DATABASE_URL`           | db                     | PostgreSQL connection string                                                                                                                                  |

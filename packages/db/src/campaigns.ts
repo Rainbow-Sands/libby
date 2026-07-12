@@ -14,9 +14,7 @@ export interface CreateCampaignInput {
   dm: DiscordUser;
 }
 
-export async function createCampaign(
-  input: CreateCampaignInput
-): Promise<{ id: string }> {
+export async function createCampaign(input: CreateCampaignInput): Promise<{ id: string }> {
   return db.transaction(async (tx) => {
     await tx
       .insert(guilds)
@@ -56,9 +54,7 @@ export interface AddCampaignMemberInput {
 }
 
 // Adds (or re-adds) a player to a campaign. Re-running updates their character.
-export async function addCampaignMember(
-  input: AddCampaignMemberInput
-): Promise<void> {
+export async function addCampaignMember(input: AddCampaignMemberInput): Promise<void> {
   await db.transaction(async (tx) => {
     await tx
       .insert(users)
@@ -85,18 +81,15 @@ export async function addCampaignMember(
 
 // Removes a player from a campaign. Scoped to role 'player' so the DM, who owns
 // the campaign, can never be removed by this command.
-export async function removeCampaignMember(
-  campaignId: string,
-  userId: string
-): Promise<boolean> {
+export async function removeCampaignMember(campaignId: string, userId: string): Promise<boolean> {
   const removed = await db
     .delete(campaignMembers)
     .where(
       and(
         eq(campaignMembers.campaignId, campaignId),
         eq(campaignMembers.userId, userId),
-        eq(campaignMembers.role, "player")
-      )
+        eq(campaignMembers.role, "player"),
+      ),
     )
     .returning({ userId: campaignMembers.userId });
   return removed.length > 0;

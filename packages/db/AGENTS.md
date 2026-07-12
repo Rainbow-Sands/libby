@@ -37,7 +37,7 @@ pnpm --filter @rainbot/db db:migrate    # applies to the DB in DATABASE_URL
   migration that has been committed or applied — add a new one.
 - `drizzle/meta/_journal.json` and the snapshot files must stay in sync with the
   `.sql` files. Let `drizzle-kit` manage them; don't hand-edit. (If you must
-  discard an *uncommitted, never-applied* migration, delete its `.sql` +
+  discard an _uncommitted, never-applied_ migration, delete its `.sql` +
   snapshot and revert the journal entry, then regenerate.)
 - In production, the `db-migrate` compose service runs `db:migrate` on deploy.
 

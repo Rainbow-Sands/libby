@@ -14,9 +14,7 @@ export async function startWorker(): Promise<void> {
     connection,
     namespace: "rainbot",
     taskQueue: "rainbot",
-    workflowsPath: fileURLToPath(
-      new URL("./workflows/session.ts", import.meta.url),
-    ),
+    workflowsPath: fileURLToPath(new URL("./workflows/session.ts", import.meta.url)),
   });
 
   const transcriptionWorker = await Worker.create({
@@ -63,11 +61,9 @@ export async function startWorker(): Promise<void> {
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
 
-  Promise.all([
-    workflowWorker.run(),
-    transcriptionWorker.run(),
-    summarizationWorker.run(),
-  ]).catch((err: unknown) => console.error("[temporal] worker error:", err));
+  Promise.all([workflowWorker.run(), transcriptionWorker.run(), summarizationWorker.run()]).catch(
+    (err: unknown) => console.error("[temporal] worker error:", err),
+  );
 
   console.log(
     "[temporal] workers started (rainbot / rainbot-transcription / rainbot-summarization)",

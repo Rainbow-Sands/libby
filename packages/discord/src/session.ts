@@ -1,9 +1,4 @@
-import {
-  Events,
-  type Client,
-  type VoiceBasedChannel,
-  type VoiceState,
-} from "discord.js";
+import { Events, type Client, type VoiceBasedChannel, type VoiceState } from "discord.js";
 import { joinVoiceChannel, EndBehaviorType } from "@discordjs/voice";
 import prism from "prism-media";
 import { mkdirSync, statSync } from "fs";
@@ -11,10 +6,7 @@ import { spawn } from "child_process";
 import path from "path";
 import type { WorkflowHandle } from "@temporalio/client";
 import { getActiveSession, setActiveSession } from "./recording.ts";
-import {
-  segmentRecorded,
-  sessionEnded,
-} from "@rainbot/temporal";
+import { segmentRecorded, sessionEnded } from "@rainbot/temporal";
 import type { SegmentRef } from "@rainbot/temporal";
 
 const SAMPLE_RATE = 48000;
@@ -45,7 +37,7 @@ function startActivation(
   username: string,
   connection: ReturnType<typeof joinVoiceChannel>,
   onDone: (ref: SegmentRef) => void,
-  activeUsers: Set<string>
+  activeUsers: Set<string>,
 ): void {
   if (activeUsers.has(userId)) return;
   activeUsers.add(userId);
@@ -59,15 +51,22 @@ function startActivation(
   });
 
   const ffmpegProcess = spawn("ffmpeg", [
-    "-f", "s16le", "-ar", String(SAMPLE_RATE), "-ac", String(CHANNELS),
-    "-i", "pipe:0",
-    "-c:a", "libopus", "-b:a", "64k",
+    "-f",
+    "s16le",
+    "-ar",
+    String(SAMPLE_RATE),
+    "-ac",
+    String(CHANNELS),
+    "-i",
+    "pipe:0",
+    "-c:a",
+    "libopus",
+    "-b:a",
+    "64k",
     outputPath,
   ]);
 
-  ffmpegProcess.on("error", (err) =>
-    console.error(`ffmpeg error (${userId}):`, err)
-  );
+  ffmpegProcess.on("error", (err) => console.error(`ffmpeg error (${userId}):`, err));
 
   // A malformed Opus packet (packet loss, jitter, etc.) is a normal occurrence
   // on a live voice connection. Once a Decoder's _transform callback fires
@@ -125,7 +124,7 @@ export function attachRecordingSession(
   guildId: string,
   channelId: string,
   sessionId: string,
-  sessionDir: string
+  sessionDir: string,
 ): void {
   mkdirSync(path.join(sessionDir, "clips"), { recursive: true });
   mkdirSync(path.join(sessionDir, "transcripts"), { recursive: true });
@@ -156,9 +155,7 @@ export function attachRecordingSession(
     setActiveSession(guildId, null);
     await workflowHandle
       .signal(sessionEnded)
-      .catch((err: unknown) =>
-        console.error("[workflow] sessionEnded signal error:", err)
-      );
+      .catch((err: unknown) => console.error("[workflow] sessionEnded signal error:", err));
     console.log(`[session] ended — ${guildId}:${sessionId}`);
   };
 
@@ -168,13 +165,11 @@ export function attachRecordingSession(
     const channel = oldState.guild.channels.cache.get(channelId);
     if (!channel?.isVoiceBased()) return;
     const humanCount = [...(channel as VoiceBasedChannel).members.values()].filter(
-      (m) => !m.user.bot
+      (m) => !m.user.bot,
     ).length;
     if (humanCount === 0) {
       console.log("[session] voice channel empty, auto-ending");
-      endSession().catch((err: unknown) =>
-        console.error("[session] auto-end error:", err)
-      );
+      endSession().catch((err: unknown) => console.error("[session] auto-end error:", err));
     }
   };
 
@@ -196,17 +191,8 @@ export function attachRecordingSession(
     const segId = String(segmentCounter++).padStart(4, "0");
     // Resolve a readable label for the transcript. Use the account username so it
     // matches the username stored for campaign members; fall back to the id.
-    const username =
-      voiceChannel.guild.members.cache.get(userId)?.user.username ?? userId;
-    startActivation(
-      sessionDir,
-      segId,
-      userId,
-      username,
-      connection,
-      onSegmentDone,
-      activeUsers
-    );
+    const username = voiceChannel.guild.members.cache.get(userId)?.user.username ?? userId;
+    startActivation(sessionDir, segId, userId, username, connection, onSegmentDone, activeUsers);
     const session = getActiveSession(guildId);
     if (session) session.segmentCount = segmentCounter;
   });

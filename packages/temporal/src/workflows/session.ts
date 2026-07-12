@@ -14,8 +14,10 @@ import type { SegmentRef, SessionInput, SessionStatus } from "../types.ts";
 
 const { transcribeSegment, aggregateTranscript } = proxyActivities<typeof activities>({
   taskQueue: "rainbot-transcription",
-  startToCloseTimeout: "15 minutes",
-  scheduleToCloseTimeout: "1 hour",
+  // Manual imports can be several hours of one speaker's audio. Heartbeats in
+  // the activity still let Temporal detect a dead worker promptly.
+  startToCloseTimeout: "4 hours",
+  scheduleToCloseTimeout: "6 hours",
   retry: {
     maximumAttempts: 5,
     initialInterval: "5 seconds",
@@ -42,14 +44,14 @@ const {
   persistRecap,
   persistTitle,
 } = proxyActivities<typeof persistActivities>({
-    taskQueue: "rainbot-transcription",
-    startToCloseTimeout: "1 minute",
-    retry: {
-      maximumAttempts: 10,
-      initialInterval: "2 seconds",
-      backoffCoefficient: 2,
-    },
-  });
+  taskQueue: "rainbot-transcription",
+  startToCloseTimeout: "1 minute",
+  retry: {
+    maximumAttempts: 10,
+    initialInterval: "2 seconds",
+    backoffCoefficient: 2,
+  },
+});
 
 const CONTINUE_AS_NEW_THRESHOLD = 500;
 
@@ -151,10 +153,7 @@ export async function sessionWorkflow(
 
   try {
     // Post-session pipeline.
-    const transcriptKey = await aggregateTranscript(
-      input.sessionDir,
-      allKeys,
-    );
+    const transcriptKey = await aggregateTranscript(input.sessionDir, allKeys);
     await persistTranscript(input.sessionDir, input.sessionId, transcriptKey);
 
     phase = "summarizing";

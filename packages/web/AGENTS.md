@@ -19,7 +19,7 @@ package — plain `tsc` is not used here.
 
 adapter-node emits the app's runtime dependencies (`svelte`, `@sveltejs/kit`,
 `marked`, `drizzle-orm`, `postgres`) as **bare imports in the per-route server
-chunks**, so they must exist in `node_modules` at runtime — the build is *not*
+chunks**, so they must exist in `node_modules` at runtime — the build is _not_
 fully self-contained. Consequences that are load-bearing:
 
 - `svelte` and `@sveltejs/kit` are in **`dependencies`**, not `devDependencies`.

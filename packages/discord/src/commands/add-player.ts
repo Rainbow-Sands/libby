@@ -1,7 +1,4 @@
-import {
-  SlashCommandBuilder,
-  type ChatInputCommandInteraction,
-} from "discord.js";
+import { SlashCommandBuilder, type ChatInputCommandInteraction } from "discord.js";
 import { addCampaignMember } from "@rainbot/db";
 import { campaignAutocomplete } from "./autocomplete.ts";
 import { requireDmOfCampaign } from "./guard.ts";
@@ -15,19 +12,16 @@ export const addPlayer = {
         .setName("campaign")
         .setDescription("Which campaign to add the player to")
         .setRequired(true)
-        .setAutocomplete(true)
+        .setAutocomplete(true),
     )
     .addUserOption((option) =>
-      option
-        .setName("player")
-        .setDescription("The player to add")
-        .setRequired(true)
+      option.setName("player").setDescription("The player to add").setRequired(true),
     )
     .addStringOption((option) =>
       option
         .setName("character")
         .setDescription("The name of the player's character")
-        .setRequired(true)
+        .setRequired(true),
     ),
   autocomplete: campaignAutocomplete,
   handler: async (interaction: ChatInputCommandInteraction) => {
@@ -60,8 +54,6 @@ export const addPlayer = {
       return;
     }
 
-    await interaction.reply(
-      `Added <@${player.id}> to the campaign as **${characterName}**.`
-    );
+    await interaction.reply(`Added <@${player.id}> to the campaign as **${characterName}**.`);
   },
 };

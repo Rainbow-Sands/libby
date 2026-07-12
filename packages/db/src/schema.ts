@@ -1,12 +1,4 @@
-import {
-  jsonb,
-  pgTable,
-  primaryKey,
-  text,
-  timestamp,
-  uuid,
-  varchar,
-} from "drizzle-orm/pg-core";
+import { jsonb, pgTable, primaryKey, text, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
 import type { Transcript } from "./transcript.ts";
 
 export const guilds = pgTable("guilds", {
@@ -47,7 +39,7 @@ export const campaignMembers = pgTable(
     role: varchar("role", { length: 10 }).notNull().default("player"),
     characterName: text("character_name"),
   },
-  (t) => [primaryKey({ columns: [t.campaignId, t.userId] })]
+  (t) => [primaryKey({ columns: [t.campaignId, t.userId] })],
 );
 
 // status: 'recording' | 'transcribing' | 'summarizing' | 'done' | 'failed'

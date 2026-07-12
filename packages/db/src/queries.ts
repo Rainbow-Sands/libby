@@ -1,11 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "./client.ts";
-import {
-  campaigns,
-  campaignMembers,
-  sessions,
-  users,
-} from "./schema.ts";
+import { campaigns, campaignMembers, sessions, users } from "./schema.ts";
 import type { Transcript } from "./transcript.ts";
 
 export async function getCampaignsForGuild(guildId: string) {
@@ -29,19 +24,11 @@ export async function getCampaignsForUser(userId: string) {
     .orderBy(campaigns.name);
 }
 
-export async function isCampaignMember(
-  campaignId: string,
-  userId: string
-): Promise<boolean> {
+export async function isCampaignMember(campaignId: string, userId: string): Promise<boolean> {
   const rows = await db
     .select({ userId: campaignMembers.userId })
     .from(campaignMembers)
-    .where(
-      and(
-        eq(campaignMembers.campaignId, campaignId),
-        eq(campaignMembers.userId, userId)
-      )
-    )
+    .where(and(eq(campaignMembers.campaignId, campaignId), eq(campaignMembers.userId, userId)))
     .limit(1);
   return rows.length > 0;
 }
@@ -56,7 +43,7 @@ export interface CampaignMember {
 // Lightweight lookup for command authorization: which guild owns the campaign
 // and who is its DM. Returns null if the campaign does not exist.
 export async function getCampaignMeta(
-  campaignId: string
+  campaignId: string,
 ): Promise<{ guildId: string; dmId: string | null } | null> {
   const [campaign] = await db
     .select({ guildId: campaigns.guildId })
@@ -68,12 +55,7 @@ export async function getCampaignMeta(
   const [dm] = await db
     .select({ userId: campaignMembers.userId })
     .from(campaignMembers)
-    .where(
-      and(
-        eq(campaignMembers.campaignId, campaignId),
-        eq(campaignMembers.role, "dm")
-      )
-    )
+    .where(and(eq(campaignMembers.campaignId, campaignId), eq(campaignMembers.role, "dm")))
     .limit(1);
 
   return { guildId: campaign.guildId, dmId: dm?.userId ?? null };
@@ -88,9 +70,7 @@ export interface CampaignCastMember {
 // The players of a campaign that have a character assigned, for building the
 // transcript's cast legend. Keyed by userId so callers can align it with the
 // speaker labels used in the transcript body.
-export async function getCampaignCast(
-  campaignId: string
-): Promise<CampaignCastMember[]> {
+export async function getCampaignCast(campaignId: string): Promise<CampaignCastMember[]> {
   const rows = await db
     .select({
       userId: users.id,
@@ -99,17 +79,10 @@ export async function getCampaignCast(
     })
     .from(campaignMembers)
     .innerJoin(users, eq(campaignMembers.userId, users.id))
-    .where(
-      and(
-        eq(campaignMembers.campaignId, campaignId),
-        eq(campaignMembers.role, "player")
-      )
-    )
+    .where(and(eq(campaignMembers.campaignId, campaignId), eq(campaignMembers.role, "player")))
     .orderBy(users.username);
 
-  return rows.filter(
-    (r): r is CampaignCastMember => r.characterName !== null
-  );
+  return rows.filter((r): r is CampaignCastMember => r.characterName !== null);
 }
 
 export interface CampaignSessionSummary {
@@ -128,14 +101,8 @@ export interface CampaignDetail {
   sessions: CampaignSessionSummary[];
 }
 
-export async function getCampaignDetail(
-  campaignId: string
-): Promise<CampaignDetail | null> {
-  const [campaign] = await db
-    .select()
-    .from(campaigns)
-    .where(eq(campaigns.id, campaignId))
-    .limit(1);
+export async function getCampaignDetail(campaignId: string): Promise<CampaignDetail | null> {
+  const [campaign] = await db.select().from(campaigns).where(eq(campaigns.id, campaignId)).limit(1);
   if (!campaign) return null;
 
   const members = await db
@@ -182,14 +149,8 @@ export interface SessionDetail {
   recap: string | null;
 }
 
-export async function getSessionDetail(
-  sessionId: string
-): Promise<SessionDetail | null> {
-  const [session] = await db
-    .select()
-    .from(sessions)
-    .where(eq(sessions.id, sessionId))
-    .limit(1);
+export async function getSessionDetail(sessionId: string): Promise<SessionDetail | null> {
+  const [session] = await db.select().from(sessions).where(eq(sessions.id, sessionId)).limit(1);
   if (!session) return null;
 
   return {

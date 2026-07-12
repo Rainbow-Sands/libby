@@ -3,9 +3,7 @@ import { getCampaignsForGuild } from "@rainbot/db";
 
 // Shared autocomplete for the `campaign` option used by /start, /add-player and
 // /remove-player: matches the guild's campaigns against what the user has typed.
-export async function campaignAutocomplete(
-  interaction: AutocompleteInteraction
-): Promise<void> {
+export async function campaignAutocomplete(interaction: AutocompleteInteraction): Promise<void> {
   if (!interaction.guildId) {
     await interaction.respond([]);
     return;
@@ -16,6 +14,6 @@ export async function campaignAutocomplete(
     campaigns
       .filter((c) => c.name.toLowerCase().includes(focused))
       .slice(0, 25)
-      .map((c) => ({ name: c.name, value: c.id }))
+      .map((c) => ({ name: c.name, value: c.id })),
   );
 }

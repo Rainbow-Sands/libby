@@ -19,10 +19,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
   if (!member) throw error(403, "You are not a member of this campaign.");
 
   const transcriptText = session.transcript
-    ? simplifyTranscript(
-        session.transcript,
-        await getCampaignCast(session.campaignId),
-      )
+    ? simplifyTranscript(session.transcript, await getCampaignCast(session.campaignId))
     : null;
 
   return { session, transcriptText };

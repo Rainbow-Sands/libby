@@ -70,11 +70,7 @@ body {
   color: var(--ink);
   background-color: var(--bg);
   /* subtle parchment vignette */
-  background-image: radial-gradient(
-    120% 80% at 50% 0%,
-    rgba(255, 255, 255, 0.06),
-    transparent 60%
-  );
+  background-image: radial-gradient(120% 80% at 50% 0%, rgba(255, 255, 255, 0.06), transparent 60%);
   background-attachment: fixed;
 }
 

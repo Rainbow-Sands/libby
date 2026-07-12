@@ -6,7 +6,7 @@ import { getCampaignMeta } from "@rainbot/db";
 // on success it returns the campaign metadata.
 export async function requireDmOfCampaign(
   interaction: ChatInputCommandInteraction,
-  campaignId: string
+  campaignId: string,
 ): Promise<{ guildId: string; dmId: string | null } | null> {
   const meta = await getCampaignMeta(campaignId);
   if (!meta || meta.guildId !== interaction.guildId) {

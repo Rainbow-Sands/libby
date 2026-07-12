@@ -1,11 +1,4 @@
-import {
-  Client,
-  Events,
-  GatewayIntentBits,
-  REST,
-  Routes,
-  type Interaction,
-} from "discord.js";
+import { Client, Events, GatewayIntentBits, REST, Routes, type Interaction } from "discord.js";
 import { start } from "./commands/start.ts";
 import { stop } from "./commands/stop.ts";
 import { campaign } from "./commands/campaign.ts";
@@ -25,12 +18,9 @@ export const registerCommands = async () => {
   console.log("Registering commands.");
   const rest = new REST().setToken(DISCORD_TOKEN);
 
-  await rest.put(
-    Routes.applicationCommands(DISCORD_APPLICATION_ID),
-    {
-      body: Object.values(commands).map(({ data }) => data.toJSON()),
-    },
-  );
+  await rest.put(Routes.applicationCommands(DISCORD_APPLICATION_ID), {
+    body: Object.values(commands).map(({ data }) => data.toJSON()),
+  });
 };
 
 export const startBot = async () => {
@@ -60,8 +50,7 @@ export const startBot = async () => {
     }
 
     if (interaction.commandName in commands) {
-      const command =
-        commands[interaction.commandName as keyof typeof commands];
+      const command = commands[interaction.commandName as keyof typeof commands];
       await command.handler(interaction);
     }
   });

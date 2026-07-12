@@ -20,10 +20,7 @@ export function getActiveSession(guildId: string): RecordingSession | null {
   return activeSessions.get(guildId) ?? null;
 }
 
-export function setActiveSession(
-  guildId: string,
-  session: RecordingSession | null
-): void {
+export function setActiveSession(guildId: string, session: RecordingSession | null): void {
   if (session === null) {
     activeSessions.delete(guildId);
   } else {

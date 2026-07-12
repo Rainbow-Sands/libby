@@ -1,7 +1,4 @@
-import {
-  SlashCommandBuilder,
-  type ChatInputCommandInteraction,
-} from "discord.js";
+import { SlashCommandBuilder, type ChatInputCommandInteraction } from "discord.js";
 import { createCampaign } from "@rainbot/db";
 
 export const campaign = {
@@ -9,10 +6,7 @@ export const campaign = {
     .setName("campaign")
     .setDescription("Create a new campaign (you become the DM)")
     .addStringOption((option) =>
-      option
-        .setName("name")
-        .setDescription("The name of the campaign")
-        .setRequired(true)
+      option.setName("name").setDescription("The name of the campaign").setRequired(true),
     ),
   handler: async (interaction: ChatInputCommandInteraction) => {
     if (!interaction.guildId || !interaction.guild) {
@@ -40,7 +34,7 @@ export const campaign = {
 
     await interaction.reply(
       `Created campaign **${name}**.\nDM: <@${interaction.user.id}>\n` +
-        "Add players with `/add-player`."
+        "Add players with `/add-player`.",
     );
   },
 };

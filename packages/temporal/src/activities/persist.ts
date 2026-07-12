@@ -11,18 +11,13 @@ import {
   type Transcript,
 } from "@rainbot/db";
 
-export async function recordSessionStart(
-  input: UpsertSessionInput
-): Promise<void> {
+export async function recordSessionStart(input: UpsertSessionInput): Promise<void> {
   await upsertSession(input);
 }
 
 // endedAt is decided here (not in the workflow) so workflow code stays
 // deterministic. Terminal states get an end timestamp.
-export async function updateSessionStatus(
-  sessionId: string,
-  status: string
-): Promise<void> {
+export async function updateSessionStatus(sessionId: string, status: string): Promise<void> {
   const terminal = status === "done" || status === "failed";
   await setSessionStatus(sessionId, status, terminal ? new Date() : undefined);
 }
@@ -30,7 +25,7 @@ export async function updateSessionStatus(
 export async function persistTitle(
   sessionDir: string,
   sessionId: string,
-  titleKey: string
+  titleKey: string,
 ): Promise<void> {
   const p = path.join(sessionDir, titleKey);
   if (!existsSync(p)) return;
@@ -42,7 +37,7 @@ export async function persistTitle(
 export async function persistTranscript(
   sessionDir: string,
   sessionId: string,
-  transcriptKey: string
+  transcriptKey: string,
 ): Promise<void> {
   const p = path.join(sessionDir, transcriptKey);
   if (!existsSync(p)) return;
@@ -53,7 +48,7 @@ export async function persistTranscript(
 export async function persistSummary(
   sessionDir: string,
   sessionId: string,
-  summaryKey: string
+  summaryKey: string,
 ): Promise<void> {
   const p = path.join(sessionDir, summaryKey);
   if (!existsSync(p)) return;
@@ -63,7 +58,7 @@ export async function persistSummary(
 export async function persistRecap(
   sessionDir: string,
   sessionId: string,
-  recapKey: string
+  recapKey: string,
 ): Promise<void> {
   const p = path.join(sessionDir, recapKey);
   if (!existsSync(p)) return;

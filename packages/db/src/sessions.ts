@@ -36,7 +36,7 @@ export async function upsertSession(input: UpsertSessionInput): Promise<void> {
 export async function setSessionStatus(
   sessionId: string,
   status: string,
-  endedAt?: Date
+  endedAt?: Date,
 ): Promise<void> {
   await db
     .update(sessions)
@@ -44,42 +44,18 @@ export async function setSessionStatus(
     .where(eq(sessions.id, sessionId));
 }
 
-export async function setSessionTitle(
-  sessionId: string,
-  title: string
-): Promise<void> {
-  await db
-    .update(sessions)
-    .set({ title })
-    .where(eq(sessions.id, sessionId));
+export async function setSessionTitle(sessionId: string, title: string): Promise<void> {
+  await db.update(sessions).set({ title }).where(eq(sessions.id, sessionId));
 }
 
-export async function saveTranscript(
-  sessionId: string,
-  transcript: Transcript
-): Promise<void> {
-  await db
-    .update(sessions)
-    .set({ transcript })
-    .where(eq(sessions.id, sessionId));
+export async function saveTranscript(sessionId: string, transcript: Transcript): Promise<void> {
+  await db.update(sessions).set({ transcript }).where(eq(sessions.id, sessionId));
 }
 
-export async function saveSummary(
-  sessionId: string,
-  summary: string
-): Promise<void> {
-  await db
-    .update(sessions)
-    .set({ summary })
-    .where(eq(sessions.id, sessionId));
+export async function saveSummary(sessionId: string, summary: string): Promise<void> {
+  await db.update(sessions).set({ summary }).where(eq(sessions.id, sessionId));
 }
 
-export async function saveRecap(
-  sessionId: string,
-  recap: string
-): Promise<void> {
-  await db
-    .update(sessions)
-    .set({ recap })
-    .where(eq(sessions.id, sessionId));
+export async function saveRecap(sessionId: string, recap: string): Promise<void> {
+  await db.update(sessions).set({ recap }).where(eq(sessions.id, sessionId));
 }

@@ -34,12 +34,8 @@
           "name": "campaign_members_campaign_id_campaigns_id_fk",
           "tableFrom": "campaign_members",
           "tableTo": "campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["campaign_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -47,12 +43,8 @@
           "name": "campaign_members_user_id_users_id_fk",
           "tableFrom": "campaign_members",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -60,10 +52,7 @@
       "compositePrimaryKeys": {
         "campaign_members_campaign_id_user_id_pk": {
           "name": "campaign_members_campaign_id_user_id_pk",
-          "columns": [
-            "campaign_id",
-            "user_id"
-          ]
+          "columns": ["campaign_id", "user_id"]
         }
       },
       "uniqueConstraints": {},
@@ -121,12 +110,8 @@
           "name": "campaigns_guild_id_guilds_id_fk",
           "tableFrom": "campaigns",
           "tableTo": "guilds",
-          "columnsFrom": [
-            "guild_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["guild_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -219,12 +204,8 @@
           "name": "session_recaps_session_id_sessions_id_fk",
           "tableFrom": "session_recaps",
           "tableTo": "sessions",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -234,9 +215,7 @@
         "session_recaps_session_id_unique": {
           "name": "session_recaps_session_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "session_id"
-          ]
+          "columns": ["session_id"]
         }
       },
       "policies": {},
@@ -280,12 +259,8 @@
           "name": "session_transcripts_session_id_sessions_id_fk",
           "tableFrom": "session_transcripts",
           "tableTo": "sessions",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -295,9 +270,7 @@
         "session_transcripts_session_id_unique": {
           "name": "session_transcripts_session_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "session_id"
-          ]
+          "columns": ["session_id"]
         }
       },
       "policies": {},
@@ -365,12 +338,8 @@
           "name": "sessions_campaign_id_campaigns_id_fk",
           "tableFrom": "sessions",
           "tableTo": "campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["campaign_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }

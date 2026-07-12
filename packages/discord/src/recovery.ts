@@ -24,38 +24,22 @@ export async function recoverSessions(bot: Client): Promise<void> {
 
       const channel = guild.channels.cache.get(channelId);
       if (!channel?.isVoiceBased()) {
-        console.log(
-          `[recovery] channel ${channelId} not found, ending workflow`,
-        );
+        console.log(`[recovery] channel ${channelId} not found, ending workflow`);
         await handle.signal(sessionEnded).catch(() => {});
         continue;
       }
 
       const voiceChannel = channel as VoiceBasedChannel;
-      const humanCount = [...voiceChannel.members.values()].filter(
-        (m) => !m.user.bot,
-      ).length;
+      const humanCount = [...voiceChannel.members.values()].filter((m) => !m.user.bot).length;
 
       if (humanCount === 0) {
-        console.log(
-          `[recovery] channel empty for session ${sessionId}, ending workflow`,
-        );
+        console.log(`[recovery] channel empty for session ${sessionId}, ending workflow`);
         await handle.signal(sessionEnded).catch(() => {});
         continue;
       }
 
-      console.log(
-        `[recovery] resuming session ${sessionId} in guild ${guildId}`,
-      );
-      attachRecordingSession(
-        bot,
-        voiceChannel,
-        handle,
-        guildId,
-        channelId,
-        sessionId,
-        sessionDir,
-      );
+      console.log(`[recovery] resuming session ${sessionId} in guild ${guildId}`);
+      attachRecordingSession(bot, voiceChannel, handle, guildId, channelId, sessionId, sessionDir);
     }
   }
 }

@@ -5,11 +5,13 @@ WORKDIR /app
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.json ./
 COPY packages/db/package.json ./packages/db/
+COPY packages/temporal/package.json ./packages/temporal/
 COPY packages/web/package.json ./packages/web/
 
 RUN pnpm install --frozen-lockfile --filter @rainbot/web...
 
 COPY packages/db ./packages/db
+COPY packages/temporal ./packages/temporal
 COPY packages/web ./packages/web
 
 RUN pnpm --filter @rainbot/web build

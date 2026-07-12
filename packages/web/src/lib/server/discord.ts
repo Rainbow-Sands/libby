@@ -15,7 +15,7 @@ export function getAuthorizeUrl(redirectUri: string, state: string): string {
 
 export async function exchangeCode(
   code: string,
-  redirectUri: string
+  redirectUri: string,
 ): Promise<{ access_token: string }> {
   const res = await fetch(`${DISCORD_API}/oauth2/token`, {
     method: "POST",
@@ -33,7 +33,7 @@ export async function exchangeCode(
 }
 
 export async function fetchDiscordUser(
-  accessToken: string
+  accessToken: string,
 ): Promise<{ id: string; username: string; global_name: string | null }> {
   const res = await fetch(`${DISCORD_API}/users/@me`, {
     headers: { Authorization: `Bearer ${accessToken}` },

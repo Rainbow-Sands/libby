@@ -21,7 +21,7 @@ export const start = {
         .setName("campaign")
         .setDescription("Which campaign this session belongs to")
         .setRequired(true)
-        .setAutocomplete(true)
+        .setAutocomplete(true),
     ),
   autocomplete: campaignAutocomplete,
   handler: async (interaction: ChatInputCommandInteraction) => {
@@ -33,17 +33,13 @@ export const start = {
     const guildId = interaction.guildId;
 
     if (getActiveSession(guildId)) {
-      await interaction.reply(
-        "A recording is already in progress. Use `/stop` to stop it first."
-      );
+      await interaction.reply("A recording is already in progress. Use `/stop` to stop it first.");
       return;
     }
 
     const guild = interaction.guild;
     if (!guild) {
-      await interaction.reply(
-        "This command can only be used in a server the bot has joined."
-      );
+      await interaction.reply("This command can only be used in a server the bot has joined.");
       return;
     }
 
@@ -54,19 +50,13 @@ export const start = {
       return;
     }
 
-    const voiceChannelId = guild.voiceStates.cache.get(
-      interaction.user.id
-    )?.channelId;
+    const voiceChannelId = guild.voiceStates.cache.get(interaction.user.id)?.channelId;
     if (!voiceChannelId) {
-      await interaction.reply(
-        "You must be in a voice channel to use this command."
-      );
+      await interaction.reply("You must be in a voice channel to use this command.");
       return;
     }
 
-    const voiceChannel = guild.channels.cache.get(
-      voiceChannelId
-    ) as VoiceBasedChannel | null;
+    const voiceChannel = guild.channels.cache.get(voiceChannelId) as VoiceBasedChannel | null;
     if (!voiceChannel) {
       await interaction.reply("Could not resolve the voice channel.");
       return;
@@ -98,11 +88,11 @@ export const start = {
       guildId,
       channelId,
       sessionId,
-      sessionDir
+      sessionDir,
     );
 
     await interaction.reply(
-      `Joined **${voiceChannel.name}** and started recording. Session \`${sessionId}\`.`
+      `Joined **${voiceChannel.name}** and started recording. Session \`${sessionId}\`.`,
     );
   },
 };

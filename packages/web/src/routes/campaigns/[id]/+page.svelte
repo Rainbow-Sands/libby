@@ -43,6 +43,9 @@
   {/if}
 
   <h2>Sessions</h2>
+  {#if data.isDm}
+    <p><a class="button" href="/campaigns/{data.campaign.id}/ingest">Ingest audio session</a></p>
+  {/if}
   {#if data.campaign.sessions.length === 0}
     <p class="empty">No sessions recorded yet.</p>
   {:else}
@@ -124,5 +127,13 @@
   .status-failed {
     color: var(--accent-bright);
     border-color: var(--accent-bright);
+  }
+  .button {
+    display: inline-block;
+    background: var(--accent);
+    color: var(--surface);
+    border-radius: 4px;
+    padding: 0.5rem 0.8rem;
+    font-family: var(--font-display);
   }
 </style>

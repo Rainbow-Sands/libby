@@ -32,12 +32,12 @@ Discord voice ──/start──▶ Temporal workflow (session.ts)
 
 pnpm workspace; packages depend on each other via `workspace:*`.
 
-| Package | Role |
-|---|---|
-| `@rainbot/db` | Drizzle schema + Postgres client + queries |
-| `@rainbot/discord` | Discord bot, voice recording, session recovery |
+| Package             | Role                                                                   |
+| ------------------- | ---------------------------------------------------------------------- |
+| `@rainbot/db`       | Drizzle schema + Postgres client + queries                             |
+| `@rainbot/discord`  | Discord bot, voice recording, session recovery                         |
 | `@rainbot/temporal` | Temporal workers: transcribe / aggregate / summarize / recap / persist |
-| `@rainbot/web` | SvelteKit frontend (Discord OAuth) |
+| `@rainbot/web`      | SvelteKit frontend (Discord OAuth)                                     |
 
 ## Runtime & tooling — read before writing code
 
