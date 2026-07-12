@@ -7,7 +7,8 @@
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "test": "vitest run"
   },
   "dependencies": {
     "drizzle-orm": "latest",
@@ -16,6 +17,7 @@
   "devDependencies": {
     "@types/node": "^25.0.0",
     "drizzle-kit": "latest",
-    "typescript": "^6.0.0"
+    "typescript": "^6.0.0",
+    "vitest": "latest"
   }
 }

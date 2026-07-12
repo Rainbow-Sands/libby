@@ -52,6 +52,12 @@ pnpm --filter @rainbot/db db:migrate    # applies to the DB in DATABASE_URL
   timestamps, merging same-speaker turns, prepending the cast legend) happens
   in `simplifyTranscript`, not at write time — so improving that formatting
   later can be re-run over already-recorded sessions without re-transcribing.
+  This is exactly what `simplifyTranscript` already does with Whisper's own
+  `segments[]` (verbatim under `TranscriptSegment.whisper`): it explodes each
+  Discord voice activation into finer-grained per-utterance timestamps
+  (correcting for background noise keeping an activation open long after
+  someone stopped talking) and drops individual sub-segments Whisper itself
+  flags as noise — the pattern to extend for future formatting improvements.
   No backwards compatibility with the old plain-text format: the migration
   that introduced this column type cleared existing rows (`USING NULL`) rather
   than carrying a legacy-string code path — pre-production, nothing to keep.
