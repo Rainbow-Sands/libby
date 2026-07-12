@@ -11,8 +11,5 @@ export const load: PageServerLoad = async ({ params, locals }) => {
   const campaign = await getCampaignDetail(params.id);
   if (!campaign) throw error(404, "Campaign not found.");
 
-  return {
-    campaign,
-    isDm: campaign.members.some((member) => member.id === locals.user!.id && member.role === "dm"),
-  };
+  return { campaign };
 };

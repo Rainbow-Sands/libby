@@ -36,9 +36,6 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 
   const campaign = await getCampaignDetail(params.id);
   if (!campaign) throw error(404, "Campaign not found.");
-  if (!campaign.members.some((m) => m.id === locals.user!.id && m.role === "dm")) {
-    throw error(403, "Only the campaign's DM can ingest audio sessions.");
-  }
 
   return { campaign };
 };
@@ -49,9 +46,8 @@ export const actions: Actions = {
 
     const campaign = await getCampaignDetail(params.id);
     if (!campaign) throw error(404, "Campaign not found.");
-    if (!campaign.members.some((m) => m.id === locals.user!.id && m.role === "dm")) {
-      throw error(403, "Only the campaign's DM can ingest audio sessions.");
-    }
+    const member = campaign.members.some((m) => m.id === locals.user!.id);
+    if (!member) throw error(403, "You are not a member of this campaign.");
 
     const formData = await request.formData();
     const files = formData.getAll("audio");
