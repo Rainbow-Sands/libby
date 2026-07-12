@@ -24,7 +24,10 @@ RUN pnpm --filter @rainbot/web deploy --prod --legacy /app/deploy
 
 FROM node:24-slim AS runner
 WORKDIR /app
-ENV NODE_ENV=production
+# SvelteKit's Node adapter defaults request bodies to 512 KB. Manual session
+# ingestion uploads multi-hour recordings, so provide a safe operational
+# default that deployments may override.
+ENV NODE_ENV=production BODY_SIZE_LIMIT=10G
 COPY --from=builder /app/deploy/node_modules ./node_modules
 COPY --from=builder /app/packages/web/build ./
 EXPOSE 3000

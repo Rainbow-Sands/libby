@@ -60,4 +60,5 @@ pnpm dev:web       # SvelteKit frontend
 | `MEDIA_PATH`             | discord, temporal, web | Directory for audio clips, imported files, and transcripts                                                                                                    |
 | `TEMPORAL_URL`           | discord, temporal, web | Temporal server address (e.g. `localhost:7233`)                                                                                                               |
 | `INFERENCE_URL`          | temporal, web          | Shared llama-swap base URL; the app requests `whisper-large-v3-turbo` for transcription, `qwen3.6-35b-a3b` for summary/recap/title, and `qwen3.5-9b` for chat |
+| `BODY_SIZE_LIMIT`        | web                    | Maximum manual-upload request size; defaults to `10G` in Docker Compose                                                                                      |
 | `DATABASE_URL`           | db                     | PostgreSQL connection string                                                                                                                                  |

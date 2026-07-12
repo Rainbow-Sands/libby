@@ -2,7 +2,7 @@
   "name": "rainbot-sands",
   "private": true,
   "scripts": {
-    "dev": "pnpm --recursive dev",
+    "dev": "pnpm --parallel --recursive dev",
     "format": "oxfmt",
     "format:fix": "oxfmt --write",
     "lint": "oxlint",
