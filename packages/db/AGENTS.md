@@ -11,8 +11,7 @@ Drizzle ORM schema, Postgres client, and all shared queries. See the root
 - `sessions.ts` — session upserts + summary/recap/title/transcript writes.
 - `queries.ts` — read queries used by web and Temporal.
 - `transcript.ts` — the `Transcript`/`TranscriptSegment` JSON shape stored in
-  `sessions.transcript`, plus `simplifyTranscript` (the LLM-facing formatting
-  transform, shared by Temporal's `summarize` activity and web's chat context).
+  `sessions.transcript`, plus display and inference formatting transforms.
 - `index.ts` — the package's **public API**. Export anything other packages need
   from here; consumers import from `@rainbot/db`, never deep paths.
 
@@ -48,12 +47,13 @@ pnpm --filter @rainbot/db db:migrate    # applies to the DB in DATABASE_URL
   and written independently as the pipeline produces them.
 - `sessions.transcript` is `jsonb`, typed as `Transcript` (see `transcript.ts`):
   every recorded segment, lossless (timestamp, userId, username, text,
-  whisper's own per-segment metadata). LLM-facing simplification (dropping
-  timestamps, merging same-speaker turns, prepending the cast legend) happens
-  in `simplifyTranscript`, not at write time — so improving that formatting
-  later can be re-run over already-recorded sessions without re-transcribing.
-  This is exactly what `simplifyTranscript` already does with Whisper's own
-  `segments[]` (verbatim under `TranscriptSegment.whisper`): it explodes each
+  whisper's own per-segment metadata). LLM-facing formatting (retaining
+  utterance timestamps and prepending the cast legend) happens in
+  `formatTranscriptForInference`, not at write time — so improving that
+  formatting later can be re-run over already-recorded sessions without
+  re-transcribing. Both it and the display-oriented `simplifyTranscript` use
+  Whisper's own `segments[]` (verbatim under `TranscriptSegment.whisper`) to
+  explode each
   Discord voice activation into finer-grained per-utterance timestamps
   (correcting for background noise keeping an activation open long after
   someone stopped talking) and drops individual sub-segments Whisper itself

@@ -31,8 +31,8 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
   const member = await isCampaignMember(session.campaignId, locals.user.id);
   if (!member) throw error(403, "You are not a member of this campaign.");
 
-  if (!session.transcript) {
-    throw error(409, "This session has no transcript to chat about yet.");
+  if (!session.summary && !session.transcript) {
+    throw error(409, "This session has no detailed record or transcript to chat about yet.");
   }
 
   const { messages }: { messages: UIMessage[] } = await request.json();

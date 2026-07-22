@@ -7,17 +7,20 @@
 //   INFERENCE_URL=http://localhost:8080 node src/scripts/test-summarize.ts <transcript.txt>
 //   pnpm test:summarize <transcript.txt>          # loads INFERENCE_URL from root .env
 //
-// Writes <transcript>.summary.md / .recap.md / .title.txt next to the input so
+// Writes <transcript>.record.md / .recap.md / .title.txt next to the input so
 // outputs persist for comparing prompts or models across runs.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { performance } from "node:perf_hooks";
-import { SUMMARIZE_SYSTEM, TITLE_SYSTEM, RECAP_SYSTEM } from "../prompts.ts";
+import { TITLE_SYSTEM } from "../prompts.ts";
 import { stripCodeFence, stripLeadingTitle, normalizeTitle } from "../text.ts";
+import { createDetailedRecord, createRecap } from "../record-pipeline.ts";
 
 const INFERENCE_URL = process.env.INFERENCE_URL;
 const SUMMARIZATION_MODEL = process.env.SUMMARIZATION_MODEL ?? "qwen3.6-35b-a3b";
 const SUMMARIZATION_THINKING_BUDGET = process.env.SUMMARIZATION_THINKING_BUDGET ?? "8192";
+const SUMMARIZATION_MAX_TOKENS = Number(process.env.SUMMARIZATION_MAX_TOKENS ?? "16384");
+const SUMMARIZATION_CHUNK_CHARS = Number(process.env.SUMMARIZATION_CHUNK_CHARS ?? "36000");
 
 if (!INFERENCE_URL) {
   console.error("Missing required environment variable: INFERENCE_URL");
@@ -37,22 +40,23 @@ interface Completion {
   completionTokens?: number;
 }
 
-async function complete(system: string, user: string): Promise<Completion> {
+async function complete(prompt: string, system: string): Promise<Completion> {
   const res = await fetch(`${INFERENCE_URL}/v1/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: SUMMARIZATION_MODEL,
+    body: JSON.stringify({
+      model: SUMMARIZATION_MODEL,
       messages: [
         { role: "system", content: system },
-        { role: "user", content: user },
-        ],
-        temperature: 0.7,
-        thinking_budget_tokens: Number(SUMMARIZATION_THINKING_BUDGET),
-        chat_template_kwargs: {
-          enable_thinking: Number(SUMMARIZATION_THINKING_BUDGET) !== 0,
-        },
-      }),
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.15,
+      max_tokens: SUMMARIZATION_MAX_TOKENS,
+      thinking_budget_tokens: Number(SUMMARIZATION_THINKING_BUDGET),
+      chat_template_kwargs: {
+        enable_thinking: Number(SUMMARIZATION_THINKING_BUDGET) !== 0,
+      },
+    }),
   });
 
   if (!res.ok) {
@@ -61,12 +65,22 @@ async function complete(system: string, user: string): Promise<Completion> {
 
   const data = (await res.json()) as {
     model?: string;
-    choices: { message: { content: string } }[];
+    choices: { finish_reason?: string; message: { content: string } }[];
     usage?: { prompt_tokens?: number; completion_tokens?: number };
   };
 
+  const choice = data.choices[0];
+  if (choice?.finish_reason === "length") {
+    throw new Error(
+      "Inference output reached SUMMARIZATION_MAX_TOKENS; increase it or reduce SUMMARIZATION_CHUNK_CHARS",
+    );
+  }
+
+  const content = stripCodeFence((choice?.message.content ?? "").trim());
+  if (!content) throw new Error("Inference server returned an empty response");
+
   return {
-    content: stripCodeFence((data.choices[0]?.message.content ?? "").trim()),
+    content,
     model: data.model,
     promptTokens: data.usage?.prompt_tokens,
     completionTokens: data.usage?.completion_tokens,
@@ -77,7 +91,7 @@ async function complete(system: string, user: string): Promise<Completion> {
 async function stage(label: string, system: string, input: string): Promise<Completion> {
   process.stdout.write(`\n→ ${label}… (${input.length.toLocaleString()} chars in)\n`);
   const start = performance.now();
-  const result = await complete(system, input);
+  const result = await complete(input, system);
   const secs = (performance.now() - start) / 1000;
 
   const stats = [`${secs.toFixed(1)}s`];
@@ -101,20 +115,30 @@ try {
 
   const overall = performance.now();
 
-  const summary = await stage("Summary", SUMMARIZE_SYSTEM, transcript);
-  const summaryText = stripLeadingTitle(summary.content);
-  writeFileSync(`${base}.summary.md`, summaryText, "utf8");
+  let recordPass = 0;
+  const record = await createDetailedRecord(
+    transcript,
+    SUMMARIZATION_CHUNK_CHARS,
+    async (prompt, system) =>
+      (await stage(`Detailed record pass ${++recordPass}`, system, prompt)).content,
+  );
+  writeFileSync(`${base}.record.md`, record, "utf8");
 
-  const recap = await stage("Recap", RECAP_SYSTEM, summaryText);
-  writeFileSync(`${base}.recap.md`, stripLeadingTitle(recap.content), "utf8");
+  let recapPass = 0;
+  const recap = await createRecap(
+    record,
+    SUMMARIZATION_CHUNK_CHARS,
+    async (prompt, system) => (await stage(`Recap pass ${++recapPass}`, system, prompt)).content,
+  );
+  writeFileSync(`${base}.recap.md`, stripLeadingTitle(recap), "utf8");
 
-  const titleResult = await stage("Title", TITLE_SYSTEM, summaryText);
+  const titleResult = await stage("Title", TITLE_SYSTEM, recap);
   const title = normalizeTitle(titleResult.content);
   writeFileSync(`${base}.title.txt`, title, "utf8");
 
   console.log(
     `\nDone in ${((performance.now() - overall) / 1000).toFixed(1)}s. ` +
-      `Wrote ${base}.summary.md, ${base}.recap.md, ${base}.title.txt`,
+      `Wrote ${base}.record.md, ${base}.recap.md, ${base}.title.txt`,
   );
 } catch (err) {
   console.error(`\nFailed: ${err instanceof Error ? err.message : String(err)}`);

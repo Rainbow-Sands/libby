@@ -16,6 +16,17 @@ function getThinkingBudget(name: string, fallback: number): number {
   return budget;
 }
 
+function getPositiveInteger(name: string, fallback: number): number {
+  const value = process.env[name];
+  if (!value) return fallback;
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+  return parsed;
+}
+
 export const TEMPORAL_URL = get("TEMPORAL_URL");
 export const INFERENCE_URL = get("INFERENCE_URL");
 export const DISCORD_TOKEN = get("DISCORD_TOKEN");
@@ -26,3 +37,5 @@ export const SUMMARIZATION_THINKING_BUDGET = getThinkingBudget(
   "SUMMARIZATION_THINKING_BUDGET",
   8192,
 );
+export const SUMMARIZATION_MAX_TOKENS = getPositiveInteger("SUMMARIZATION_MAX_TOKENS", 16384);
+export const SUMMARIZATION_CHUNK_CHARS = getPositiveInteger("SUMMARIZATION_CHUNK_CHARS", 36000);

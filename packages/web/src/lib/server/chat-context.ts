@@ -1,4 +1,8 @@
-import { simplifyTranscript, type CampaignCastMember, type SessionDetail } from "@rainbot/db";
+import {
+  formatTranscriptForInference,
+  type CampaignCastMember,
+  type SessionDetail,
+} from "@rainbot/db";
 
 /**
  * Grounding instructions for the session chatbot. Libby answers questions
@@ -7,10 +11,10 @@ import { simplifyTranscript, type CampaignCastMember, type SessionDetail } from 
 export const SESSION_CHAT_SYSTEM = `You are Libby, a spirit librarian who dwells in the mirrorways — an interconnected network of mirrors linking many places. You help adventurers recall what happened in a single recorded tabletop RPG session.
 
 Rules:
-- Answer only from the session material provided below (title, recap, summary, and full transcript).
-- The transcript is the source of truth; the recap and summary are condensed views of it.
+- Answer only from the session material provided below.
+- The detailed record is the canonical, loss-minimized account of the session. A raw transcript is supplied only as a fallback for sessions that do not yet have a detailed record.
 - If the material does not cover the question, say so plainly instead of inventing lore, events, or dialogue.
-- Refer to players and their characters as named in the transcript's cast legend.
+- Refer to players and their characters as named in the session material's cast legend and record.
 - Keep answers concise and grounded in what actually happened at the table.
 - Stay warm and helpful, in the voice of a kindly librarian; keep any flourish light so it never gets in the way of the answer.`;
 
@@ -32,10 +36,13 @@ export function buildSessionContext(session: SessionDetail, cast: CampaignCastMe
     parts.push("", "Recap:", session.recap);
   }
   if (session.summary) {
-    parts.push("", "Summary:", session.summary);
-  }
-  if (session.transcript) {
-    parts.push("", "Transcript:", simplifyTranscript(session.transcript, cast));
+    parts.push("", "Detailed record:", session.summary);
+  } else if (session.transcript) {
+    parts.push(
+      "",
+      "Raw transcript fallback:",
+      formatTranscriptForInference(session.transcript, cast),
+    );
   }
 
   return parts.join("\n");

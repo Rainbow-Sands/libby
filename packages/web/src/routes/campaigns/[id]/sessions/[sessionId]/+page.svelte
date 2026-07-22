@@ -71,7 +71,7 @@
         role="tab"
         href="?tab=summary"
         aria-selected={activeTab === "summary"}
-        class:active={activeTab === "summary"}>Summary</a
+        class:active={activeTab === "summary"}>Detailed Record</a
       >
       <a
         role="tab"

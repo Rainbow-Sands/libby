@@ -1,23 +1,32 @@
 // System prompts for the post-session LLM pipeline. Shared by the Temporal
 // activities and the standalone test script so the two never drift.
 
-export const SUMMARIZE_SYSTEM = `I am going to give you a full transcript of a DnD game. Your goal is to create a summary of the game that only includes the in-world elements.
-This means you remove all meta commentary, out of character conversations and fluff.
-Your final summary should be a beautifully formatted markdown document of everything that happened in the game.
-For flair - include markdown quotes from characters for funny or impactful moments but ensure they are relevant to the section in question.
-Ensure you include all the details of the game, including all the characters and their actions.
+export const DETAILED_RECORD_SYSTEM = `Create a loss-minimized factual record from this excerpt of a tabletop RPG transcript. This is not a conventional summary. It will be treated as a canonical source for future inference, so completeness and fidelity matter more than brevity or literary style.
 
-To reiterate - ensure your summary is extremely long and covers every action exhaustively.
-Speak in third person: "The party entered..." etc.
-Do not begin with a title or top-level (#) heading; the session has a separate title. Start with the content and its section headers.
-You only respond with the markdown text of the summary: do not respond with anything else.`;
+Retain every detail that could affect fictional events, game state, characterization, relationships, objectives, inventory, rules outcomes, or future interpretation. This includes:
+- every meaningful action, decision, outcome, discovery, clue, description, and piece of lore;
+- consequential dialogue, promises, threats, plans, theories, and alternatives considered or rejected;
+- NPCs, locations, factions, relationships, quests, unresolved threads, items, resources, injuries, conditions, spells, and abilities;
+- out-of-character rules discussion, corrections, retcons, and player statements when they determine, clarify, or reinterpret what happened in the game.
 
-export const TITLE_SYSTEM = `I am going to give you a summary of a DnD session. Your goal is to write a short, evocative title for the session — the kind of name a chapter in a fantasy novel might have.
+Remove only clearly unrelated conversation, repeated verbal filler, and meta commentary with no possible bearing on the game. When uncertain whether a detail matters, retain it. Do not invent connections or resolve ambiguities. Explicitly identify uncertainty, disagreement, and likely transcription errors instead of silently choosing an interpretation.
+
+Write precise markdown in chronological order. Use source timestamps from the transcript throughout so facts can be audited. Use level-three headings (###) to organize chronology and relevant state changes. Do not add a title or top-level heading. Do not optimize for shortness, elegance, or a target reading time. Respond only with the detailed record.`;
+
+export const AUDIT_RECORD_SYSTEM = `Audit a draft tabletop RPG session record against its source transcript excerpt, then output a corrected and complete replacement record.
+
+Preserve everything the draft got right. Restore every consequential fact that is absent, weakened, over-compressed, misattributed, or represented with unjustified certainty. Check actions, dialogue, decisions, alternatives, outcomes, NPCs, locations, relationships, discoveries, lore, objectives, inventory, resources, combat, rules decisions, corrections, retcons, and unresolved uncertainty. Remove claims unsupported by the source.
+
+This remains a loss-minimized canonical record, not a conventional summary. Retain source timestamps. Remove only clearly unrelated conversation and verbal filler. Use level-three markdown headings, no title or top-level heading, and respond only with the complete revised record.`;
+
+export const RECAP_EXCERPT_SYSTEM = `Extract the important player-facing recap material from this portion of a detailed tabletop RPG session record. Preserve names, decisions, discoveries, outcomes, and unresolved hooks. Produce compact markdown notes for a later recap-writing pass. Do not add facts or a title. Respond only with the notes.`;
+
+export const TITLE_SYSTEM = `I am going to give you a recap of a DnD session. Your goal is to write a short, evocative title for the session — the kind of name a chapter in a fantasy novel might have.
 The title should capture the most memorable moment or theme of the session.
 Keep it under 10 words. Use title case. Do not use quotation marks, markdown, or any prefix like "Title:".
 You only respond with the title text, nothing else.`;
 
-export const RECAP_SYSTEM = `I am going to give you a summary of a DnD session. Your goal is to shorten it to just a few paragraphs of the most important parts creating a short 'recap' of the game.
+export const RECAP_SYSTEM = `I am going to give you a detailed record or collected recap notes for a DnD session. Your goal is to shorten it to just a few paragraphs of the most important parts creating a short 'recap' of the game.
 This recap will be used at the next session to help the players remember what happened.
 Your recap should be in markdown format with nice headers and use of bold.
 

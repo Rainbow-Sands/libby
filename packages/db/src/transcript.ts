@@ -150,6 +150,26 @@ export function simplifyTranscript(transcript: Transcript, cast: CastMember[]): 
   return buildCastLegend(cast, labelByUserId) + lines.join("\n") + "\n";
 }
 
+// Preserve utterance-level timestamps and speaker boundaries for the detailed
+// record pipeline. These source markers let the model retain chronology and
+// make the resulting record auditable against the original transcript.
+export function formatTranscriptForInference(transcript: Transcript, cast: CastMember[]): string {
+  const utterances = transcript.segments
+    .flatMap(explodeSegment)
+    .toSorted((a, b) => a.timestamp.localeCompare(b.timestamp));
+  const labelByUserId = new Map<string, string>();
+
+  const lines = utterances.flatMap((utterance) => {
+    const text = utterance.text.trim();
+    if (!text) return [];
+    const name = utterance.username ?? utterance.userId;
+    if (!labelByUserId.has(utterance.userId)) labelByUserId.set(utterance.userId, name);
+    return [`[${utterance.timestamp}] ${name}: ${text}`];
+  });
+
+  return buildCastLegend(cast, labelByUserId) + lines.join("\n") + "\n";
+}
+
 function buildCastLegend(cast: CastMember[], labelByUserId: Map<string, string>): string {
   if (cast.length === 0) return "";
 
