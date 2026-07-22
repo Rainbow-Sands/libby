@@ -1,12 +1,19 @@
 <script lang="ts">
   import { marked } from "marked";
   import type { PageData } from "./$types";
+  import { page } from "$app/state";
   import TaperedRule from "$lib/components/TaperedRule.svelte";
   import SessionChat from "$lib/components/SessionChat.svelte";
 
   let { data }: { data: PageData } = $props();
 
-  let activeTab = $state<"recap" | "summary" | "transcript">("recap");
+  type SessionTab = "recap" | "summary" | "transcript";
+
+  function sessionTab(value: string | null): SessionTab {
+    return value === "summary" || value === "transcript" ? value : "recap";
+  }
+
+  let activeTab = $derived(sessionTab(page.url.searchParams.get("tab")));
 
   function formatDate(d: Date | string): string {
     return new Date(d).toLocaleString("en-CA", {
@@ -54,23 +61,23 @@
     {/if}
 
     <div class="tabs" role="tablist">
-      <button
+      <a
         role="tab"
+        href="?tab=recap"
         aria-selected={activeTab === "recap"}
-        class:active={activeTab === "recap"}
-        onclick={() => (activeTab = "recap")}>Recap</button
+        class:active={activeTab === "recap"}>Recap</a
       >
-      <button
+      <a
         role="tab"
+        href="?tab=summary"
         aria-selected={activeTab === "summary"}
-        class:active={activeTab === "summary"}
-        onclick={() => (activeTab = "summary")}>Summary</button
+        class:active={activeTab === "summary"}>Summary</a
       >
-      <button
+      <a
         role="tab"
+        href="?tab=transcript"
         aria-selected={activeTab === "transcript"}
-        class:active={activeTab === "transcript"}
-        onclick={() => (activeTab = "transcript")}>Transcript</button
+        class:active={activeTab === "transcript"}>Transcript</a
       >
     </div>
 
@@ -120,21 +127,19 @@
     margin: 1.25rem 0 0.5rem;
     border-bottom: 1px solid var(--edge);
   }
-  .tabs button {
+  .tabs a {
     padding: 0.5rem 1rem;
     font-family: var(--font-display);
     font-size: 1rem;
     color: var(--ink-soft);
-    background: none;
-    border: none;
     border-bottom: 2px solid transparent;
     margin-bottom: -1px;
-    cursor: pointer;
+    text-decoration: none;
   }
-  .tabs button:hover {
+  .tabs a:hover {
     color: var(--ink);
   }
-  .tabs button.active {
+  .tabs a.active {
     color: var(--gold);
     border-bottom-color: var(--gold);
   }
