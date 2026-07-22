@@ -49,9 +49,7 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
     providerOptions: {
       llama: {
         thinking_budget_tokens: CHAT_THINKING_BUDGET,
-        ...(CHAT_THINKING_BUDGET === 0
-          ? { chat_template_kwargs: { enable_thinking: false } }
-          : {}),
+        chat_template_kwargs: { enable_thinking: CHAT_THINKING_BUDGET !== 0 },
       },
     },
   });

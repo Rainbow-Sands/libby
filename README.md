@@ -73,5 +73,6 @@ budget with `0` to end thinking immediately, a positive integer to cap thinking
 tokens, or `-1` for unrestricted thinking. Per-request budgets require a recent
 llama.cpp build and are ignored when the server was started with a fixed
 `--reasoning-budget`. A zero budget also passes
-`chat_template_kwargs.enable_thinking=false` so Qwen's chat template disables
-thinking rather than merely limiting its output.
+`chat_template_kwargs.enable_thinking=false`; positive and unrestricted budgets
+pass `enable_thinking=true`. This makes Qwen's chat-template mode explicit on
+every request.

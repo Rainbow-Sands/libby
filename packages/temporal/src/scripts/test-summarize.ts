@@ -49,9 +49,9 @@ async function complete(system: string, user: string): Promise<Completion> {
         ],
         temperature: 0.7,
         thinking_budget_tokens: Number(SUMMARIZATION_THINKING_BUDGET),
-        ...(Number(SUMMARIZATION_THINKING_BUDGET) === 0
-          ? { chat_template_kwargs: { enable_thinking: false } }
-          : {}),
+        chat_template_kwargs: {
+          enable_thinking: Number(SUMMARIZATION_THINKING_BUDGET) !== 0,
+        },
       }),
   });
 
