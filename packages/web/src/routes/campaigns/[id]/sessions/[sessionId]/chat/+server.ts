@@ -55,6 +55,6 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
   });
 
   return createUIMessageStreamResponse({
-    stream: toUIMessageStream({ stream: result.stream }),
+    stream: toUIMessageStream({ stream: result.stream, sendReasoning: true }),
   });
 };

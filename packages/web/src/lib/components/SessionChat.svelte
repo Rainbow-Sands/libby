@@ -31,13 +31,28 @@
       .join("");
   }
 
+  function messageReasoning(message: UIMessage): {
+    text: string;
+    streaming: boolean;
+  } {
+    const parts = message.parts.filter((part) => part.type === "reasoning");
+    return {
+      text: parts.map((part) => part.text).join(""),
+      streaming: parts.some((part) => part.state === "streaming"),
+    };
+  }
+
   // Keep the placeholder up from the moment we send until the first token of
   // the assistant reply arrives (there's a gap where an empty assistant
   // message exists but has no text yet).
   const awaitingResponse = $derived.by(() => {
     if (!busy) return false;
     const last = chat.messages.at(-1);
-    return !last || last.role !== "assistant" || messageText(last) === "";
+    return (
+      !last ||
+      last.role !== "assistant" ||
+      (messageText(last) === "" && messageReasoning(last).text === "")
+    );
   });
 
   function renderMarkdown(text: string): string {
@@ -63,10 +78,21 @@
   <div class="log" role="log" aria-live="polite">
     {#each chat.messages as message (message.id)}
       {@const text = messageText(message)}
+      {@const reasoning = messageReasoning(message)}
       {#if message.role === "assistant"}
-        {#if text}
+        {#if text || reasoning.text}
           <div class="message assistant">
-            <div class="prose">{@html renderMarkdown(text)}</div>
+            {#if reasoning.text}
+              <details class="reasoning" open={reasoning.streaming}>
+                <summary>{reasoning.streaming ? "Libby is thinking…" : "Libby's thinking"}</summary>
+                <div class="prose reasoning-content">
+                  {@html renderMarkdown(reasoning.text)}
+                </div>
+              </details>
+            {/if}
+            {#if text}
+              <div class="prose">{@html renderMarkdown(text)}</div>
+            {/if}
           </div>
         {/if}
       {:else}
@@ -133,6 +159,23 @@
   .thinking {
     color: var(--ink-soft);
     font-style: italic;
+  }
+  .reasoning {
+    margin-bottom: 0.6rem;
+    color: var(--ink-soft);
+    border-bottom: 1px solid var(--edge);
+    padding-bottom: 0.5rem;
+  }
+  .reasoning summary {
+    cursor: pointer;
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .reasoning-content {
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
   }
   .error {
     color: var(--accent-bright);
