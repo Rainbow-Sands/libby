@@ -164,7 +164,7 @@ export function formatTranscriptForInference(transcript: Transcript, cast: CastM
     if (!text) return [];
     const name = utterance.username ?? utterance.userId;
     if (!labelByUserId.has(utterance.userId)) labelByUserId.set(utterance.userId, name);
-    return [`[${utterance.timestamp}] ${name}: ${text}`];
+    return [`${name}: ${text}`];
   });
 
   return buildCastLegend(cast, labelByUserId) + lines.join("\n") + "\n";
