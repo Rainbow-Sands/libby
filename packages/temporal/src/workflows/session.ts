@@ -11,7 +11,7 @@ import {
 import type * as activities from "../activities/transcribe.ts";
 import type * as persistActivities from "../activities/persist.ts";
 import type * as notifyActivities from "../activities/notify.ts";
-import type { SegmentRef, SessionInput, SessionStatus } from "../types.ts";
+import type { RegenerateSessionInput, SegmentRef, SessionInput, SessionStatus } from "../types.ts";
 
 const { transcribeSegment, aggregateTranscript } = proxyActivities<typeof activities>({
   taskQueue: "rainbot-transcription",
@@ -44,6 +44,8 @@ const {
   persistSummary,
   persistRecap,
   persistTitle,
+  prepareSessionRegeneration,
+  updateRegenerationStatus,
 } = proxyActivities<typeof persistActivities>({
   taskQueue: "rainbot-transcription",
   startToCloseTimeout: "1 minute",
@@ -72,6 +74,27 @@ export const getStatus = defineQuery<SessionStatus>("getStatus");
 
 interface SessionContinuation {
   carriedOverKeys: string[];
+}
+
+export async function regenerateSessionWorkflow(input: RegenerateSessionInput): Promise<void> {
+  const source = await prepareSessionRegeneration(input.sessionId);
+  await updateRegenerationStatus(input.sessionId, "summarizing");
+
+  try {
+    const summaryKey = await summarize(source.sessionDir, source.transcriptKey, source.campaignId);
+    await persistSummary(source.sessionDir, input.sessionId, summaryKey);
+
+    const recapKey = await recap(source.sessionDir, summaryKey);
+    await persistRecap(source.sessionDir, input.sessionId, recapKey);
+
+    const titleKey = await generateTitle(source.sessionDir, summaryKey);
+    await persistTitle(source.sessionDir, input.sessionId, titleKey);
+
+    await updateRegenerationStatus(input.sessionId, "done");
+  } catch (err) {
+    await updateRegenerationStatus(input.sessionId, "failed");
+    throw err;
+  }
 }
 
 export async function sessionWorkflow(

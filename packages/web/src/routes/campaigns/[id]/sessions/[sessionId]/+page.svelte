@@ -1,11 +1,11 @@
 <script lang="ts">
   import { marked } from "marked";
-  import type { PageData } from "./$types";
+  import type { ActionData, PageData } from "./$types";
   import { page } from "$app/state";
   import TaperedRule from "$lib/components/TaperedRule.svelte";
   import SessionChat from "$lib/components/SessionChat.svelte";
 
-  let { data }: { data: PageData } = $props();
+  let { data, form }: { data: PageData; form: ActionData } = $props();
 
   type SessionTab = "recap" | "summary" | "transcript";
 
@@ -24,6 +24,12 @@
 
   function renderMarkdown(text: string): string {
     return marked(text) as string;
+  }
+
+  function confirmRegeneration(event: SubmitEvent) {
+    if (!window.confirm("Regenerate the detailed record, recap, and title from this transcript?")) {
+      event.preventDefault();
+    }
   }
 </script>
 
@@ -49,6 +55,22 @@
   <p class="muted status">Status: {data.session.status}</p>
 
   {#if data.canViewDetails}
+    {#if form?.message}
+      <p class="error" role="alert">{form.message}</p>
+    {/if}
+    {#if page.url.searchParams.has("regenerating") || data.session.status === "summarizing"}
+      <p class="muted">Regeneration is running. Refresh this page to see its progress.</p>
+    {/if}
+    {#if data.session.transcript}
+      <form method="POST" action="?/regenerate" onsubmit={confirmRegeneration}>
+        <button
+          class="btn regenerate"
+          type="submit"
+          disabled={["recording", "transcribing", "summarizing"].includes(data.session.status)}
+        >Regenerate inference</button>
+      </form>
+    {/if}
+
     {#if data.session.status === "done"}
       <SessionChat
         sessionId={data.session.id}
@@ -120,6 +142,16 @@
   }
   .preview-description {
     line-height: 1.7;
+  }
+  .regenerate {
+    margin: 0.25rem 0 1rem;
+  }
+  .regenerate:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+  .error {
+    color: var(--accent-bright);
   }
   .tabs {
     display: flex;

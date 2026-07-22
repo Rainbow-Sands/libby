@@ -22,3 +22,7 @@ export interface SessionStatus {
   transcribedCount: number;
   lastError?: string;
 }
+
+export interface RegenerateSessionInput {
+  sessionId: string;
+}

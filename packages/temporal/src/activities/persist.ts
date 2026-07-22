@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import path from "path";
 import {
   upsertSession,
@@ -7,6 +7,7 @@ import {
   saveTranscript,
   saveSummary,
   saveRecap,
+  getSessionRegenerationInput,
   type UpsertSessionInput,
   type Transcript,
 } from "@rainbot/db";
@@ -20,6 +21,33 @@ export async function recordSessionStart(input: UpsertSessionInput): Promise<voi
 export async function updateSessionStatus(sessionId: string, status: string): Promise<void> {
   const terminal = status === "done" || status === "failed";
   await setSessionStatus(sessionId, status, terminal ? new Date() : undefined);
+}
+
+export async function updateRegenerationStatus(sessionId: string, status: string): Promise<void> {
+  // Regeneration should not replace the original session's endedAt timestamp.
+  await setSessionStatus(sessionId, status);
+}
+
+export async function prepareSessionRegeneration(sessionId: string): Promise<{
+  campaignId: string;
+  sessionDir: string;
+  transcriptKey: string;
+}> {
+  const session = await getSessionRegenerationInput(sessionId);
+  if (!session) throw new Error(`Session ${sessionId} has no persisted transcript`);
+
+  mkdirSync(session.sessionDir, { recursive: true });
+  const transcriptKey = "transcript.json";
+  writeFileSync(
+    path.join(session.sessionDir, transcriptKey),
+    JSON.stringify(session.transcript),
+    "utf8",
+  );
+  return {
+    campaignId: session.campaignId,
+    sessionDir: session.sessionDir,
+    transcriptKey,
+  };
 }
 
 export async function persistTitle(

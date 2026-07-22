@@ -32,14 +32,16 @@ workflow bundle — keep it that way.
 
 ## Workers & task queues (all in `worker.ts`)
 
-| Queue                   | Activities                                                 |
-| ----------------------- | ---------------------------------------------------------- |
-| `rainbot`               | the workflow                                               |
-| `rainbot-transcription` | `transcribeSegment`, `aggregateTranscript`, all `persist*` |
-| `rainbot-summarization` | `summarize`, `recap`, `generateTitle`                      |
+| Queue                   | Activities                                           |
+| ----------------------- | ---------------------------------------------------- |
+| `rainbot`               | session and regeneration workflows                   |
+| `rainbot-transcription` | transcription, persistence, regeneration preparation |
+| `rainbot-summarization` | `summarize`, `recap`, `generateTitle`                |
 
 Workflow behaviour: parallel per-segment transcription; 1-hour idle timeout;
 `continueAsNew` at 500 segments; status transitions persisted through activities.
+The regeneration workflow rebuilds `transcript.json` from the lossless database
+copy, then replaces only the detailed record, recap, and title.
 
 ## Search attributes
 

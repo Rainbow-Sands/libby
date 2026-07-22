@@ -28,6 +28,8 @@ export async function startWorker(): Promise<void> {
       // DB persistence runs alongside transcription (light, always-on queue).
       recordSessionStart: persistActivities.recordSessionStart,
       updateSessionStatus: persistActivities.updateSessionStatus,
+      updateRegenerationStatus: persistActivities.updateRegenerationStatus,
+      prepareSessionRegeneration: persistActivities.prepareSessionRegeneration,
       persistTranscript: persistActivities.persistTranscript,
       persistSummary: persistActivities.persistSummary,
       persistRecap: persistActivities.persistRecap,

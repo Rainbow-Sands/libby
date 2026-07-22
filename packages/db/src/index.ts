@@ -21,11 +21,13 @@ export {
   getCampaignCast,
   getCampaignDetail,
   getSessionDetail,
+  getSessionRegenerationInput,
   type CampaignMember,
   type CampaignCastMember,
   type CampaignSessionSummary,
   type CampaignDetail,
   type SessionDetail,
+  type SessionRegenerationInput,
 } from "./queries.ts";
 export {
   upsertSession,
