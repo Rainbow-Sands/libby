@@ -8,7 +8,7 @@ import {
   type UIMessage,
 } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { CHAT_MODEL, INFERENCE_URL } from "$lib/server/env";
+import { CHAT_MODEL, CHAT_THINKING_BUDGET, INFERENCE_URL } from "$lib/server/env";
 import { buildSessionContext } from "$lib/server/chat-context";
 import type { RequestHandler } from "./$types";
 
@@ -46,6 +46,10 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
     model: llama(CHAT_MODEL),
     system: buildSessionContext(session, cast),
     messages: await convertToModelMessages(messages),
+    providerOptions:
+      CHAT_THINKING_BUDGET === undefined
+        ? undefined
+        : { llama: { thinking_budget_tokens: CHAT_THINKING_BUDGET } },
   });
 
   return createUIMessageStreamResponse({

@@ -62,6 +62,14 @@ pnpm dev:web       # SvelteKit frontend
 | `INFERENCE_URL`          | temporal, web          | Shared OpenAI-compatible inference server base URL                                                                                                             |
 | `TRANSCRIPTION_MODEL`    | temporal               | Audio transcription model ID (default: `whisper-large-v3-turbo`)                                                                                               |
 | `SUMMARIZATION_MODEL`    | temporal               | Summary, recap, and title model ID (default: `qwen3.6-35b-a3b`)                                                                                                |
-| `CHAT_MODEL`             | web                    | Session chat model ID (default: `qwen3.5-9b`)                                                                                                                  |
+| `SUMMARIZATION_THINKING_BUDGET` | temporal        | Optional llama.cpp reasoning-token budget for summary, recap, and title                                                                                        |
+| `CHAT_MODEL`             | web                    | Session chat model ID (default: `qwen3.6-35b-a3b`)                                                                                                             |
+| `CHAT_THINKING_BUDGET`   | web                    | Optional llama.cpp reasoning-token budget for session chat                                                                                                     |
 | `BODY_SIZE_LIMIT`        | web                    | Maximum manual-upload request size; defaults to `10G` in Docker Compose                                                                                      |
 | `DATABASE_URL`           | db                     | PostgreSQL connection string                                                                                                                                  |
+
+Thinking budgets are passed to llama.cpp as `thinking_budget_tokens`. Leave a
+budget unset to use the server/model default, use `0` to end thinking
+immediately, a positive integer to cap thinking tokens, or `-1` for unrestricted
+thinking. Per-request budgets require a recent llama.cpp build and are ignored
+when the server was started with a fixed `--reasoning-budget`.

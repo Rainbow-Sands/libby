@@ -5,7 +5,21 @@ function get(name: string, fallback?: string): string {
   return value;
 }
 
+function getThinkingBudget(name: string): number | undefined {
+  const value = process.env[name];
+  if (!value) return undefined;
+
+  const budget = Number(value);
+  if (!Number.isInteger(budget) || budget < -1) {
+    throw new Error(`${name} must be -1, 0, or a positive integer`);
+  }
+  return budget;
+}
+
 export const TEMPORAL_URL = get("TEMPORAL_URL");
 export const INFERENCE_URL = get("INFERENCE_URL");
 export const TRANSCRIPTION_MODEL = get("TRANSCRIPTION_MODEL", "whisper-large-v3-turbo");
 export const SUMMARIZATION_MODEL = get("SUMMARIZATION_MODEL", "qwen3.6-35b-a3b");
+export const SUMMARIZATION_THINKING_BUDGET = getThinkingBudget(
+  "SUMMARIZATION_THINKING_BUDGET",
+);

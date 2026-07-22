@@ -2,7 +2,12 @@ import { Context, ApplicationFailure } from "@temporalio/activity";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import path from "path";
 import type { SegmentRef } from "../types.ts";
-import { INFERENCE_URL, SUMMARIZATION_MODEL, TRANSCRIPTION_MODEL } from "../env.ts";
+import {
+  INFERENCE_URL,
+  SUMMARIZATION_MODEL,
+  SUMMARIZATION_THINKING_BUDGET,
+  TRANSCRIPTION_MODEL,
+} from "../env.ts";
 import { SUMMARIZE_SYSTEM, TITLE_SYSTEM, RECAP_SYSTEM } from "../prompts.ts";
 import { stripCodeFence, stripLeadingTitle, normalizeTitle } from "../text.ts";
 import {
@@ -158,6 +163,9 @@ async function llamaComplete(prompt: string, system: string): Promise<string> {
           { role: "user", content: prompt },
         ],
         temperature: 0.7,
+        ...(SUMMARIZATION_THINKING_BUDGET === undefined
+          ? {}
+          : { thinking_budget_tokens: SUMMARIZATION_THINKING_BUDGET }),
       }),
       signal: abortController.signal,
     });

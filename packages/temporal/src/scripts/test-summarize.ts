@@ -17,6 +17,7 @@ import { stripCodeFence, stripLeadingTitle, normalizeTitle } from "../text.ts";
 
 const INFERENCE_URL = process.env.INFERENCE_URL;
 const SUMMARIZATION_MODEL = process.env.SUMMARIZATION_MODEL ?? "qwen3.6-35b-a3b";
+const SUMMARIZATION_THINKING_BUDGET = process.env.SUMMARIZATION_THINKING_BUDGET;
 
 if (!INFERENCE_URL) {
   console.error("Missing required environment variable: INFERENCE_URL");
@@ -40,14 +41,17 @@ async function complete(system: string, user: string): Promise<Completion> {
   const res = await fetch(`${INFERENCE_URL}/v1/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: SUMMARIZATION_MODEL,
+      body: JSON.stringify({
+        model: SUMMARIZATION_MODEL,
       messages: [
         { role: "system", content: system },
         { role: "user", content: user },
       ],
-      temperature: 0.7,
-    }),
+        temperature: 0.7,
+        ...(SUMMARIZATION_THINKING_BUDGET
+          ? { thinking_budget_tokens: Number(SUMMARIZATION_THINKING_BUDGET) }
+          : {}),
+      }),
   });
 
   if (!res.ok) {
