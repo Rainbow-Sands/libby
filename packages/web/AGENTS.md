@@ -41,8 +41,8 @@ Required vars: `DATABASE_URL`, `DISCORD_APPLICATION_ID`, `DISCORD_CLIENT_SECRET`
 `SESSION_SECRET`, `INFERENCE_URL` (shared inference server URL), and `ORIGIN` (SvelteKit needs it for
 CSRF/form-action origin checks in production).
 The session-chat model ID is optionally overridden with `CHAT_MODEL`.
-`CHAT_THINKING_BUDGET` optionally sets llama.cpp's per-request reasoning-token
-budget for chat.
+`CHAT_THINKING_BUDGET` overrides llama.cpp's per-request reasoning-token budget
+for chat (default `2048`).
 
 ## Notes
 

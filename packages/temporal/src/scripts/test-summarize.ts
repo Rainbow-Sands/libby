@@ -17,7 +17,7 @@ import { stripCodeFence, stripLeadingTitle, normalizeTitle } from "../text.ts";
 
 const INFERENCE_URL = process.env.INFERENCE_URL;
 const SUMMARIZATION_MODEL = process.env.SUMMARIZATION_MODEL ?? "qwen3.6-35b-a3b";
-const SUMMARIZATION_THINKING_BUDGET = process.env.SUMMARIZATION_THINKING_BUDGET;
+const SUMMARIZATION_THINKING_BUDGET = process.env.SUMMARIZATION_THINKING_BUDGET ?? "8192";
 
 if (!INFERENCE_URL) {
   console.error("Missing required environment variable: INFERENCE_URL");
@@ -46,11 +46,9 @@ async function complete(system: string, user: string): Promise<Completion> {
       messages: [
         { role: "system", content: system },
         { role: "user", content: user },
-      ],
+        ],
         temperature: 0.7,
-        ...(SUMMARIZATION_THINKING_BUDGET
-          ? { thinking_budget_tokens: Number(SUMMARIZATION_THINKING_BUDGET) }
-          : {}),
+        thinking_budget_tokens: Number(SUMMARIZATION_THINKING_BUDGET),
       }),
   });
 

@@ -163,9 +163,7 @@ async function llamaComplete(prompt: string, system: string): Promise<string> {
           { role: "user", content: prompt },
         ],
         temperature: 0.7,
-        ...(SUMMARIZATION_THINKING_BUDGET === undefined
-          ? {}
-          : { thinking_budget_tokens: SUMMARIZATION_THINKING_BUDGET }),
+        thinking_budget_tokens: SUMMARIZATION_THINKING_BUDGET,
       }),
       signal: abortController.signal,
     });

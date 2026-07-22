@@ -10,9 +10,9 @@ function get(name: string, fallback?: string): string {
   return value as string;
 }
 
-function getThinkingBudget(name: string): number | undefined {
+function getThinkingBudget(name: string, fallback: number): number {
   const value = env[name];
-  if (!value) return undefined;
+  if (!value) return fallback;
 
   const budget = Number(value);
   if (!Number.isInteger(budget) || budget < -1) {
@@ -28,4 +28,4 @@ export const INFERENCE_URL = get("INFERENCE_URL");
 export const MEDIA_PATH = get("MEDIA_PATH");
 export const TEMPORAL_URL = get("TEMPORAL_URL");
 export const CHAT_MODEL = get("CHAT_MODEL", "qwen3.6-35b-a3b");
-export const CHAT_THINKING_BUDGET = getThinkingBudget("CHAT_THINKING_BUDGET");
+export const CHAT_THINKING_BUDGET = getThinkingBudget("CHAT_THINKING_BUDGET", 2048);

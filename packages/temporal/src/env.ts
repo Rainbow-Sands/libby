@@ -5,9 +5,9 @@ function get(name: string, fallback?: string): string {
   return value;
 }
 
-function getThinkingBudget(name: string): number | undefined {
+function getThinkingBudget(name: string, fallback: number): number {
   const value = process.env[name];
-  if (!value) return undefined;
+  if (!value) return fallback;
 
   const budget = Number(value);
   if (!Number.isInteger(budget) || budget < -1) {
@@ -22,4 +22,5 @@ export const TRANSCRIPTION_MODEL = get("TRANSCRIPTION_MODEL", "whisper-large-v3-
 export const SUMMARIZATION_MODEL = get("SUMMARIZATION_MODEL", "qwen3.6-35b-a3b");
 export const SUMMARIZATION_THINKING_BUDGET = getThinkingBudget(
   "SUMMARIZATION_THINKING_BUDGET",
+  8192,
 );

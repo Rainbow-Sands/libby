@@ -71,5 +71,5 @@ DB copy lossless means improvements to that formatting can be re-run over
 already-recorded sessions later without re-transcribing. `env.ts` asserts
 `TEMPORAL_URL`, `INFERENCE_URL`. Model IDs are runtime-configurable through
 `TRANSCRIPTION_MODEL` and `SUMMARIZATION_MODEL`, with defaults in `env.ts`.
-`SUMMARIZATION_THINKING_BUDGET` optionally sets llama.cpp's per-request reasoning
-token budget.
+`SUMMARIZATION_THINKING_BUDGET` overrides llama.cpp's per-request reasoning-token
+budget (default `8192`).
