@@ -164,6 +164,9 @@ async function llamaComplete(prompt: string, system: string): Promise<string> {
         ],
         temperature: 0.7,
         thinking_budget_tokens: SUMMARIZATION_THINKING_BUDGET,
+        ...(SUMMARIZATION_THINKING_BUDGET === 0
+          ? { chat_template_kwargs: { enable_thinking: false } }
+          : {}),
       }),
       signal: abortController.signal,
     });

@@ -46,7 +46,14 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
     model: llama(CHAT_MODEL),
     system: buildSessionContext(session, cast),
     messages: await convertToModelMessages(messages),
-    providerOptions: { llama: { thinking_budget_tokens: CHAT_THINKING_BUDGET } },
+    providerOptions: {
+      llama: {
+        thinking_budget_tokens: CHAT_THINKING_BUDGET,
+        ...(CHAT_THINKING_BUDGET === 0
+          ? { chat_template_kwargs: { enable_thinking: false } }
+          : {}),
+      },
+    },
   });
 
   return createUIMessageStreamResponse({
