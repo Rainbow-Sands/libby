@@ -40,6 +40,7 @@ flag so assertions don't fire during `vite build`. Never import server env (or
 Required vars: `DATABASE_URL`, `DISCORD_APPLICATION_ID`, `DISCORD_CLIENT_SECRET`,
 `SESSION_SECRET`, `INFERENCE_URL` (shared inference server URL), and `ORIGIN` (SvelteKit needs it for
 CSRF/form-action origin checks in production).
+The session-chat model ID is optionally overridden with `CHAT_MODEL`.
 
 ## Notes
 

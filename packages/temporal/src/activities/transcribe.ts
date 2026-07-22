@@ -2,7 +2,7 @@ import { Context, ApplicationFailure } from "@temporalio/activity";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import path from "path";
 import type { SegmentRef } from "../types.ts";
-import { INFERENCE_URL } from "../env.ts";
+import { INFERENCE_URL, SUMMARIZATION_MODEL, TRANSCRIPTION_MODEL } from "../env.ts";
 import { SUMMARIZE_SYSTEM, TITLE_SYSTEM, RECAP_SYSTEM } from "../prompts.ts";
 import { stripCodeFence, stripLeadingTitle, normalizeTitle } from "../text.ts";
 import {
@@ -18,8 +18,6 @@ interface WhisperResponse {
 }
 
 const NO_SPEECH_THRESHOLD = 0.6;
-const TRANSCRIPTION_MODEL = "whisper-large-v3-turbo";
-const SUMMARIZATION_MODEL = "qwen3.6-35b-a3b";
 
 function audioMimeType(audioPath: string): string {
   switch (path.extname(audioPath).toLowerCase()) {

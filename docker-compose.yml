@@ -101,6 +101,8 @@ services:
     environment:
       TEMPORAL_URL: temporal:7233
       INFERENCE_URL: ${INFERENCE_URL}
+      TRANSCRIPTION_MODEL: ${TRANSCRIPTION_MODEL:-whisper-large-v3-turbo}
+      SUMMARIZATION_MODEL: ${SUMMARIZATION_MODEL:-qwen3.6-35b-a3b}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       MEDIA_PATH: /media
     volumes:
@@ -119,6 +121,7 @@ services:
       SESSION_SECRET: ${SESSION_SECRET}
       ORIGIN: ${ORIGIN}
       INFERENCE_URL: ${INFERENCE_URL}
+      CHAT_MODEL: ${CHAT_MODEL:-qwen3.5-9b}
       TEMPORAL_URL: temporal:7233
       MEDIA_PATH: /media
       BODY_SIZE_LIMIT: ${BODY_SIZE_LIMIT:-10G}

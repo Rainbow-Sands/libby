@@ -16,7 +16,7 @@ import { SUMMARIZE_SYSTEM, TITLE_SYSTEM, RECAP_SYSTEM } from "../prompts.ts";
 import { stripCodeFence, stripLeadingTitle, normalizeTitle } from "../text.ts";
 
 const INFERENCE_URL = process.env.INFERENCE_URL;
-const SUMMARIZATION_MODEL = "qwen3.6-35b-a3b";
+const SUMMARIZATION_MODEL = process.env.SUMMARIZATION_MODEL ?? "qwen3.6-35b-a3b";
 
 if (!INFERENCE_URL) {
   console.error("Missing required environment variable: INFERENCE_URL");

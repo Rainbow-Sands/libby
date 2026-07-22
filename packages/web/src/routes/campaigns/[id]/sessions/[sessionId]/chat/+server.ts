@@ -8,11 +8,9 @@ import {
   type UIMessage,
 } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { INFERENCE_URL } from "$lib/server/env";
+import { CHAT_MODEL, INFERENCE_URL } from "$lib/server/env";
 import { buildSessionContext } from "$lib/server/chat-context";
 import type { RequestHandler } from "./$types";
-
-const CHAT_MODEL = "qwen3.5-9b";
 
 // llama.cpp exposes an OpenAI-compatible API at /v1 and requires no auth; the
 // apiKey is a placeholder so the SDK doesn't send an empty Authorization header.
