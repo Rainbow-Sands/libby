@@ -2,6 +2,7 @@ import { NativeConnection, Worker } from "@temporalio/worker";
 import { fileURLToPath } from "url";
 import * as activities from "./activities/transcribe.ts";
 import * as persistActivities from "./activities/persist.ts";
+import * as notifyActivities from "./activities/notify.ts";
 import { TEMPORAL_URL } from "./env.ts";
 
 export async function startWorker(): Promise<void> {
@@ -31,6 +32,7 @@ export async function startWorker(): Promise<void> {
       persistSummary: persistActivities.persistSummary,
       persistRecap: persistActivities.persistRecap,
       persistTitle: persistActivities.persistTitle,
+      postSessionLink: notifyActivities.postSessionLink,
     },
     maxConcurrentActivityTaskExecutions: 4,
   });

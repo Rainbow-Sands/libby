@@ -9,6 +9,8 @@ export interface SegmentRef {
 export interface SessionInput {
   guildId: string;
   channelId: string;
+  /** Text channel where the completed session link should be posted. */
+  notificationChannelId?: string;
   campaignId: string;
   sessionId: string;
   sessionDir: string;

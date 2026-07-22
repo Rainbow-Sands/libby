@@ -53,20 +53,21 @@ pnpm dev:web       # SvelteKit frontend
 
 ## Environment variables
 
-| Variable                 | Used by                | Description                                                                                                                                                   |
-| ------------------------ | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DISCORD_TOKEN`          | discord                | Bot token                                                                                                                                                     |
-| `DISCORD_APPLICATION_ID` | discord                | Application ID                                                                                                                                                |
-| `MEDIA_PATH`             | discord, temporal, web | Directory for audio clips, imported files, and transcripts                                                                                                    |
-| `TEMPORAL_URL`           | discord, temporal, web | Temporal server address (e.g. `localhost:7233`)                                                                                                               |
-| `INFERENCE_URL`          | temporal, web          | Shared OpenAI-compatible inference server base URL                                                                                                             |
-| `TRANSCRIPTION_MODEL`    | temporal               | Audio transcription model ID (default: `whisper-large-v3-turbo`)                                                                                               |
-| `SUMMARIZATION_MODEL`    | temporal               | Summary, recap, and title model ID (default: `qwen3.6-35b-a3b`)                                                                                                |
-| `SUMMARIZATION_THINKING_BUDGET` | temporal        | llama.cpp reasoning-token budget for summary, recap, and title (default: `8192`)                                                                                |
-| `CHAT_MODEL`             | web                    | Session chat model ID (default: `qwen3.6-35b-a3b`)                                                                                                             |
-| `CHAT_THINKING_BUDGET`   | web                    | llama.cpp reasoning-token budget for session chat (default: `2048`)                                                                                            |
-| `BODY_SIZE_LIMIT`        | web                    | Maximum manual-upload request size; defaults to `10G` in Docker Compose                                                                                      |
-| `DATABASE_URL`           | db                     | PostgreSQL connection string                                                                                                                                  |
+| Variable                        | Used by                | Description                                                                           |
+| ------------------------------- | ---------------------- | ------------------------------------------------------------------------------------- |
+| `DISCORD_TOKEN`                 | discord, temporal      | Bot token                                                                             |
+| `DISCORD_APPLICATION_ID`        | discord                | Application ID                                                                        |
+| `MEDIA_PATH`                    | discord, temporal, web | Directory for audio clips, imported files, and transcripts                            |
+| `TEMPORAL_URL`                  | discord, temporal, web | Temporal server address (e.g. `localhost:7233`)                                       |
+| `INFERENCE_URL`                 | temporal, web          | Shared OpenAI-compatible inference server base URL                                    |
+| `TRANSCRIPTION_MODEL`           | temporal               | Audio transcription model ID (default: `whisper-large-v3-turbo`)                      |
+| `SUMMARIZATION_MODEL`           | temporal               | Summary, recap, and title model ID (default: `qwen3.6-35b-a3b`)                       |
+| `SUMMARIZATION_THINKING_BUDGET` | temporal               | llama.cpp reasoning-token budget for summary, recap, and title (default: `8192`)      |
+| `CHAT_MODEL`                    | web                    | Session chat model ID (default: `qwen3.6-35b-a3b`)                                    |
+| `CHAT_THINKING_BUDGET`          | web                    | llama.cpp reasoning-token budget for session chat (default: `2048`)                   |
+| `BODY_SIZE_LIMIT`               | web                    | Maximum manual-upload request size; defaults to `10G` in Docker Compose               |
+| `DATABASE_URL`                  | db                     | PostgreSQL connection string                                                          |
+| `WEB_URL`                       | temporal               | Public web origin used for completed-session links (for example, `https://libby.bot`) |
 
 Thinking budgets are passed to llama.cpp as `thinking_budget_tokens`. Override a
 budget with `0` to end thinking immediately, a positive integer to cap thinking

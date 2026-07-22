@@ -10,6 +10,7 @@ import {
 } from "@temporalio/workflow";
 import type * as activities from "../activities/transcribe.ts";
 import type * as persistActivities from "../activities/persist.ts";
+import type * as notifyActivities from "../activities/notify.ts";
 import type { SegmentRef, SessionInput, SessionStatus } from "../types.ts";
 
 const { transcribeSegment, aggregateTranscript } = proxyActivities<typeof activities>({
@@ -49,6 +50,16 @@ const {
   retry: {
     maximumAttempts: 10,
     initialInterval: "2 seconds",
+    backoffCoefficient: 2,
+  },
+});
+
+const { postSessionLink } = proxyActivities<typeof notifyActivities>({
+  taskQueue: "rainbot-transcription",
+  startToCloseTimeout: "1 minute",
+  retry: {
+    maximumAttempts: 5,
+    initialInterval: "5 seconds",
     backoffCoefficient: 2,
   },
 });
@@ -175,5 +186,19 @@ export async function sessionWorkflow(
     lastError = err instanceof Error ? err.message : String(err);
     await updateSessionStatus(input.sessionId, "failed");
     throw err;
+  }
+
+  if (input.notificationChannelId) {
+    try {
+      await postSessionLink({
+        channelId: input.notificationChannelId,
+        campaignId: input.campaignId,
+        sessionId: input.sessionId,
+      });
+    } catch (err) {
+      // A notification failure must not turn an otherwise completed session
+      // into a failed processing run.
+      lastError = err instanceof Error ? err.message : String(err);
+    }
   }
 }

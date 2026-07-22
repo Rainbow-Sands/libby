@@ -18,6 +18,8 @@ function getThinkingBudget(name: string, fallback: number): number {
 
 export const TEMPORAL_URL = get("TEMPORAL_URL");
 export const INFERENCE_URL = get("INFERENCE_URL");
+export const DISCORD_TOKEN = get("DISCORD_TOKEN");
+export const WEB_URL = get("WEB_URL");
 export const TRANSCRIPTION_MODEL = get("TRANSCRIPTION_MODEL", "whisper-large-v3-turbo");
 export const SUMMARIZATION_MODEL = get("SUMMARIZATION_MODEL", "qwen3.6-35b-a3b");
 export const SUMMARIZATION_THINKING_BUDGET = getThinkingBudget(

@@ -20,10 +20,15 @@
   }
 </script>
 
-<svelte:head
-  ><title>{data.session.title ?? formatDate(data.session.startedAt)} — Session</title
-  ></svelte:head
->
+<svelte:head>
+  <title>{data.session.title ?? formatDate(data.session.startedAt)} — Session</title>
+  <meta property="og:title" content={data.preview.title}>
+  <meta property="og:description" content={data.preview.description}>
+  <meta property="og:type" content="article">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content={data.preview.title}>
+  <meta name="twitter:description" content={data.preview.description}>
+</svelte:head>
 
 <p><a href="/campaigns/{data.session.campaignId}">← Campaign</a></p>
 
@@ -36,61 +41,67 @@
   <TaperedRule />
   <p class="muted status">Status: {data.session.status}</p>
 
-  {#if data.session.status === "done"}
-    <SessionChat
-      sessionId={data.session.id}
-      campaignId={data.session.campaignId}
-    />
+  {#if data.canViewDetails}
+    {#if data.session.status === "done"}
+      <SessionChat
+        sessionId={data.session.id}
+        campaignId={data.session.campaignId}
+      />
+    {:else}
+      <p class="empty chat-pending">
+        Libby can answer questions once this session finishes processing.
+      </p>
+    {/if}
+
+    <div class="tabs" role="tablist">
+      <button
+        role="tab"
+        aria-selected={activeTab === "recap"}
+        class:active={activeTab === "recap"}
+        onclick={() => (activeTab = "recap")}>Recap</button
+      >
+      <button
+        role="tab"
+        aria-selected={activeTab === "summary"}
+        class:active={activeTab === "summary"}
+        onclick={() => (activeTab = "summary")}>Summary</button
+      >
+      <button
+        role="tab"
+        aria-selected={activeTab === "transcript"}
+        class:active={activeTab === "transcript"}
+        onclick={() => (activeTab = "transcript")}>Transcript</button
+      >
+    </div>
+
+    <div role="tabpanel" hidden={activeTab !== "recap"}>
+      {#if data.session.recap}
+        <div class="prose">{@html renderMarkdown(data.session.recap)}</div>
+      {:else}
+        <p class="empty">The bards have not yet composed this tale.</p>
+      {/if}
+    </div>
+
+    <div role="tabpanel" hidden={activeTab !== "summary"}>
+      {#if data.session.summary}
+        <div class="prose">{@html renderMarkdown(data.session.summary)}</div>
+      {:else}
+        <p class="empty">Not yet available.</p>
+      {/if}
+    </div>
+
+    <div role="tabpanel" hidden={activeTab !== "transcript"}>
+      {#if data.transcriptText}
+        <pre class="transcript">{data.transcriptText}</pre>
+      {:else}
+        <p class="empty">Not yet available.</p>
+      {/if}
+    </div>
   {:else}
-    <p class="empty chat-pending">
-      Libby can answer questions once this session finishes processing.
-    </p>
+    <p class="preview-description">{data.preview.description}</p>
+    <p class="empty">Log in with Discord to view the complete session.</p>
+    <p><a class="button" href="/auth/login">Log in with Discord</a></p>
   {/if}
-
-  <div class="tabs" role="tablist">
-    <button
-      role="tab"
-      aria-selected={activeTab === "recap"}
-      class:active={activeTab === "recap"}
-      onclick={() => (activeTab = "recap")}>Recap</button
-    >
-    <button
-      role="tab"
-      aria-selected={activeTab === "summary"}
-      class:active={activeTab === "summary"}
-      onclick={() => (activeTab = "summary")}>Summary</button
-    >
-    <button
-      role="tab"
-      aria-selected={activeTab === "transcript"}
-      class:active={activeTab === "transcript"}
-      onclick={() => (activeTab = "transcript")}>Transcript</button
-    >
-  </div>
-
-  <div role="tabpanel" hidden={activeTab !== "recap"}>
-    {#if data.session.recap}
-      <div class="prose">{@html renderMarkdown(data.session.recap)}</div>
-    {:else}
-      <p class="empty">The bards have not yet composed this tale.</p>
-    {/if}
-  </div>
-
-  <div role="tabpanel" hidden={activeTab !== "summary"}>
-    {#if data.session.summary}
-      <div class="prose">{@html renderMarkdown(data.session.summary)}</div>
-    {:else}
-      <p class="empty">Not yet available.</p>
-    {/if}
-  </div>
-
-  <div role="tabpanel" hidden={activeTab !== "transcript"}>
-    {#if data.transcriptText}
-      <pre class="transcript">{data.transcriptText}</pre>
-    {:else}
-      <p class="empty">Not yet available.</p>
-    {/if}
-  </div>
 </div>
 
 <style>
@@ -99,6 +110,9 @@
   }
   .status {
     margin-top: -0.5rem;
+  }
+  .preview-description {
+    line-height: 1.7;
   }
   .tabs {
     display: flex;

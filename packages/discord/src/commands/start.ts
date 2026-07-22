@@ -74,6 +74,7 @@ export const start = {
         {
           guildId,
           channelId,
+          notificationChannelId: interaction.channelId,
           campaignId,
           sessionId,
           sessionDir,
