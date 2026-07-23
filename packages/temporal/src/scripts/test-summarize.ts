@@ -39,7 +39,9 @@ async function complete(prompt: string, system: string): Promise<Completion> {
   const data = await providerComplete(prompt, system);
 
   if (data.finishReason === "length") {
-    throw new Error("Inference output reached SUMMARIZATION_MAX_TOKENS; increase it");
+    throw new Error(
+      "Inference output reached the provider or model output limit and was truncated",
+    );
   }
 
   const content = stripCodeFence(data.content.trim());

@@ -67,7 +67,6 @@ pnpm dev:web       # SvelteKit frontend
 | `SUMMARIZATION_MODEL`            | temporal               | Detailed-record, recap, and title model ID; required for cloud providers (local default: `qwen3.6-35b-a3b`)         |
 | `SUMMARIZATION_REASONING_EFFORT` | temporal               | Optional cloud reasoning effort: `none`, `low`, `medium`, `high`, `xhigh`, or `max`; OpenAI also supports `minimal` |
 | `SUMMARIZATION_THINKING_BUDGET`  | temporal               | Local llama.cpp reasoning-token budget (default: `8192`)                                                            |
-| `SUMMARIZATION_MAX_TOKENS`       | temporal               | Maximum generated tokens per detailed-record/recap/title call (default: `16384`)                                    |
 | `CHAT_MODEL`                     | web                    | Session chat model ID (default: `qwen3.6-35b-a3b`)                                                                  |
 | `CHAT_THINKING_BUDGET`           | web                    | llama.cpp reasoning-token budget for session chat (default: `2048`)                                                 |
 | `BODY_SIZE_LIMIT`                | web                    | Maximum manual-upload request size; defaults to `10G` in Docker Compose                                             |

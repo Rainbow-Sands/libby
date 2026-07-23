@@ -14,7 +14,6 @@ export interface SummarizationConfig {
   model: string;
   reasoningEffort?: ReasoningEffort;
   thinkingBudget: number;
-  maxOutputTokens: number;
 }
 
 export interface SummarizationCompletion {
@@ -28,17 +27,6 @@ export interface SummarizationCompletion {
 
 function optional(env: NodeJS.ProcessEnv, name: string): string | undefined {
   return env[name]?.trim() || undefined;
-}
-
-function integer(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
-  const value = optional(env, name);
-  if (value === undefined) return fallback;
-
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`${name} must be a positive integer`);
-  }
-  return parsed;
 }
 
 function thinkingBudget(env: NodeJS.ProcessEnv): number {
@@ -118,7 +106,6 @@ export function loadSummarizationConfig(
     model: configuredModel ?? "qwen3.6-35b-a3b",
     reasoningEffort: effort,
     thinkingBudget: thinkingBudget(env),
-    maxOutputTokens: integer(env, "SUMMARIZATION_MAX_TOKENS", 16384),
   };
 }
 
@@ -197,7 +184,6 @@ export function createSummarizationInference(config: SummarizationConfig) {
       system,
       prompt,
       abortSignal,
-      maxOutputTokens: config.maxOutputTokens,
       maxRetries: 0,
       providerOptions: selected.providerOptions,
       temperature: selected.temperature,

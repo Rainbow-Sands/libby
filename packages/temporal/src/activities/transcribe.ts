@@ -158,7 +158,7 @@ async function inferenceComplete(prompt: string, system: string): Promise<string
     );
     if (data.finishReason === "length") {
       throw ApplicationFailure.nonRetryable(
-        "Inference output reached SUMMARIZATION_MAX_TOKENS; increase it to avoid a truncated result",
+        "Inference output reached the provider or model output limit and was truncated",
         "InferenceOutputTruncated",
       );
     }

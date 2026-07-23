@@ -77,5 +77,5 @@ request; there is no chunking or context-size preflight. `env.ts` asserts
 `openai`, or `anthropic`; the cloud providers require `SUMMARIZATION_API_KEY` and
 `SUMMARIZATION_MODEL`. Local summarization defaults to `INFERENCE_URL`, model
 `qwen3.6-35b-a3b`, and an `8192`-token llama.cpp thinking budget.
-`SUMMARIZATION_REASONING_EFFORT` configures cloud reasoning when set, and
-`SUMMARIZATION_MAX_TOKENS` caps each generated response (default `16384`).
+`SUMMARIZATION_REASONING_EFFORT` configures cloud reasoning when set. Generated
+output uses the provider or model's native limit.

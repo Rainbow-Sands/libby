@@ -14,7 +14,6 @@ test("loads local summarization defaults from INFERENCE_URL", () => {
     model: "qwen3.6-35b-a3b",
     reasoningEffort: undefined,
     thinkingBudget: 8192,
-    maxOutputTokens: 16384,
   });
 });
 
@@ -24,14 +23,12 @@ test("loads an Anthropic summarization profile", () => {
     SUMMARIZATION_API_KEY: "secret",
     SUMMARIZATION_MODEL: "claude-sonnet-5",
     SUMMARIZATION_REASONING_EFFORT: "high",
-    SUMMARIZATION_MAX_TOKENS: "32768",
   });
 
   assert.equal(config.provider, "anthropic");
   assert.equal(config.apiKey, "secret");
   assert.equal(config.model, "claude-sonnet-5");
   assert.equal(config.reasoningEffort, "high");
-  assert.equal(config.maxOutputTokens, 32768);
 });
 
 test("requires a key and model for cloud summarization", () => {
