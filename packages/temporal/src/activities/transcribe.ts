@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import path from "path";
 import { APICallError } from "ai";
 import type { SegmentRef } from "../types.ts";
-import { SUMMARIZATION_CONFIG, TRANSCRIPTION_BASE_URL, TRANSCRIPTION_MODEL } from "../env.ts";
+import { SUMMARIZATION_CONFIG, TRANSCRIPTION_MODEL, TRANSCRIPTION_URL } from "../env.ts";
 import { TITLE_SYSTEM } from "../prompts.ts";
 import { stripCodeFence, normalizeTitle } from "../text.ts";
 import { createDetailedRecord, createRecap } from "../record-pipeline.ts";
@@ -69,7 +69,7 @@ export async function transcribeSegment(
     form.append("response_format", "verbose_json");
     form.append("model", TRANSCRIPTION_MODEL);
 
-    const res = await fetch(`${TRANSCRIPTION_BASE_URL}/audio/transcriptions`, {
+    const res = await fetch(TRANSCRIPTION_URL, {
       method: "POST",
       body: form,
       signal: abortController.signal,

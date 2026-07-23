@@ -73,9 +73,11 @@ happens **inside `summarize`**, via `formatTranscriptForInference` from
 formatting can be re-run over already-recorded sessions later without
 re-transcribing. The complete formatted transcript is sent in one detailed-record
 request; there is no chunking or context-size preflight. `env.ts` asserts
-`TEMPORAL_URL` and `TRANSCRIPTION_BASE_URL`. `SUMMARIZATION_PROVIDER` selects `local`,
-`openai`, or `anthropic`; the cloud providers require `SUMMARIZATION_API_KEY` and
-`SUMMARIZATION_MODEL`. Local summarization requires `SUMMARIZATION_BASE_URL` and
-defaults to model `qwen3.6-35b-a3b` with an `8192`-token llama.cpp thinking budget.
-`SUMMARIZATION_REASONING_EFFORT` configures cloud reasoning when set. Generated
-output uses the provider or model's native limit.
+`TEMPORAL_URL` and `TRANSCRIPTION_URL`; the latter is the complete request URL
+and no endpoint path is appended by the app. `SUMMARIZATION_PROVIDER` selects
+`local`, `openai`, or `anthropic`; the cloud providers require
+`SUMMARIZATION_API_KEY` and `SUMMARIZATION_MODEL`. Local summarization requires
+`SUMMARIZATION_BASE_URL` and defaults to model `qwen3.6-35b-a3b` with an
+`8192`-token llama.cpp thinking budget. `SUMMARIZATION_REASONING_EFFORT`
+configures cloud reasoning when set. Generated output uses the provider or
+model's native limit.

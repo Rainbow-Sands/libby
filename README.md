@@ -59,7 +59,7 @@ pnpm dev:web       # SvelteKit frontend
 | `DISCORD_APPLICATION_ID`         | discord                | Application ID                                                                                                      |
 | `MEDIA_PATH`                     | discord, temporal, web | Directory for audio clips, imported files, and transcripts                                                          |
 | `TEMPORAL_URL`                   | discord, temporal, web | Temporal server address (e.g. `localhost:7233`)                                                                     |
-| `TRANSCRIPTION_BASE_URL`         | temporal               | Full OpenAI-compatible transcription API root, such as `http://host:8080/v1`                                        |
+| `TRANSCRIPTION_URL`              | temporal               | Complete transcription endpoint URL, such as `http://whisper-server:8080/inference`                                 |
 | `TRANSCRIPTION_MODEL`            | temporal               | Audio transcription model ID (default: `whisper-large-v3-turbo`)                                                    |
 | `SUMMARIZATION_PROVIDER`         | temporal               | `local`, `openai`, or `anthropic` (default: `local`)                                                                |
 | `SUMMARIZATION_API_KEY`          | temporal               | API key; required for OpenAI and Anthropic, optional for local                                                      |
@@ -99,7 +99,13 @@ For local inference, configure each service explicitly. These may point to the
 same OpenAI-compatible server, but they are not coupled:
 
 ```env
-TRANSCRIPTION_BASE_URL=http://llama-swap:8080/v1
+TRANSCRIPTION_URL=http://whisper-server:8080/inference
+```
+
+Local LLM inference is configured separately and may use any OpenAI-compatible
+server:
+
+```env
 SUMMARIZATION_PROVIDER=local
 SUMMARIZATION_BASE_URL=http://llama-swap:8080/v1
 CHAT_PROVIDER=local
