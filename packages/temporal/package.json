@@ -11,11 +11,16 @@
     "test:summarize": "node --env-file=../../.env src/scripts/test-summarize.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.18",
+    "@ai-sdk/openai": "^4.0.17",
+    "@ai-sdk/openai-compatible": "^3.0.14",
+    "@ai-sdk/provider": "^4.0.3",
     "@rainbot/db": "workspace:*",
     "@temporalio/activity": "^1.18.1",
     "@temporalio/client": "^1.18.1",
     "@temporalio/worker": "^1.18.1",
-    "@temporalio/workflow": "^1.18.1"
+    "@temporalio/workflow": "^1.18.1",
+    "ai": "^7.0.34"
   },
   "devDependencies": {
     "@types/node": "^25.0.0",

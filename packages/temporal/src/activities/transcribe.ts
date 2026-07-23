@@ -1,18 +1,13 @@
 import { Context, ApplicationFailure } from "@temporalio/activity";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import path from "path";
+import { APICallError } from "ai";
 import type { SegmentRef } from "../types.ts";
-import {
-  INFERENCE_URL,
-  SUMMARIZATION_MODEL,
-  SUMMARIZATION_MAX_TOKENS,
-  SUMMARIZATION_CHUNK_CHARS,
-  SUMMARIZATION_THINKING_BUDGET,
-  TRANSCRIPTION_MODEL,
-} from "../env.ts";
+import { INFERENCE_URL, SUMMARIZATION_CONFIG, TRANSCRIPTION_MODEL } from "../env.ts";
 import { TITLE_SYSTEM } from "../prompts.ts";
 import { stripCodeFence, normalizeTitle } from "../text.ts";
 import { createDetailedRecord, createRecap } from "../record-pipeline.ts";
+import { createSummarizationInference } from "../summarization-inference.ts";
 import {
   formatTranscriptForInference,
   getCampaignCast,
@@ -26,6 +21,7 @@ interface WhisperResponse {
 }
 
 const NO_SPEECH_THRESHOLD = 0.6;
+const completeSummarization = createSummarizationInference(SUMMARIZATION_CONFIG);
 
 function audioMimeType(audioPath: string): string {
   switch (path.extname(audioPath).toLowerCase()) {
@@ -149,54 +145,34 @@ export async function aggregateTranscript(sessionDir: string, keys: string[]): P
 
 // ── Post-session pipeline ─────────────────────────────────────────────────────
 
-async function llamaComplete(prompt: string, system: string): Promise<string> {
+async function inferenceComplete(prompt: string, system: string): Promise<string> {
   const abortController = new AbortController();
   Context.current().cancelled.catch(() => abortController.abort());
 
   const heartbeat = setInterval(() => Context.current().heartbeat(), 10_000);
 
   try {
-    const res = await fetch(`${INFERENCE_URL}/v1/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: SUMMARIZATION_MODEL,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: prompt },
-        ],
-        temperature: 0.15,
-        max_tokens: SUMMARIZATION_MAX_TOKENS,
-        thinking_budget_tokens: SUMMARIZATION_THINKING_BUDGET,
-        chat_template_kwargs: {
-          enable_thinking: SUMMARIZATION_THINKING_BUDGET !== 0,
-        },
-      }),
-      signal: abortController.signal,
-    });
-
-    if (res.status >= 400 && res.status < 500) {
-      throw ApplicationFailure.nonRetryable(`LLaMA rejected the request: ${res.status}`);
-    }
-    if (!res.ok) throw new Error(`LLaMA server returned ${res.status}`);
-
-    const data = (await res.json()) as {
-      choices: { finish_reason?: string; message: { content: string } }[];
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
-    };
+    const data = await completeSummarization(prompt, system, abortController.signal);
     console.log(
-      `[inference] ${data.usage?.prompt_tokens ?? "?"} prompt tokens, ${data.usage?.completion_tokens ?? "?"} completion tokens`,
+      `[inference] ${data.provider}/${data.model}: ${data.inputTokens ?? "?"} input tokens, ${data.outputTokens ?? "?"} output tokens`,
     );
-    const choice = data.choices[0];
-    if (choice?.finish_reason === "length") {
+    if (data.finishReason === "length") {
       throw ApplicationFailure.nonRetryable(
-        "Inference output reached SUMMARIZATION_MAX_TOKENS; increase it or reduce SUMMARIZATION_CHUNK_CHARS",
+        "Inference output reached SUMMARIZATION_MAX_TOKENS; increase it to avoid a truncated result",
         "InferenceOutputTruncated",
       );
     }
-    const content = stripCodeFence(choice?.message.content.trim() ?? "");
-    if (!content) throw new Error("Inference server returned an empty response");
+    const content = stripCodeFence(data.content.trim());
+    if (!content) throw new Error("Summarization provider returned an empty response");
     return content;
+  } catch (error) {
+    if (APICallError.isInstance(error) && !error.isRetryable) {
+      throw ApplicationFailure.nonRetryable(
+        `Summarization provider rejected the request${error.statusCode ? ` (${error.statusCode})` : ""}: ${error.message}`,
+        "SummarizationRequestRejected",
+      );
+    }
+    throw error;
   } finally {
     clearInterval(heartbeat);
   }
@@ -212,7 +188,7 @@ export async function summarize(
   ) as Transcript;
   const cast = await getCampaignCast(campaignId);
   const formatted = formatTranscriptForInference(transcript, cast);
-  const text = await createDetailedRecord(formatted, SUMMARIZATION_CHUNK_CHARS, llamaComplete);
+  const text = await createDetailedRecord(formatted, inferenceComplete);
 
   const outPath = path.join(sessionDir, "summary.txt");
   writeFileSync(outPath, text, "utf8");
@@ -229,7 +205,7 @@ export async function generateTitle(sessionDir: string, summaryKey: string): Pro
     "utf8",
   );
 
-  const text = await llamaComplete(source, TITLE_SYSTEM);
+  const text = await inferenceComplete(source, TITLE_SYSTEM);
   const title = normalizeTitle(text);
 
   const outPath = path.join(sessionDir, "title.txt");
@@ -240,7 +216,7 @@ export async function generateTitle(sessionDir: string, summaryKey: string): Pro
 export async function recap(sessionDir: string, summaryKey: string): Promise<string> {
   const summary = readFileSync(path.join(sessionDir, summaryKey), "utf8");
 
-  const text = await createRecap(summary, SUMMARIZATION_CHUNK_CHARS, llamaComplete);
+  const text = await createRecap(summary, inferenceComplete);
 
   const outPath = path.join(sessionDir, "recap.txt");
   writeFileSync(outPath, text, "utf8");

@@ -1,7 +1,7 @@
 // System prompts for the post-session LLM pipeline. Shared by the Temporal
 // activities and the standalone test script so the two never drift.
 
-export const DETAILED_RECORD_SYSTEM = `Create a loss-minimized factual record from this excerpt of a tabletop RPG transcript. This is not a conventional summary. It will be treated as a canonical source for future inference, so completeness and fidelity matter more than brevity or literary style.
+export const DETAILED_RECORD_SYSTEM = `Create a loss-minimized factual record from this complete tabletop RPG transcript. It will be treated as a canonical source for future inference, so completeness and fidelity matter more than brevity or literary style.
 
 Retain every detail that could affect fictional events, game state, characterization, relationships, objectives, inventory, rules outcomes, or future interpretation. This includes:
 - every meaningful action, decision, outcome, discovery, clue, description, and piece of lore;
@@ -12,14 +12,6 @@ Retain every detail that could affect fictional events, game state, characteriza
 Remove only clearly unrelated conversation, repeated verbal filler, and meta commentary with no possible bearing on the game. When uncertain whether a detail matters, retain it. Do not invent connections or resolve ambiguities. Explicitly identify uncertainty, disagreement, and likely transcription errors instead of silently choosing an interpretation.
 
 Write precise markdown in chronological order. Use source timestamps from the transcript throughout so facts can be audited. Use level-three headings (###) to organize chronology and relevant state changes. Do not add a title or top-level heading. Do not optimize for shortness, elegance, or a target reading time. Respond only with the detailed record.`;
-
-export const AUDIT_RECORD_SYSTEM = `Audit a draft tabletop RPG session record against its source transcript excerpt, then output a corrected and complete replacement record.
-
-Preserve everything the draft got right. Restore every consequential fact that is absent, weakened, over-compressed, misattributed, or represented with unjustified certainty. Check actions, dialogue, decisions, alternatives, outcomes, NPCs, locations, relationships, discoveries, lore, objectives, inventory, resources, combat, rules decisions, corrections, retcons, and unresolved uncertainty. Remove claims unsupported by the source.
-
-This remains a loss-minimized canonical record, not a conventional summary. Retain source timestamps. Remove only clearly unrelated conversation and verbal filler. Use level-three markdown headings, no title or top-level heading, and respond only with the complete revised record.`;
-
-export const RECAP_EXCERPT_SYSTEM = `Extract the important player-facing recap material from this portion of a detailed tabletop RPG session record. Preserve names, decisions, discoveries, outcomes, and unresolved hooks. Produce compact markdown notes for a later recap-writing pass. Do not add facts or a title. Respond only with the notes.`;
 
 export const TITLE_SYSTEM = `I am going to give you a recap of a DnD session. Your goal is to write a short, evocative title for the session — the kind of name a chapter in a fantasy novel might have.
 The title should capture the most memorable moment or theme of the session.

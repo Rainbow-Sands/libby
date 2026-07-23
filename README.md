@@ -1,6 +1,6 @@
 # rainbot-sands
 
-Discord bot that records tabletop RPG sessions, transcribes them with whisper.cpp, and generates summaries and recaps with llama.cpp. Built on Temporal for durable workflow orchestration.
+Discord bot that records tabletop RPG sessions, transcribes them with whisper.cpp, and generates detailed records and recaps with local or cloud language models. Built on Temporal for durable workflow orchestration.
 
 ## Packages
 
@@ -53,29 +53,47 @@ pnpm dev:web       # SvelteKit frontend
 
 ## Environment variables
 
-| Variable                        | Used by                | Description                                                                                 |
-| ------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------- |
-| `DISCORD_TOKEN`                 | discord, temporal      | Bot token                                                                                   |
-| `DISCORD_APPLICATION_ID`        | discord                | Application ID                                                                              |
-| `MEDIA_PATH`                    | discord, temporal, web | Directory for audio clips, imported files, and transcripts                                  |
-| `TEMPORAL_URL`                  | discord, temporal, web | Temporal server address (e.g. `localhost:7233`)                                             |
-| `INFERENCE_URL`                 | temporal, web          | Shared OpenAI-compatible inference server base URL                                          |
-| `TRANSCRIPTION_MODEL`           | temporal               | Audio transcription model ID (default: `whisper-large-v3-turbo`)                            |
-| `SUMMARIZATION_MODEL`           | temporal               | Detailed-record, recap, and title model ID (default: `qwen3.6-35b-a3b`)                     |
-| `SUMMARIZATION_THINKING_BUDGET` | temporal               | llama.cpp reasoning-token budget for detailed records, recaps, and titles (default: `8192`) |
-| `SUMMARIZATION_MAX_TOKENS`      | temporal               | Maximum generated tokens per detailed-record/recap/title inference call (default: `16384`)  |
-| `SUMMARIZATION_CHUNK_CHARS`     | temporal               | Maximum transcript characters processed by each detailed-record pass (default: `36000`)     |
-| `CHAT_MODEL`                    | web                    | Session chat model ID (default: `qwen3.6-35b-a3b`)                                          |
-| `CHAT_THINKING_BUDGET`          | web                    | llama.cpp reasoning-token budget for session chat (default: `2048`)                         |
-| `BODY_SIZE_LIMIT`               | web                    | Maximum manual-upload request size; defaults to `10G` in Docker Compose                     |
-| `DATABASE_URL`                  | db                     | PostgreSQL connection string                                                                |
-| `WEB_URL`                       | temporal               | Public web origin used for completed-session links (for example, `https://libby.bot`)       |
+| Variable                         | Used by                | Description                                                                                                         |
+| -------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `DISCORD_TOKEN`                  | discord, temporal      | Bot token                                                                                                           |
+| `DISCORD_APPLICATION_ID`         | discord                | Application ID                                                                                                      |
+| `MEDIA_PATH`                     | discord, temporal, web | Directory for audio clips, imported files, and transcripts                                                          |
+| `TEMPORAL_URL`                   | discord, temporal, web | Temporal server address (e.g. `localhost:7233`)                                                                     |
+| `INFERENCE_URL`                  | temporal, web          | Local OpenAI-compatible server used for transcription, chat, and local summarization                                |
+| `TRANSCRIPTION_MODEL`            | temporal               | Audio transcription model ID (default: `whisper-large-v3-turbo`)                                                    |
+| `SUMMARIZATION_PROVIDER`         | temporal               | `local`, `openai`, or `anthropic` (default: `local`)                                                                |
+| `SUMMARIZATION_API_KEY`          | temporal               | API key; required for OpenAI and Anthropic, optional for local                                                      |
+| `SUMMARIZATION_BASE_URL`         | temporal               | Optional full API base URL override (for example, `http://host:8080/v1`); local defaults to `${INFERENCE_URL}/v1`   |
+| `SUMMARIZATION_MODEL`            | temporal               | Detailed-record, recap, and title model ID; required for cloud providers (local default: `qwen3.6-35b-a3b`)         |
+| `SUMMARIZATION_REASONING_EFFORT` | temporal               | Optional cloud reasoning effort: `none`, `low`, `medium`, `high`, `xhigh`, or `max`; OpenAI also supports `minimal` |
+| `SUMMARIZATION_THINKING_BUDGET`  | temporal               | Local llama.cpp reasoning-token budget (default: `8192`)                                                            |
+| `SUMMARIZATION_MAX_TOKENS`       | temporal               | Maximum generated tokens per detailed-record/recap/title call (default: `16384`)                                    |
+| `CHAT_MODEL`                     | web                    | Session chat model ID (default: `qwen3.6-35b-a3b`)                                                                  |
+| `CHAT_THINKING_BUDGET`           | web                    | llama.cpp reasoning-token budget for session chat (default: `2048`)                                                 |
+| `BODY_SIZE_LIMIT`                | web                    | Maximum manual-upload request size; defaults to `10G` in Docker Compose                                             |
+| `DATABASE_URL`                   | db                     | PostgreSQL connection string                                                                                        |
+| `WEB_URL`                        | temporal               | Public web origin used for completed-session links (for example, `https://libby.bot`)                               |
 
-Thinking budgets are passed to llama.cpp as `thinking_budget_tokens`. Override a
+For example, to run the post-session pipeline through Claude Sonnet:
+
+```env
+SUMMARIZATION_PROVIDER=anthropic
+SUMMARIZATION_API_KEY=sk-ant-...
+SUMMARIZATION_MODEL=claude-sonnet-5
+SUMMARIZATION_REASONING_EFFORT=high
+```
+
+The detailed record is generated from the complete formatted transcript in one
+request. Its output then feeds one recap request, and the recap feeds one title
+request. There is no transcript chunking or context-size preflight.
+
+Local thinking budgets are passed to llama.cpp as `thinking_budget_tokens`. Override a
 budget with `0` to end thinking immediately, a positive integer to cap thinking
 tokens, or `-1` for unrestricted thinking. Per-request budgets require a recent
 llama.cpp build and are ignored when the server was started with a fixed
 `--reasoning-budget`. A zero budget also passes
 `chat_template_kwargs.enable_thinking=false`; positive and unrestricted budgets
 pass `enable_thinking=true`. This makes Qwen's chat-template mode explicit on
-every request.
+every local request. OpenAI and Anthropic instead use
+`SUMMARIZATION_REASONING_EFFORT` when it is set; Anthropic enables adaptive
+thinking for non-`none` effort levels.

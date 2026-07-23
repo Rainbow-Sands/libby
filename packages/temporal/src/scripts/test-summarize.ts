@@ -4,8 +4,7 @@
 // ../text.ts), so what you see here is what the workflow would produce.
 //
 // Usage:
-//   INFERENCE_URL=http://localhost:8080 node src/scripts/test-summarize.ts <transcript.txt>
-//   pnpm test:summarize <transcript.txt>          # loads INFERENCE_URL from root .env
+//   pnpm test:summarize <transcript.txt>          # loads provider settings from root .env
 //
 // Writes <transcript>.record.md / .recap.md / .title.txt next to the input so
 // outputs persist for comparing prompts or models across runs.
@@ -15,17 +14,13 @@ import { performance } from "node:perf_hooks";
 import { TITLE_SYSTEM } from "../prompts.ts";
 import { stripCodeFence, stripLeadingTitle, normalizeTitle } from "../text.ts";
 import { createDetailedRecord, createRecap } from "../record-pipeline.ts";
+import {
+  createSummarizationInference,
+  loadSummarizationConfig,
+} from "../summarization-inference.ts";
 
-const INFERENCE_URL = process.env.INFERENCE_URL;
-const SUMMARIZATION_MODEL = process.env.SUMMARIZATION_MODEL ?? "qwen3.6-35b-a3b";
-const SUMMARIZATION_THINKING_BUDGET = process.env.SUMMARIZATION_THINKING_BUDGET ?? "8192";
-const SUMMARIZATION_MAX_TOKENS = Number(process.env.SUMMARIZATION_MAX_TOKENS ?? "16384");
-const SUMMARIZATION_CHUNK_CHARS = Number(process.env.SUMMARIZATION_CHUNK_CHARS ?? "36000");
-
-if (!INFERENCE_URL) {
-  console.error("Missing required environment variable: INFERENCE_URL");
-  process.exit(1);
-}
+const config = loadSummarizationConfig(process.env, process.env.INFERENCE_URL);
+const providerComplete = createSummarizationInference(config);
 
 const transcriptPath = process.argv[2];
 if (!transcriptPath) {
@@ -41,49 +36,20 @@ interface Completion {
 }
 
 async function complete(prompt: string, system: string): Promise<Completion> {
-  const res = await fetch(`${INFERENCE_URL}/v1/chat/completions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: SUMMARIZATION_MODEL,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: prompt },
-      ],
-      temperature: 0.15,
-      max_tokens: SUMMARIZATION_MAX_TOKENS,
-      thinking_budget_tokens: Number(SUMMARIZATION_THINKING_BUDGET),
-      chat_template_kwargs: {
-        enable_thinking: Number(SUMMARIZATION_THINKING_BUDGET) !== 0,
-      },
-    }),
-  });
+  const data = await providerComplete(prompt, system);
 
-  if (!res.ok) {
-    throw new Error(`llama-server returned ${res.status}: ${await res.text()}`);
+  if (data.finishReason === "length") {
+    throw new Error("Inference output reached SUMMARIZATION_MAX_TOKENS; increase it");
   }
 
-  const data = (await res.json()) as {
-    model?: string;
-    choices: { finish_reason?: string; message: { content: string } }[];
-    usage?: { prompt_tokens?: number; completion_tokens?: number };
-  };
-
-  const choice = data.choices[0];
-  if (choice?.finish_reason === "length") {
-    throw new Error(
-      "Inference output reached SUMMARIZATION_MAX_TOKENS; increase it or reduce SUMMARIZATION_CHUNK_CHARS",
-    );
-  }
-
-  const content = stripCodeFence((choice?.message.content ?? "").trim());
+  const content = stripCodeFence(data.content.trim());
   if (!content) throw new Error("Inference server returned an empty response");
 
   return {
     content,
     model: data.model,
-    promptTokens: data.usage?.prompt_tokens,
-    completionTokens: data.usage?.completion_tokens,
+    promptTokens: data.inputTokens,
+    completionTokens: data.outputTokens,
   };
 }
 
@@ -115,20 +81,15 @@ try {
 
   const overall = performance.now();
 
-  let recordPass = 0;
   const record = await createDetailedRecord(
     transcript,
-    SUMMARIZATION_CHUNK_CHARS,
-    async (prompt, system) =>
-      (await stage(`Detailed record pass ${++recordPass}`, system, prompt)).content,
+    async (prompt, system) => (await stage("Detailed record", system, prompt)).content,
   );
   writeFileSync(`${base}.record.md`, record, "utf8");
 
-  let recapPass = 0;
   const recap = await createRecap(
     record,
-    SUMMARIZATION_CHUNK_CHARS,
-    async (prompt, system) => (await stage(`Recap pass ${++recapPass}`, system, prompt)).content,
+    async (prompt, system) => (await stage("Recap", system, prompt)).content,
   );
   writeFileSync(`${base}.recap.md`, stripLeadingTitle(recap), "utf8");
 

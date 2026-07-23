@@ -8,9 +8,10 @@ workspace-wide conventions.
 - `worker.ts` — process entrypoint; starts the workers.
 - `workflows/session.ts` — the durable session workflow (orchestration only).
 - `activities/transcribe.ts` — whisper transcription, transcript aggregation,
-  and the llama detailed-record/recap/title calls.
+  and the detailed-record/recap/title calls.
 - `activities/persist.ts` — writes pipeline output to Postgres via `@rainbot/db`.
 - `prompts.ts` / `text.ts` — LLM system prompts and response cleanup.
+- `summarization-inference.ts` — local/OpenAI/Anthropic provider configuration.
 - `scripts/test-summarize.ts` — standalone detailed-record pipeline harness.
 - `client.ts`, `types.ts`, `env.ts`, `index.ts`.
 
@@ -56,9 +57,8 @@ the built-in `ExecutionStatus` instead.
   source of truth** shared by the activities and `scripts/test-summarize.ts`.
   Don't re-inline prompt strings in the activities.
 - Iterate on prompts/models without recording a session:
-  `pnpm --filter @rainbot/temporal test:summarize <transcript.txt>`. Swapping the
-  llama model is an inference-server concern — everything here just talks to
-  `INFERENCE_URL`.
+  `pnpm --filter @rainbot/temporal test:summarize <transcript.txt>`. The harness
+  uses the same provider configuration and inference code as the activities.
 
 ## Transcript format
 
@@ -71,11 +71,11 @@ boundaries and prepending the cast legend (`- <name> plays <character>`) —
 happens **inside `summarize`**, via `formatTranscriptForInference` from
 `@rainbot/db`. Keeping the DB copy lossless means improvements to that
 formatting can be re-run over already-recorded sessions later without
-re-transcribing. `env.ts` asserts
-`TEMPORAL_URL`, `INFERENCE_URL`. Model IDs are runtime-configurable through
-`TRANSCRIPTION_MODEL` and `SUMMARIZATION_MODEL`, with defaults in `env.ts`.
-`SUMMARIZATION_THINKING_BUDGET` overrides llama.cpp's per-request reasoning-token
-budget (default `8192`). `SUMMARIZATION_MAX_TOKENS` caps generated tokens per
-call (default `16384`), while `SUMMARIZATION_CHUNK_CHARS` controls the
-timestamped transcript chunk size used by the extraction and audit passes
-(default `36000`).
+re-transcribing. The complete formatted transcript is sent in one detailed-record
+request; there is no chunking or context-size preflight. `env.ts` asserts
+`TEMPORAL_URL` and `INFERENCE_URL`. `SUMMARIZATION_PROVIDER` selects `local`,
+`openai`, or `anthropic`; the cloud providers require `SUMMARIZATION_API_KEY` and
+`SUMMARIZATION_MODEL`. Local summarization defaults to `INFERENCE_URL`, model
+`qwen3.6-35b-a3b`, and an `8192`-token llama.cpp thinking budget.
+`SUMMARIZATION_REASONING_EFFORT` configures cloud reasoning when set, and
+`SUMMARIZATION_MAX_TOKENS` caps each generated response (default `16384`).
