@@ -7,18 +7,12 @@ import {
   toUIMessageStream,
   type UIMessage,
 } from "ai";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { CHAT_MODEL, CHAT_THINKING_BUDGET, INFERENCE_URL } from "$lib/server/env";
+import { createChatInference } from "$lib/server/chat-inference";
+import { CHAT_INFERENCE_CONFIG } from "$lib/server/env";
 import { buildSessionContext } from "$lib/server/chat-context";
 import type { RequestHandler } from "./$types";
 
-// llama.cpp exposes an OpenAI-compatible API at /v1 and requires no auth; the
-// apiKey is a placeholder so the SDK doesn't send an empty Authorization header.
-const llama = createOpenAICompatible({
-  name: "llama",
-  baseURL: `${INFERENCE_URL}/v1`,
-  apiKey: "-",
-});
+const chatInference = createChatInference(CHAT_INFERENCE_CONFIG);
 
 export const POST: RequestHandler = async ({ params, locals, request }) => {
   if (!locals.user) throw error(401, "You must be logged in.");
@@ -43,15 +37,10 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
   const cast = await getCampaignCast(session.campaignId);
 
   const result = streamText({
-    model: llama(CHAT_MODEL),
+    model: chatInference.model,
     system: buildSessionContext(session, cast),
     messages: await convertToModelMessages(messages),
-    providerOptions: {
-      llama: {
-        thinking_budget_tokens: CHAT_THINKING_BUDGET,
-        chat_template_kwargs: { enable_thinking: CHAT_THINKING_BUDGET !== 0 },
-      },
-    },
+    providerOptions: chatInference.providerOptions,
   });
 
   return createUIMessageStreamResponse({

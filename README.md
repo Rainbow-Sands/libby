@@ -59,7 +59,7 @@ pnpm dev:web       # SvelteKit frontend
 | `DISCORD_APPLICATION_ID`         | discord                | Application ID                                                                                                      |
 | `MEDIA_PATH`                     | discord, temporal, web | Directory for audio clips, imported files, and transcripts                                                          |
 | `TEMPORAL_URL`                   | discord, temporal, web | Temporal server address (e.g. `localhost:7233`)                                                                     |
-| `INFERENCE_URL`                  | temporal, web          | Local OpenAI-compatible server used for transcription, chat, and local summarization                                |
+| `INFERENCE_URL`                  | temporal, web          | Local OpenAI-compatible server used for transcription and as the default local chat/summarization backend           |
 | `TRANSCRIPTION_MODEL`            | temporal               | Audio transcription model ID (default: `whisper-large-v3-turbo`)                                                    |
 | `SUMMARIZATION_PROVIDER`         | temporal               | `local`, `openai`, or `anthropic` (default: `local`)                                                                |
 | `SUMMARIZATION_API_KEY`          | temporal               | API key; required for OpenAI and Anthropic, optional for local                                                      |
@@ -67,8 +67,12 @@ pnpm dev:web       # SvelteKit frontend
 | `SUMMARIZATION_MODEL`            | temporal               | Detailed-record, recap, and title model ID; required for cloud providers (local default: `qwen3.6-35b-a3b`)         |
 | `SUMMARIZATION_REASONING_EFFORT` | temporal               | Optional cloud reasoning effort: `none`, `low`, `medium`, `high`, `xhigh`, or `max`; OpenAI also supports `minimal` |
 | `SUMMARIZATION_THINKING_BUDGET`  | temporal               | Local llama.cpp reasoning-token budget (default: `8192`)                                                            |
-| `CHAT_MODEL`                     | web                    | Session chat model ID (default: `qwen3.6-35b-a3b`)                                                                  |
-| `CHAT_THINKING_BUDGET`           | web                    | llama.cpp reasoning-token budget for session chat (default: `2048`)                                                 |
+| `CHAT_PROVIDER`                  | web                    | `local`, `openai`, or `anthropic` (default: `local`)                                                                |
+| `CHAT_API_KEY`                   | web                    | API key; required for OpenAI and Anthropic, optional for local                                                      |
+| `CHAT_BASE_URL`                  | web                    | Optional full API base URL override; local defaults to `${INFERENCE_URL}/v1`                                        |
+| `CHAT_MODEL`                     | web                    | Session chat model ID; required for cloud providers (local default: `qwen3.6-35b-a3b`)                              |
+| `CHAT_REASONING_EFFORT`          | web                    | Optional cloud reasoning effort: `none`, `low`, `medium`, `high`, `xhigh`, or `max`; OpenAI also supports `minimal` |
+| `CHAT_THINKING_BUDGET`           | web                    | Local llama.cpp reasoning-token budget for session chat (default: `2048`)                                           |
 | `BODY_SIZE_LIMIT`                | web                    | Maximum manual-upload request size; defaults to `10G` in Docker Compose                                             |
 | `DATABASE_URL`                   | db                     | PostgreSQL connection string                                                                                        |
 | `WEB_URL`                        | temporal               | Public web origin used for completed-session links (for example, `https://libby.bot`)                               |
@@ -80,6 +84,15 @@ SUMMARIZATION_PROVIDER=anthropic
 SUMMARIZATION_API_KEY=sk-ant-...
 SUMMARIZATION_MODEL=claude-sonnet-5
 SUMMARIZATION_REASONING_EFFORT=high
+```
+
+Chat uses a separate provider profile, so it can use a smaller or less expensive
+model without changing the post-session pipeline:
+
+```env
+CHAT_PROVIDER=anthropic
+CHAT_API_KEY=sk-ant-...
+CHAT_MODEL=claude-haiku-4-5
 ```
 
 The detailed record is generated from the complete formatted transcript in one
@@ -94,5 +107,6 @@ llama.cpp build and are ignored when the server was started with a fixed
 `chat_template_kwargs.enable_thinking=false`; positive and unrestricted budgets
 pass `enable_thinking=true`. This makes Qwen's chat-template mode explicit on
 every local request. OpenAI and Anthropic instead use
-`SUMMARIZATION_REASONING_EFFORT` when it is set; Anthropic enables adaptive
-thinking for non-`none` effort levels.
+their corresponding `SUMMARIZATION_REASONING_EFFORT` or
+`CHAT_REASONING_EFFORT` when set; Anthropic enables adaptive thinking for
+non-`none` effort levels.

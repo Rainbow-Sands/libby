@@ -38,11 +38,12 @@ flag so assertions don't fire during `vite build`. Never import server env (or
 `+server.ts`, and `hooks.server.ts`.
 
 Required vars: `DATABASE_URL`, `DISCORD_APPLICATION_ID`, `DISCORD_CLIENT_SECRET`,
-`SESSION_SECRET`, `INFERENCE_URL` (shared inference server URL), and `ORIGIN` (SvelteKit needs it for
-CSRF/form-action origin checks in production).
-The session-chat model ID is optionally overridden with `CHAT_MODEL`.
-`CHAT_THINKING_BUDGET` overrides llama.cpp's per-request reasoning-token budget
-for chat (default `2048`).
+`SESSION_SECRET`, and `ORIGIN` (SvelteKit needs it for CSRF/form-action origin
+checks in production). Session chat uses `CHAT_PROVIDER` (`local`, `openai`, or
+`anthropic`), with separate API key, base URL, model, and reasoning settings from
+summarization. Local chat defaults to `INFERENCE_URL`, model
+`qwen3.6-35b-a3b`, and a `2048`-token llama.cpp thinking budget. Cloud chat
+requires `CHAT_API_KEY` and `CHAT_MODEL`.
 
 ## Notes
 

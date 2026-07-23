@@ -9,7 +9,10 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.18",
+    "@ai-sdk/openai": "^4.0.17",
     "@ai-sdk/openai-compatible": "latest",
+    "@ai-sdk/provider": "^4.0.3",
     "@ai-sdk/svelte": "latest",
     "@rainbot/db": "workspace:*",
     "@rainbot/temporal": "workspace:*",
