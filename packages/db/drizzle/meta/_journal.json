@@ -43,6 +43,13 @@
       "when": 1783394913761,
       "tag": "0005_good_silver_fox",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784774369642,
+      "tag": "0006_curvy_fabian_cortez",
+      "breakpoints": true
     }
   ]
 }

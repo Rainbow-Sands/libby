@@ -3,6 +3,7 @@ import {
   formatTranscriptForDisplay,
   getCampaignCast,
   getSessionDetail,
+  isAdmin,
   isCampaignMember,
 } from "@rainbot/db";
 import { getTemporalClient, regenerateSessionWorkflow } from "@rainbot/temporal";
@@ -45,18 +46,22 @@ export const load: PageServerLoad = async ({ params, locals }) => {
       },
       transcriptTurns: null,
       canViewDetails: false,
+      canRegenerate: false,
       preview,
     };
   }
 
-  const member = await isCampaignMember(session.campaignId, locals.user.id);
-  if (!member) throw error(403, "You are not a member of this campaign.");
+  const [admin, member] = await Promise.all([
+    isAdmin(locals.user.id),
+    isCampaignMember(session.campaignId, locals.user.id),
+  ]);
+  if (!admin && !member) throw error(403, "You cannot view this campaign.");
 
   const transcriptTurns = session.transcript
     ? formatTranscriptForDisplay(session.transcript, await getCampaignCast(session.campaignId))
     : null;
 
-  return { session, transcriptTurns, canViewDetails: true, preview };
+  return { session, transcriptTurns, canViewDetails: true, canRegenerate: admin, preview };
 };
 
 export const actions: Actions = {
@@ -68,8 +73,9 @@ export const actions: Actions = {
       throw error(404, "Session not found.");
     }
 
-    const member = await isCampaignMember(session.campaignId, locals.user.id);
-    if (!member) throw error(403, "You are not a member of this campaign.");
+    if (!(await isAdmin(locals.user.id))) {
+      throw error(403, "Only administrators can regenerate session inference.");
+    }
     if (!session.transcript) {
       return fail(409, { message: "This session has no transcript to regenerate from." });
     }

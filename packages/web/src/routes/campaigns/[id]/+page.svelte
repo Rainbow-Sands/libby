@@ -43,7 +43,9 @@
   {/if}
 
   <h2>Sessions</h2>
-  <p><a class="button" href="/campaigns/{data.campaign.id}/ingest">Ingest audio session</a></p>
+  {#if data.canIngest}
+    <p><a class="button" href="/campaigns/{data.campaign.id}/ingest">Ingest audio session</a></p>
+  {/if}
   {#if data.campaign.sessions.length === 0}
     <p class="empty">No sessions recorded yet.</p>
   {:else}

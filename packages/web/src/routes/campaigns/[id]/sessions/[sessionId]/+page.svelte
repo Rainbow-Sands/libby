@@ -86,7 +86,7 @@
     {#if page.url.searchParams.has("regenerating") || data.session.status === "summarizing"}
       <p class="muted">Regeneration is running. Refresh this page to see its progress.</p>
     {/if}
-    {#if data.session.transcript}
+    {#if data.canRegenerate && data.session.transcript}
       <form method="POST" action="?/regenerate" onsubmit={confirmRegeneration}>
         <button
           class="btn regenerate"

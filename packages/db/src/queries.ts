@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "./client.ts";
 import { campaigns, campaignMembers, sessions, users } from "./schema.ts";
 import type { Transcript } from "./transcript.ts";
@@ -12,6 +12,17 @@ export async function getCampaignsForGuild(guildId: string) {
 }
 
 export async function getCampaignsForUser(userId: string) {
+  if (await isAdmin(userId)) {
+    return db
+      .select({
+        id: campaigns.id,
+        name: campaigns.name,
+        role: sql<string>`'admin'`,
+      })
+      .from(campaigns)
+      .orderBy(campaigns.name);
+  }
+
   return db
     .select({
       id: campaigns.id,
@@ -22,6 +33,15 @@ export async function getCampaignsForUser(userId: string) {
     .innerJoin(campaigns, eq(campaignMembers.campaignId, campaigns.id))
     .where(eq(campaignMembers.userId, userId))
     .orderBy(campaigns.name);
+}
+
+export async function isAdmin(userId: string): Promise<boolean> {
+  const [user] = await db
+    .select({ isAdmin: users.isAdmin })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return user?.isAdmin ?? false;
 }
 
 export async function isCampaignMember(campaignId: string, userId: string): Promise<boolean> {

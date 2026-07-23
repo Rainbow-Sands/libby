@@ -18,6 +18,7 @@ export {
 export {
   getCampaignsForGuild,
   getCampaignsForUser,
+  isAdmin,
   isCampaignMember,
   getCampaignMeta,
   getCampaignCast,

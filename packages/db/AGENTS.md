@@ -63,4 +63,6 @@ pnpm --filter @rainbot/db db:migrate    # applies to the DB in DATABASE_URL
   than carrying a legacy-string code path — pre-production, nothing to keep.
 - `campaign_members` has `role` (`dm` | `player`) and `characterName` (null for
   the DM). The cast legend and player management depend on these.
+- `users.is_admin` grants application-wide visibility into every campaign and
+  is managed manually.
 - Writes are idempotent upserts so Temporal activity retries are safe.

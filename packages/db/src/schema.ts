@@ -1,4 +1,13 @@
-import { jsonb, pgTable, primaryKey, text, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uuid,
+  varchar,
+} from "drizzle-orm/pg-core";
 import type { Transcript } from "./transcript.ts";
 
 export const guilds = pgTable("guilds", {
@@ -11,6 +20,7 @@ export const guilds = pgTable("guilds", {
 export const users = pgTable("users", {
   id: varchar("id", { length: 20 }).primaryKey(),
   username: varchar("username", { length: 100 }).notNull(),
+  isAdmin: boolean("is_admin").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

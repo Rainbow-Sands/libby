@@ -1,5 +1,5 @@
 import { error, json } from "@sveltejs/kit";
-import { getCampaignCast, getSessionDetail, isCampaignMember } from "@rainbot/db";
+import { getCampaignCast, getSessionDetail, isAdmin, isCampaignMember } from "@rainbot/db";
 import {
   convertToModelMessages,
   createUIMessageStreamResponse,
@@ -22,8 +22,11 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
     throw error(404, "Session not found.");
   }
 
-  const member = await isCampaignMember(session.campaignId, locals.user.id);
-  if (!member) throw error(403, "You are not a member of this campaign.");
+  const [admin, member] = await Promise.all([
+    isAdmin(locals.user.id),
+    isCampaignMember(session.campaignId, locals.user.id),
+  ]);
+  if (!admin && !member) throw error(403, "You cannot view this campaign.");
 
   if (!session.summary && !session.transcript) {
     throw error(409, "This session has no detailed record or transcript to chat about yet.");
