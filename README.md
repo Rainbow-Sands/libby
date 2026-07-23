@@ -59,17 +59,17 @@ pnpm dev:web       # SvelteKit frontend
 | `DISCORD_APPLICATION_ID`         | discord                | Application ID                                                                                                      |
 | `MEDIA_PATH`                     | discord, temporal, web | Directory for audio clips, imported files, and transcripts                                                          |
 | `TEMPORAL_URL`                   | discord, temporal, web | Temporal server address (e.g. `localhost:7233`)                                                                     |
-| `INFERENCE_URL`                  | temporal, web          | Local OpenAI-compatible server used for transcription and as the default local chat/summarization backend           |
+| `TRANSCRIPTION_BASE_URL`         | temporal               | Full OpenAI-compatible transcription API root, such as `http://host:8080/v1`                                        |
 | `TRANSCRIPTION_MODEL`            | temporal               | Audio transcription model ID (default: `whisper-large-v3-turbo`)                                                    |
 | `SUMMARIZATION_PROVIDER`         | temporal               | `local`, `openai`, or `anthropic` (default: `local`)                                                                |
 | `SUMMARIZATION_API_KEY`          | temporal               | API key; required for OpenAI and Anthropic, optional for local                                                      |
-| `SUMMARIZATION_BASE_URL`         | temporal               | Optional full API base URL override (for example, `http://host:8080/v1`); local defaults to `${INFERENCE_URL}/v1`   |
+| `SUMMARIZATION_BASE_URL`         | temporal               | Required full API root for local summarization; optional cloud API override                                         |
 | `SUMMARIZATION_MODEL`            | temporal               | Detailed-record, recap, and title model ID; required for cloud providers (local default: `qwen3.6-35b-a3b`)         |
 | `SUMMARIZATION_REASONING_EFFORT` | temporal               | Optional cloud reasoning effort: `none`, `low`, `medium`, `high`, `xhigh`, or `max`; OpenAI also supports `minimal` |
 | `SUMMARIZATION_THINKING_BUDGET`  | temporal               | Local llama.cpp reasoning-token budget (default: `8192`)                                                            |
 | `CHAT_PROVIDER`                  | web                    | `local`, `openai`, or `anthropic` (default: `local`)                                                                |
 | `CHAT_API_KEY`                   | web                    | API key; required for OpenAI and Anthropic, optional for local                                                      |
-| `CHAT_BASE_URL`                  | web                    | Optional full API base URL override; local defaults to `${INFERENCE_URL}/v1`                                        |
+| `CHAT_BASE_URL`                  | web                    | Required full API root for local chat; optional cloud API override                                                  |
 | `CHAT_MODEL`                     | web                    | Session chat model ID; required for cloud providers (local default: `qwen3.6-35b-a3b`)                              |
 | `CHAT_REASONING_EFFORT`          | web                    | Optional cloud reasoning effort: `none`, `low`, `medium`, `high`, `xhigh`, or `max`; OpenAI also supports `minimal` |
 | `CHAT_THINKING_BUDGET`           | web                    | Local llama.cpp reasoning-token budget for session chat (default: `2048`)                                           |
@@ -93,6 +93,17 @@ model without changing the post-session pipeline:
 CHAT_PROVIDER=anthropic
 CHAT_API_KEY=sk-ant-...
 CHAT_MODEL=claude-haiku-4-5
+```
+
+For local inference, configure each service explicitly. These may point to the
+same OpenAI-compatible server, but they are not coupled:
+
+```env
+TRANSCRIPTION_BASE_URL=http://llama-swap:8080/v1
+SUMMARIZATION_PROVIDER=local
+SUMMARIZATION_BASE_URL=http://llama-swap:8080/v1
+CHAT_PROVIDER=local
+CHAT_BASE_URL=http://llama-swap:8080/v1
 ```
 
 The detailed record is generated from the complete formatted transcript in one

@@ -11,14 +11,9 @@ function get(name: string, fallback?: string): string {
   return value as string;
 }
 
-function optional(name: string): string | undefined {
-  return env[name]?.trim() || undefined;
-}
-
 export const DISCORD_APPLICATION_ID = get("DISCORD_APPLICATION_ID");
 export const DISCORD_CLIENT_SECRET = get("DISCORD_CLIENT_SECRET");
 export const SESSION_SECRET = get("SESSION_SECRET");
 export const MEDIA_PATH = get("MEDIA_PATH");
 export const TEMPORAL_URL = get("TEMPORAL_URL");
-export const INFERENCE_URL = optional("INFERENCE_URL");
-export const CHAT_INFERENCE_CONFIG = loadChatInferenceConfig(env, INFERENCE_URL, !building);
+export const CHAT_INFERENCE_CONFIG = loadChatInferenceConfig(env, !building);

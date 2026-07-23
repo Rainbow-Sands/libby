@@ -68,10 +68,7 @@ function reasoningEffort(env: NodeJS.ProcessEnv): ReasoningEffort | undefined {
   return value;
 }
 
-export function loadSummarizationConfig(
-  env: NodeJS.ProcessEnv,
-  localInferenceURL?: string,
-): SummarizationConfig {
+export function loadSummarizationConfig(env: NodeJS.ProcessEnv): SummarizationConfig {
   const selectedProvider = provider(env);
   const apiKey = optional(env, "SUMMARIZATION_API_KEY");
   const configuredModel = optional(env, "SUMMARIZATION_MODEL");
@@ -88,21 +85,17 @@ export function loadSummarizationConfig(
       `SUMMARIZATION_MODEL is required when SUMMARIZATION_PROVIDER=${selectedProvider}`,
     );
   }
-  if (selectedProvider === "local" && !configuredBaseURL && !localInferenceURL) {
-    throw new Error(
-      "SUMMARIZATION_BASE_URL or INFERENCE_URL is required when SUMMARIZATION_PROVIDER=local",
-    );
+  if (selectedProvider === "local" && !configuredBaseURL) {
+    throw new Error("SUMMARIZATION_BASE_URL is required when SUMMARIZATION_PROVIDER=local");
   }
   if (selectedProvider === "anthropic" && effort === "minimal") {
     throw new Error("Anthropic does not support SUMMARIZATION_REASONING_EFFORT=minimal");
   }
 
-  const localBaseURL = localInferenceURL ? `${localInferenceURL.replace(/\/$/, "")}/v1` : undefined;
-
   return {
     provider: selectedProvider,
     apiKey,
-    baseURL: configuredBaseURL ?? (selectedProvider === "local" ? localBaseURL : undefined),
+    baseURL: configuredBaseURL?.replace(/\/$/, ""),
     model: configuredModel ?? "qwen3.6-35b-a3b",
     reasoningEffort: effort,
     thinkingBudget: thinkingBudget(env),

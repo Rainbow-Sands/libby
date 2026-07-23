@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createChatInference, loadChatInferenceConfig } from "./chat-inference.ts";
 
-test("loads local chat defaults from INFERENCE_URL", () => {
-  const config = loadChatInferenceConfig({}, "http://localhost:8080/");
+test("loads a local chat profile", () => {
+  const config = loadChatInferenceConfig({ CHAT_BASE_URL: "http://localhost:8080/v1/" });
 
   assert.deepEqual(config, {
     provider: "local",
@@ -51,4 +51,8 @@ test("requires a key and model for cloud chat", () => {
       }),
     /CHAT_MODEL/,
   );
+});
+
+test("requires an explicit base URL for local chat", () => {
+  assert.throws(() => loadChatInferenceConfig({}), /CHAT_BASE_URL/);
 });

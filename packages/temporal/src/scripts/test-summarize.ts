@@ -19,7 +19,7 @@ import {
   loadSummarizationConfig,
 } from "../summarization-inference.ts";
 
-const config = loadSummarizationConfig(process.env, process.env.INFERENCE_URL);
+const config = loadSummarizationConfig(process.env);
 const providerComplete = createSummarizationInference(config);
 
 const transcriptPath = process.argv[2];

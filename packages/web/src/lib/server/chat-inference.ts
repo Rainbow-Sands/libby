@@ -66,7 +66,6 @@ function thinkingBudget(env: Record<string, string | undefined>): number {
 
 export function loadChatInferenceConfig(
   env: Record<string, string | undefined>,
-  localInferenceURL?: string,
   validateRequired = true,
 ): ChatInferenceConfig {
   const selectedProvider = provider(env);
@@ -81,24 +80,17 @@ export function loadChatInferenceConfig(
   if (validateRequired && selectedProvider !== "local" && !configuredModel) {
     throw new Error(`CHAT_MODEL is required when CHAT_PROVIDER=${selectedProvider}`);
   }
-  if (
-    validateRequired &&
-    selectedProvider === "local" &&
-    !configuredBaseURL &&
-    !localInferenceURL
-  ) {
-    throw new Error("CHAT_BASE_URL or INFERENCE_URL is required when CHAT_PROVIDER=local");
+  if (validateRequired && selectedProvider === "local" && !configuredBaseURL) {
+    throw new Error("CHAT_BASE_URL is required when CHAT_PROVIDER=local");
   }
   if (selectedProvider === "anthropic" && effort === "minimal") {
     throw new Error("Anthropic does not support CHAT_REASONING_EFFORT=minimal");
   }
 
-  const localBaseURL = localInferenceURL ? `${localInferenceURL.replace(/\/$/, "")}/v1` : undefined;
-
   return {
     provider: selectedProvider,
     apiKey,
-    baseURL: configuredBaseURL ?? (selectedProvider === "local" ? localBaseURL : undefined),
+    baseURL: configuredBaseURL?.replace(/\/$/, ""),
     model: configuredModel ?? "qwen3.6-35b-a3b",
     reasoningEffort: effort,
     thinkingBudget: thinkingBudget(env),

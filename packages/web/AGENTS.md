@@ -41,9 +41,10 @@ Required vars: `DATABASE_URL`, `DISCORD_APPLICATION_ID`, `DISCORD_CLIENT_SECRET`
 `SESSION_SECRET`, and `ORIGIN` (SvelteKit needs it for CSRF/form-action origin
 checks in production). Session chat uses `CHAT_PROVIDER` (`local`, `openai`, or
 `anthropic`), with separate API key, base URL, model, and reasoning settings from
-summarization. Local chat defaults to `INFERENCE_URL`, model
-`qwen3.6-35b-a3b`, and a `2048`-token llama.cpp thinking budget. Cloud chat
-requires `CHAT_API_KEY` and `CHAT_MODEL`.
+summarization. Local chat requires `CHAT_BASE_URL` and defaults to model
+`qwen3.6-35b-a3b` with a `2048`-token llama.cpp thinking budget. Cloud chat
+requires `CHAT_API_KEY` and `CHAT_MODEL`; it does not require any local inference
+or transcription URL.
 
 ## Notes
 

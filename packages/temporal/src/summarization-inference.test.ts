@@ -4,8 +4,10 @@ import { createDetailedRecord, createRecap } from "./record-pipeline.ts";
 import { DETAILED_RECORD_SYSTEM, RECAP_SYSTEM } from "./prompts.ts";
 import { loadSummarizationConfig } from "./summarization-inference.ts";
 
-test("loads local summarization defaults from INFERENCE_URL", () => {
-  const config = loadSummarizationConfig({}, "http://localhost:8080/");
+test("loads a local summarization profile", () => {
+  const config = loadSummarizationConfig({
+    SUMMARIZATION_BASE_URL: "http://localhost:8080/v1/",
+  });
 
   assert.deepEqual(config, {
     provider: "local",
@@ -44,6 +46,10 @@ test("requires a key and model for cloud summarization", () => {
       }),
     /SUMMARIZATION_MODEL/,
   );
+});
+
+test("requires an explicit base URL for local summarization", () => {
+  assert.throws(() => loadSummarizationConfig({}), /SUMMARIZATION_BASE_URL/);
 });
 
 test("detailed record and recap each make one complete inference call", async () => {

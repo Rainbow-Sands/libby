@@ -8,8 +8,8 @@ function get(name: string, fallback?: string): string {
 import { loadSummarizationConfig } from "./summarization-inference.ts";
 
 export const TEMPORAL_URL = get("TEMPORAL_URL");
-export const INFERENCE_URL = get("INFERENCE_URL");
+export const TRANSCRIPTION_BASE_URL = get("TRANSCRIPTION_BASE_URL").replace(/\/$/, "");
 export const DISCORD_TOKEN = get("DISCORD_TOKEN");
 export const WEB_URL = get("WEB_URL");
 export const TRANSCRIPTION_MODEL = get("TRANSCRIPTION_MODEL", "whisper-large-v3-turbo");
-export const SUMMARIZATION_CONFIG = loadSummarizationConfig(process.env, INFERENCE_URL);
+export const SUMMARIZATION_CONFIG = loadSummarizationConfig(process.env);
