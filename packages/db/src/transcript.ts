@@ -24,6 +24,14 @@ interface CastMember {
   characterName: string;
 }
 
+export interface TranscriptTurn {
+  timestamp: string;
+  userId: string;
+  speaker: string;
+  characterName: string | null;
+  text: string;
+}
+
 // Whisper's own per-clip utterance segmentation, already stored verbatim
 // under TranscriptSegment.whisper. Duck-typed since that field is `unknown` —
 // @rainbot/db stays decoupled from any whisper.cpp-specific package, mirroring
@@ -106,6 +114,44 @@ function explodeSegment(segment: TranscriptSegment): Utterance[] {
     }));
 }
 
+function orderedUtterances(transcript: Transcript): Utterance[] {
+  return transcript.segments
+    .flatMap(explodeSegment)
+    .toSorted((a, b) => a.timestamp.localeCompare(b.timestamp));
+}
+
+// Build display-ready speaker turns while retaining the first utterance's
+// timestamp. Consecutive utterances from the same user are grouped so the UI
+// reads like a conversation rather than a wall of Whisper fragments.
+export function formatTranscriptForDisplay(
+  transcript: Transcript,
+  cast: CastMember[],
+): TranscriptTurn[] {
+  const characterByUserId = new Map(cast.map((member) => [member.userId, member.characterName]));
+  const turns: TranscriptTurn[] = [];
+
+  for (const utterance of orderedUtterances(transcript)) {
+    const text = utterance.text.trim();
+    if (!text) continue;
+
+    const previous = turns.at(-1);
+    if (previous?.userId === utterance.userId) {
+      previous.text += ` ${text}`;
+      continue;
+    }
+
+    turns.push({
+      timestamp: utterance.timestamp,
+      userId: utterance.userId,
+      speaker: utterance.username ?? utterance.userId,
+      characterName: characterByUserId.get(utterance.userId) ?? null,
+      text,
+    });
+  }
+
+  return turns;
+}
+
 // Reduce a full transcript down to what the LLM actually needs: wall-clock
 // timing is dropped, consecutive lines from the same speaker are merged onto
 // one labelled line, and a cast legend is prepended so dialogue can be
@@ -113,50 +159,25 @@ function explodeSegment(segment: TranscriptSegment): Utterance[] {
 // formatting is found later — re-run it over `Transcript.segments` from any
 // stored session to benefit retroactively, no re-transcription needed.
 export function simplifyTranscript(transcript: Transcript, cast: CastMember[]): string {
-  const utterances = transcript.segments.flatMap(explodeSegment);
-  const sorted = utterances.toSorted((a, b) => a.timestamp.localeCompare(b.timestamp));
-
-  const lines: string[] = [];
-  let speaker: string | null = null;
-  let buffer: string[] = [];
-  // Track the label actually used per speaker so the cast legend below can
-  // reuse the same name (the body uses displayName, which may differ from the
-  // account username).
+  const turns = formatTranscriptForDisplay(transcript, cast);
   const labelByUserId = new Map<string, string>();
 
-  const flush = () => {
-    if (speaker !== null && buffer.length > 0) {
-      lines.push(`${speaker}: ${buffer.join(" ")}`);
-    }
-  };
-
-  for (const segment of sorted) {
-    const text = segment.text.trim();
-    if (!text) continue;
-    const name = segment.username ?? segment.userId;
-    if (!labelByUserId.has(segment.userId)) {
-      labelByUserId.set(segment.userId, name);
-    }
-    if (name !== speaker) {
-      flush();
-      speaker = name;
-      buffer = [text];
-    } else {
-      buffer.push(text);
-    }
+  for (const turn of turns) {
+    if (!labelByUserId.has(turn.userId)) labelByUserId.set(turn.userId, turn.speaker);
   }
-  flush();
 
-  return buildCastLegend(cast, labelByUserId) + lines.join("\n") + "\n";
+  return (
+    buildCastLegend(cast, labelByUserId) +
+    turns.map((turn) => `${turn.speaker}: ${turn.text}`).join("\n") +
+    "\n"
+  );
 }
 
 // Preserve utterance-level timestamps and speaker boundaries for the detailed
 // record pipeline. These source markers let the model retain chronology and
 // make the resulting record auditable against the original transcript.
 export function formatTranscriptForInference(transcript: Transcript, cast: CastMember[]): string {
-  const utterances = transcript.segments
-    .flatMap(explodeSegment)
-    .toSorted((a, b) => a.timestamp.localeCompare(b.timestamp));
+  const utterances = orderedUtterances(transcript);
   const labelByUserId = new Map<string, string>();
 
   const lines = utterances.flatMap((utterance) => {

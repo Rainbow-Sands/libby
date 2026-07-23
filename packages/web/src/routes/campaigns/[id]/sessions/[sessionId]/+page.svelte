@@ -8,6 +8,7 @@
   let { data, form }: { data: PageData; form: ActionData } = $props();
 
   type SessionTab = "recap" | "summary" | "transcript";
+  type TranscriptTurn = NonNullable<PageData["transcriptTurns"]>[number];
 
   function sessionTab(value: string | null): SessionTab {
     return value === "summary" || value === "transcript" ? value : "recap";
@@ -24,6 +25,30 @@
 
   function renderMarkdown(text: string): string {
     return marked(text) as string;
+  }
+
+  function formatTranscriptTime(timestamp: string): string {
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return "Unknown time";
+    return date.toLocaleTimeString("en-CA", {
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  }
+
+  function speakerInitial(speaker: string): string {
+    return speaker.trim().charAt(0).toLocaleUpperCase() || "?";
+  }
+
+  function speakerHue(userId: string): number {
+    let hash = 0;
+    for (const char of userId) hash = (hash * 31 + char.charCodeAt(0)) | 0;
+    return Math.abs(hash) % 360;
+  }
+
+  function transcriptSpeakers(turns: TranscriptTurn[]): TranscriptTurn[] {
+    return [...new Map(turns.map((turn) => [turn.userId, turn])).values()];
   }
 
   function confirmRegeneration(event: SubmitEvent) {
@@ -120,8 +145,57 @@
     </div>
 
     <div role="tabpanel" hidden={activeTab !== "transcript"}>
-      {#if data.transcriptText}
-        <pre class="transcript">{data.transcriptText}</pre>
+      {#if data.transcriptTurns?.length}
+        {@const speakers = transcriptSpeakers(data.transcriptTurns)}
+        <section class="transcript-view" aria-label="Session transcript">
+          <header class="transcript-header">
+            <div>
+              <p class="eyebrow">Recorded Dialogue</p>
+              <h2>Table Transcript</h2>
+              <p class="transcript-note">
+                Machine-generated from the session audio. Names and wording may contain errors.
+              </p>
+            </div>
+            <div class="transcript-stats" aria-label="Transcript statistics">
+              <span>{data.transcriptTurns.length} speaker turns</span>
+              <span>{speakers.length} voices</span>
+            </div>
+          </header>
+
+          <div class="speaker-key" aria-label="Speakers in this transcript">
+            {#each speakers as speaker (speaker.userId)}
+              <span class="speaker-chip" style={`--speaker-hue: ${speakerHue(speaker.userId)}`}>
+                <span class="speaker-dot" aria-hidden="true"></span>
+                <strong>{speaker.speaker}</strong>
+                {#if speaker.characterName}
+                  <span>as {speaker.characterName}</span>
+                {/if}
+              </span>
+            {/each}
+          </div>
+
+          <ol class="transcript-list">
+            {#each data.transcriptTurns as turn, index (`${turn.timestamp}-${turn.userId}-${index}`)}
+              <li class="transcript-turn" style={`--speaker-hue: ${speakerHue(turn.userId)}`}>
+                <div class="speaker-avatar" aria-hidden="true">
+                  {speakerInitial(turn.speaker)}
+                </div>
+                <div class="turn-content">
+                  <div class="turn-meta">
+                    <strong>{turn.speaker}</strong>
+                    {#if turn.characterName}
+                      <span class="character-name">as {turn.characterName}</span>
+                    {/if}
+                    <time datetime={turn.timestamp} title={formatDate(turn.timestamp)}>
+                      {formatTranscriptTime(turn.timestamp)}
+                    </time>
+                  </div>
+                  <p class="turn-text">{turn.text}</p>
+                </div>
+              </li>
+            {/each}
+          </ol>
+        </section>
       {:else}
         <p class="empty">Not yet available.</p>
       {/if}
@@ -202,16 +276,177 @@
   .prose :global(em) {
     font-style: italic;
   }
-  .transcript {
-    font-family: var(--font-mono);
-    font-size: 0.9rem;
-    line-height: 1.5;
-    white-space: pre-wrap;
+  .transcript-view {
+    margin-top: 0.75rem;
     background: var(--surface-sunken);
     border: 1px solid var(--edge);
-    border-left: 3px solid var(--gold);
     border-radius: 4px;
-    padding: 1rem 1.2rem;
-    overflow-x: auto;
+    overflow: hidden;
+  }
+  .transcript-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding: 1.25rem 1.4rem;
+    background: linear-gradient(135deg, var(--surface), var(--surface-sunken));
+    border-bottom: 1px solid var(--edge);
+  }
+  .transcript-header .eyebrow {
+    margin-bottom: 0.2rem;
+  }
+  .transcript-header h2 {
+    margin: 0;
+  }
+  .transcript-note {
+    max-width: 38rem;
+    margin: 0.4rem 0 0;
+    color: var(--ink-soft);
+    font-size: 0.95rem;
+    line-height: 1.45;
+  }
+  .transcript-stats {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.4rem;
+    flex: 0 0 auto;
+  }
+  .transcript-stats span {
+    padding: 0.25rem 0.55rem;
+    font-family: var(--font-display);
+    font-size: 0.66rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    background: var(--surface);
+    border: 1px solid var(--edge);
+    border-radius: 999px;
+  }
+  .speaker-key {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    padding: 0.8rem 1.4rem;
+    background: var(--surface);
+    border-bottom: 1px solid var(--edge);
+  }
+  .speaker-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.22rem 0.55rem;
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+    background: var(--surface-sunken);
+    border: 1px solid var(--edge);
+    border-radius: 999px;
+  }
+  .speaker-chip strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .speaker-dot {
+    width: 0.55rem;
+    height: 0.55rem;
+    background: hsl(var(--speaker-hue) 48% 42%);
+    border-radius: 50%;
+  }
+  .transcript-list {
+    margin: 0;
+    padding: 0.35rem 1.4rem;
+    list-style: none;
+  }
+  .transcript-turn {
+    display: grid;
+    grid-template-columns: 2.35rem minmax(0, 1fr);
+    gap: 0.85rem;
+    padding: 1rem 0;
+  }
+  .transcript-turn + .transcript-turn {
+    border-top: 1px solid color-mix(in srgb, var(--edge) 68%, transparent);
+  }
+  .speaker-avatar {
+    display: grid;
+    place-items: center;
+    width: 2.35rem;
+    height: 2.35rem;
+    font-family: var(--font-display);
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #fff;
+    background: color-mix(in srgb, hsl(var(--speaker-hue) 48% 42%) 72%, #2b2018);
+    border: 1px solid color-mix(in srgb, hsl(var(--speaker-hue) 48% 42%) 60%, var(--edge));
+    border-radius: 50%;
+    box-shadow: 0 1px 3px var(--shadow);
+  }
+  .turn-content {
+    min-width: 0;
+    padding-left: 0.85rem;
+    border-left: 2px solid hsl(var(--speaker-hue) 42% 48%);
+  }
+  .turn-meta {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    line-height: 1.2;
+  }
+  .turn-meta strong {
+    color: var(--ink);
+    font-family: var(--font-display);
+    font-size: 0.92rem;
+    letter-spacing: 0.015em;
+  }
+  .character-name {
+    color: var(--gold);
+    font-size: 0.9rem;
+    font-style: italic;
+  }
+  .turn-meta time {
+    margin-left: auto;
+    color: var(--ink-soft);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+  .turn-text {
+    margin: 0.38rem 0 0;
+    color: var(--ink);
+    font-size: 1.02rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  @media (max-width: 640px) {
+    .transcript-header {
+      flex-direction: column;
+      gap: 0.8rem;
+      padding: 1rem;
+    }
+    .transcript-stats {
+      justify-content: flex-start;
+    }
+    .speaker-key {
+      padding: 0.7rem 1rem;
+    }
+    .transcript-list {
+      padding: 0.25rem 0.9rem;
+    }
+    .transcript-turn {
+      grid-template-columns: 2rem minmax(0, 1fr);
+      gap: 0.65rem;
+    }
+    .speaker-avatar {
+      width: 2rem;
+      height: 2rem;
+    }
+    .turn-content {
+      padding-left: 0.65rem;
+    }
+    .turn-meta time {
+      width: 100%;
+      margin-left: 0;
+    }
   }
 </style>

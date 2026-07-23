@@ -1,10 +1,12 @@
 export { db } from "./client.ts";
 export * from "./schema.ts";
 export {
+  formatTranscriptForDisplay,
   formatTranscriptForInference,
   simplifyTranscript,
   type Transcript,
   type TranscriptSegment,
+  type TranscriptTurn,
 } from "./transcript.ts";
 export {
   createCampaign,

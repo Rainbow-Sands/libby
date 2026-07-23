@@ -1,9 +1,9 @@
 import { error, fail, redirect } from "@sveltejs/kit";
 import {
+  formatTranscriptForDisplay,
   getCampaignCast,
   getSessionDetail,
   isCampaignMember,
-  simplifyTranscript,
 } from "@rainbot/db";
 import { getTemporalClient, regenerateSessionWorkflow } from "@rainbot/temporal";
 import type { Actions, PageServerLoad } from "./$types";
@@ -43,7 +43,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
         summary: null,
         transcript: null,
       },
-      transcriptText: null,
+      transcriptTurns: null,
       canViewDetails: false,
       preview,
     };
@@ -52,11 +52,11 @@ export const load: PageServerLoad = async ({ params, locals }) => {
   const member = await isCampaignMember(session.campaignId, locals.user.id);
   if (!member) throw error(403, "You are not a member of this campaign.");
 
-  const transcriptText = session.transcript
-    ? simplifyTranscript(session.transcript, await getCampaignCast(session.campaignId))
+  const transcriptTurns = session.transcript
+    ? formatTranscriptForDisplay(session.transcript, await getCampaignCast(session.campaignId))
     : null;
 
-  return { session, transcriptText, canViewDetails: true, preview };
+  return { session, transcriptTurns, canViewDetails: true, preview };
 };
 
 export const actions: Actions = {

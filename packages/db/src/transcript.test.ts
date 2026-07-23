@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { simplifyTranscript, type Transcript, type TranscriptSegment } from "./transcript.ts";
+import {
+  formatTranscriptForDisplay,
+  simplifyTranscript,
+  type Transcript,
+  type TranscriptSegment,
+} from "./transcript.ts";
 
 function makeSegment(overrides: Partial<TranscriptSegment>): TranscriptSegment {
   return {
@@ -18,6 +23,86 @@ function makeSegment(overrides: Partial<TranscriptSegment>): TranscriptSegment {
 function transcriptOf(...segments: TranscriptSegment[]): Transcript {
   return { version: 1, segments };
 }
+
+describe("formatTranscriptForDisplay", () => {
+  it("returns chronologically ordered turns with timestamps and character names", () => {
+    const alice = makeSegment({
+      segmentId: "a",
+      userId: "user-a",
+      username: "Alice",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      whisper: { segments: [{ start: 8, text: "Alice's words", no_speech_prob: 0.1 }] },
+    });
+    const bob = makeSegment({
+      segmentId: "b",
+      userId: "user-b",
+      username: "Bob",
+      timestamp: "2026-01-01T00:00:02.000Z",
+      whisper: { segments: [{ start: 0, text: "Bob's words", no_speech_prob: 0.1 }] },
+    });
+
+    const result = formatTranscriptForDisplay(transcriptOf(alice, bob), [
+      { userId: "user-a", username: "Alice", characterName: "Thorin" },
+    ]);
+
+    expect(result).toEqual([
+      {
+        timestamp: "2026-01-01T00:00:02.000Z",
+        userId: "user-b",
+        speaker: "Bob",
+        characterName: null,
+        text: "Bob's words",
+      },
+      {
+        timestamp: "2026-01-01T00:00:08.000Z",
+        userId: "user-a",
+        speaker: "Alice",
+        characterName: "Thorin",
+        text: "Alice's words",
+      },
+    ]);
+  });
+
+  it("groups consecutive utterances by user while preserving the first timestamp", () => {
+    const segment = makeSegment({
+      timestamp: "2026-01-01T00:00:00.000Z",
+      whisper: {
+        segments: [
+          { start: 2, text: " first part ", no_speech_prob: 0.1 },
+          { start: 5, text: "second part", no_speech_prob: 0.1 },
+        ],
+      },
+    });
+
+    expect(formatTranscriptForDisplay(transcriptOf(segment), [])).toEqual([
+      {
+        timestamp: "2026-01-01T00:00:02.000Z",
+        userId: "user-1",
+        speaker: "Alice",
+        characterName: null,
+        text: "first part second part",
+      },
+    ]);
+  });
+
+  it("keeps adjacent users separate even when their display names match", () => {
+    const first = makeSegment({
+      segmentId: "a",
+      userId: "user-a",
+      username: "Player",
+      whisper: { segments: [{ start: 0, text: "one", no_speech_prob: 0.1 }] },
+    });
+    const second = makeSegment({
+      segmentId: "b",
+      userId: "user-b",
+      username: "Player",
+      timestamp: "2026-01-01T00:00:01.000Z",
+      whisper: { segments: [{ start: 0, text: "two", no_speech_prob: 0.1 }] },
+    });
+
+    expect(formatTranscriptForDisplay(transcriptOf(first, second), [])).toHaveLength(2);
+  });
+});
 
 describe("simplifyTranscript", () => {
   it("orders utterances by when they were actually said, not by activation start", () => {

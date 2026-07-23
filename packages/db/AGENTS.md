@@ -51,9 +51,9 @@ pnpm --filter @rainbot/db db:migrate    # applies to the DB in DATABASE_URL
   utterance timestamps and prepending the cast legend) happens in
   `formatTranscriptForInference`, not at write time — so improving that
   formatting later can be re-run over already-recorded sessions without
-  re-transcribing. Both it and the display-oriented `simplifyTranscript` use
-  Whisper's own `segments[]` (verbatim under `TranscriptSegment.whisper`) to
-  explode each
+  re-transcribing. Both it and the display-oriented
+  `formatTranscriptForDisplay` use Whisper's own `segments[]` (verbatim under
+  `TranscriptSegment.whisper`) to explode each
   Discord voice activation into finer-grained per-utterance timestamps
   (correcting for background noise keeping an activation open long after
   someone stopped talking) and drops individual sub-segments Whisper itself
