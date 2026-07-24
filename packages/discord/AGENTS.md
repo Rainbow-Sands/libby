@@ -34,6 +34,9 @@ management commands use `commands/guard.ts` (`requireDmOfCampaign`).
   find the caller's channel and resolve usernames).
 - Each voice activation becomes one ogg/opus clip via **ffmpeg** (required at
   runtime), then signals `segmentRecorded` to the workflow.
+- Session shutdown finalizes all active receiver/decoder/ffmpeg pipelines and
+  awaits their `segmentRecorded` signals before sending `sessionEnded`. Keep
+  this ordering so speech in progress during `/stop` or auto-end is retained.
 - The transcript speaker label is the **account username** resolved from the
   guild member cache (`session.ts`), falling back to the user id. It is joined to
   campaign members by `userId` downstream, so keep the id flowing through.

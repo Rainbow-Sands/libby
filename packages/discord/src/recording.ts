@@ -8,7 +8,6 @@ export interface RecordingSession {
   sessionId: string;
   sessionDir: string;
   segmentCount: number;
-  activeUsers: Set<string>;
   workflowHandle: WorkflowHandle;
   end: () => Promise<void>;
 }
