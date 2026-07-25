@@ -11,7 +11,13 @@ import {
 import type * as activities from "../activities/transcribe.ts";
 import type * as persistActivities from "../activities/persist.ts";
 import type * as notifyActivities from "../activities/notify.ts";
-import type { RegenerateSessionInput, SegmentRef, SessionInput, SessionStatus } from "../types.ts";
+import type {
+  RegenerateSessionInput,
+  RegenerateTranscriptInput,
+  SegmentRef,
+  SessionInput,
+  SessionStatus,
+} from "../types.ts";
 
 const { transcribeSegment, aggregateTranscript } = proxyActivities<typeof activities>({
   taskQueue: "rainbot-transcription",
@@ -45,6 +51,8 @@ const {
   persistRecap,
   persistTitle,
   prepareSessionRegeneration,
+  prepareTranscriptRegeneration,
+  completeTranscriptRegeneration,
   updateRegenerationStatus,
 } = proxyActivities<typeof persistActivities>({
   taskQueue: "rainbot-transcription",
@@ -91,6 +99,59 @@ export async function regenerateSessionWorkflow(input: RegenerateSessionInput): 
     await persistTitle(source.sessionDir, input.sessionId, titleKey);
 
     await updateRegenerationStatus(input.sessionId, "done");
+  } catch (err) {
+    await updateRegenerationStatus(input.sessionId, "failed");
+    throw err;
+  }
+}
+
+export async function regenerateTranscriptWorkflow(
+  input: RegenerateTranscriptInput,
+): Promise<void> {
+  await updateRegenerationStatus(input.sessionId, "transcribing");
+
+  try {
+    const source = await prepareTranscriptRegeneration(input.sessionId);
+    const results = await Promise.allSettled(
+      source.segments.map((ref) => transcribeSegment(source.sessionDir, ref)),
+    );
+    const failed = results.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    if (failed) throw failed.reason;
+
+    const transcriptKeys = results
+      .filter((result): result is PromiseFulfilledResult<string | null> => {
+        return result.status === "fulfilled";
+      })
+      .map((result) => result.value)
+      .filter((key): key is string => key !== null);
+    const transcriptKey = await aggregateTranscript(source.sessionDir, transcriptKeys);
+
+    if (transcriptKeys.length === 0) {
+      await completeTranscriptRegeneration({
+        sessionDir: source.sessionDir,
+        sessionId: input.sessionId,
+        transcriptKey,
+      });
+      return;
+    }
+
+    await updateRegenerationStatus(input.sessionId, "summarizing");
+    const summaryKey = await summarize(source.sessionDir, transcriptKey, source.campaignId);
+    const recapKey = await recap(source.sessionDir, summaryKey);
+    const titleKey = await generateTitle(source.sessionDir, summaryKey);
+
+    // Replace the transcript and all derived content together so a failed
+    // downstream inference run cannot leave the session internally mixed.
+    await completeTranscriptRegeneration({
+      sessionDir: source.sessionDir,
+      sessionId: input.sessionId,
+      transcriptKey,
+      summaryKey,
+      recapKey,
+      titleKey,
+    });
   } catch (err) {
     await updateRegenerationStatus(input.sessionId, "failed");
     throw err;

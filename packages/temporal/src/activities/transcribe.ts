@@ -8,6 +8,7 @@ import { TITLE_SYSTEM } from "../prompts.ts";
 import { stripCodeFence, normalizeTitle } from "../text.ts";
 import { createDetailedRecord, createRecap } from "../record-pipeline.ts";
 import { createSummarizationInference } from "../summarization-inference.ts";
+import { persistSegmentMetadata } from "../segment-metadata.ts";
 import {
   formatTranscriptForInference,
   getCampaignCast,
@@ -51,6 +52,10 @@ export async function transcribeSegment(
   if (!existsSync(audioPath)) {
     throw ApplicationFailure.nonRetryable(`Audio file not found: ${ref.audioFile}`);
   }
+  // Keep an input manifest independently of the transcript. Noise-only clips
+  // return null below and therefore are intentionally absent from the
+  // transcript, but must remain available for future transcription runs.
+  persistSegmentMetadata(sessionDir, ref);
 
   const abortController = new AbortController();
   Context.current().cancelled.catch(() => abortController.abort());

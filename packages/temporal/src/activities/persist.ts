@@ -7,10 +7,14 @@ import {
   saveTranscript,
   saveSummary,
   saveRecap,
+  replaceSessionResults,
   getSessionRegenerationInput,
+  getTranscriptRegenerationInput,
   type UpsertSessionInput,
   type Transcript,
 } from "@rainbot/db";
+import type { SegmentRef } from "../types.ts";
+import { loadSegmentMetadata } from "../segment-metadata.ts";
 
 export async function recordSessionStart(input: UpsertSessionInput): Promise<void> {
   await upsertSession(input);
@@ -48,6 +52,60 @@ export async function prepareSessionRegeneration(sessionId: string): Promise<{
     sessionDir: session.sessionDir,
     transcriptKey,
   };
+}
+
+export async function prepareTranscriptRegeneration(sessionId: string): Promise<{
+  campaignId: string;
+  sessionDir: string;
+  segments: SegmentRef[];
+}> {
+  const session = await getTranscriptRegenerationInput(sessionId);
+  if (!session) throw new Error(`Session ${sessionId} was not found`);
+
+  const segments = loadSegmentMetadata(session.sessionDir, session.transcript);
+  if (segments.length === 0) {
+    throw new Error(`Session ${sessionId} has no recorded audio metadata`);
+  }
+
+  return {
+    campaignId: session.campaignId,
+    sessionDir: session.sessionDir,
+    segments,
+  };
+}
+
+interface CompleteTranscriptRegenerationInput {
+  sessionDir: string;
+  sessionId: string;
+  transcriptKey: string;
+  summaryKey?: string;
+  recapKey?: string;
+  titleKey?: string;
+}
+
+function readOptionalOutput(sessionDir: string, key: string | undefined): string | null {
+  if (!key) return null;
+  const outputPath = path.join(sessionDir, key);
+  if (!existsSync(outputPath)) throw new Error(`Regeneration output not found: ${key}`);
+  const content = readFileSync(outputPath, "utf8").trim();
+  return content || null;
+}
+
+export async function completeTranscriptRegeneration(
+  input: CompleteTranscriptRegenerationInput,
+): Promise<void> {
+  const transcriptPath = path.join(input.sessionDir, input.transcriptKey);
+  if (!existsSync(transcriptPath)) {
+    throw new Error(`Regenerated transcript not found: ${input.transcriptKey}`);
+  }
+
+  const transcript = JSON.parse(readFileSync(transcriptPath, "utf8")) as Transcript;
+  await replaceSessionResults(input.sessionId, {
+    transcript,
+    summary: readOptionalOutput(input.sessionDir, input.summaryKey),
+    recap: readOptionalOutput(input.sessionDir, input.recapKey),
+    title: readOptionalOutput(input.sessionDir, input.titleKey),
+  });
 }
 
 export async function persistTitle(

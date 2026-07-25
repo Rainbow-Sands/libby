@@ -210,3 +210,27 @@ export async function getSessionRegenerationInput(
   if (!session?.transcript) return null;
   return { ...session, transcript: session.transcript };
 }
+
+export interface TranscriptRegenerationInput {
+  id: string;
+  campaignId: string;
+  sessionDir: string;
+  transcript: Transcript | null;
+}
+
+export async function getTranscriptRegenerationInput(
+  sessionId: string,
+): Promise<TranscriptRegenerationInput | null> {
+  const [session] = await db
+    .select({
+      id: sessions.id,
+      campaignId: sessions.campaignId,
+      sessionDir: sessions.sessionDir,
+      transcript: sessions.transcript,
+    })
+    .from(sessions)
+    .where(eq(sessions.id, sessionId))
+    .limit(1);
+
+  return session ?? null;
+}

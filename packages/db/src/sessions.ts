@@ -59,3 +59,26 @@ export async function saveSummary(sessionId: string, summary: string): Promise<v
 export async function saveRecap(sessionId: string, recap: string): Promise<void> {
   await db.update(sessions).set({ recap }).where(eq(sessions.id, sessionId));
 }
+
+export interface ReplaceSessionResultsInput {
+  transcript: Transcript;
+  summary: string | null;
+  recap: string | null;
+  title: string | null;
+}
+
+export async function replaceSessionResults(
+  sessionId: string,
+  input: ReplaceSessionResultsInput,
+): Promise<void> {
+  await db
+    .update(sessions)
+    .set({
+      transcript: input.transcript,
+      summary: input.summary,
+      recap: input.recap,
+      title: input.title,
+      status: "done",
+    })
+    .where(eq(sessions.id, sessionId));
+}

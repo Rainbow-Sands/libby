@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "node --env-file=../../.env --watch src/worker.ts",
     "start": "node src/worker.ts",
+    "test": "vitest run",
     "test:summarize": "node --env-file=../../.env src/scripts/test-summarize.ts"
   },
   "dependencies": {
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.0.0",
-    "typescript": "^6.0.0"
+    "typescript": "^6.0.0",
+    "vitest": "latest"
   }
 }

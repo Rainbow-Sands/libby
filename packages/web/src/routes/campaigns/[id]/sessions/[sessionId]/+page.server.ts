@@ -6,7 +6,11 @@ import {
   isAdmin,
   isCampaignMember,
 } from "@rainbot/db";
-import { getTemporalClient, regenerateSessionWorkflow } from "@rainbot/temporal";
+import {
+  getTemporalClient,
+  regenerateSessionWorkflow,
+  regenerateTranscriptWorkflow,
+} from "@rainbot/temporal";
 import type { Actions, PageServerLoad } from "./$types";
 
 function recapExcerpt(recap: string | null): string {
@@ -101,6 +105,41 @@ export const actions: Actions = {
     throw redirect(
       303,
       `/campaigns/${params.id}/sessions/${params.sessionId}?tab=summary&regenerating=1`,
+    );
+  },
+  regenerateTranscript: async ({ params, locals }) => {
+    if (!locals.user) throw error(401, "Please log in to regenerate this transcript.");
+
+    const session = await getSessionDetail(params.sessionId);
+    if (!session || session.campaignId !== params.id) {
+      throw error(404, "Session not found.");
+    }
+
+    if (!(await isAdmin(locals.user.id))) {
+      throw error(403, "Only administrators can regenerate session transcripts.");
+    }
+    if (["recording", "transcribing", "summarizing"].includes(session.status)) {
+      return fail(409, { message: "This session is already being processed." });
+    }
+
+    try {
+      const client = await getTemporalClient();
+      await client.workflow.start(regenerateTranscriptWorkflow, {
+        taskQueue: "rainbot",
+        workflowId: `regenerate:${session.id}`,
+        workflowIdReusePolicy: "ALLOW_DUPLICATE",
+        args: [{ sessionId: session.id }],
+      });
+    } catch (err) {
+      if (err instanceof Error && err.name === "WorkflowExecutionAlreadyStartedError") {
+        return fail(409, { message: "Regeneration is already running for this session." });
+      }
+      throw err;
+    }
+
+    throw redirect(
+      303,
+      `/campaigns/${params.id}/sessions/${params.sessionId}?tab=transcript&regeneratingTranscript=1`,
     );
   },
 };

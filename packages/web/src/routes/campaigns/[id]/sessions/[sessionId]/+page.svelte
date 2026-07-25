@@ -56,6 +56,16 @@
       event.preventDefault();
     }
   }
+
+  function confirmTranscriptRegeneration(event: SubmitEvent) {
+    if (
+      !window.confirm(
+        "Re-transcribe every saved audio clip and regenerate the detailed record, recap, and title?",
+      )
+    ) {
+      event.preventDefault();
+    }
+  }
 </script>
 
 <svelte:head>
@@ -86,14 +96,34 @@
     {#if page.url.searchParams.has("regenerating") || data.session.status === "summarizing"}
       <p class="muted">Regeneration is running. Refresh this page to see its progress.</p>
     {/if}
-    {#if data.canRegenerate && data.session.transcript}
-      <form method="POST" action="?/regenerate" onsubmit={confirmRegeneration}>
-        <button
-          class="btn regenerate"
-          type="submit"
-          disabled={["recording", "transcribing", "summarizing"].includes(data.session.status)}
-        >Regenerate inference</button>
-      </form>
+    {#if page.url.searchParams.has("regeneratingTranscript")}
+      <p class="muted">
+        Transcript regeneration is running. Refresh this page to see its progress.
+      </p>
+    {/if}
+    {#if data.canRegenerate}
+      <div class="regeneration-actions">
+        {#if data.session.transcript}
+          <form method="POST" action="?/regenerate" onsubmit={confirmRegeneration}>
+            <button
+              class="btn regenerate"
+              type="submit"
+              disabled={["recording", "transcribing", "summarizing"].includes(data.session.status)}
+            >Regenerate inference</button>
+          </form>
+        {/if}
+        <form
+          method="POST"
+          action="?/regenerateTranscript"
+          onsubmit={confirmTranscriptRegeneration}
+        >
+          <button
+            class="btn regenerate"
+            type="submit"
+            disabled={["recording", "transcribing", "summarizing"].includes(data.session.status)}
+          >Regenerate transcript</button>
+        </form>
+      </div>
     {/if}
 
     {#if data.session.status === "done"}
@@ -217,8 +247,14 @@
   .preview-description {
     line-height: 1.7;
   }
-  .regenerate {
+  .regeneration-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
     margin: 0.25rem 0 1rem;
+  }
+  .regeneration-actions form {
+    margin: 0;
   }
   .regenerate:disabled {
     cursor: not-allowed;

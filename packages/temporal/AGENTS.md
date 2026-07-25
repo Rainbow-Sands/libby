@@ -41,8 +41,15 @@ workflow bundle — keep it that way.
 
 Workflow behaviour: parallel per-segment transcription; 1-hour idle timeout;
 `continueAsNew` at 500 segments; status transitions persisted through activities.
-The regeneration workflow rebuilds `transcript.json` from the lossless database
-copy, then replaces only the detailed record, recap, and title.
+Inference regeneration rebuilds `transcript.json` from the lossless database
+copy, then replaces only the detailed record, recap, and title. Transcript
+regeneration reprocesses every recorded segment, regenerates all downstream
+inference, and atomically replaces the session results when the full run
+succeeds. Each transcription activity persists its input under
+`segment-metadata/`, including noise-only segments omitted from the transcript,
+so future retranscription runs retain a complete audio manifest. Sessions from
+before that manifest was introduced fall back to the segments in their
+persisted transcript.
 
 ## Search attributes
 

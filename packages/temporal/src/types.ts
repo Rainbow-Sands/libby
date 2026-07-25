@@ -26,3 +26,7 @@ export interface SessionStatus {
 export interface RegenerateSessionInput {
   sessionId: string;
 }
+
+export interface RegenerateTranscriptInput {
+  sessionId: string;
+}

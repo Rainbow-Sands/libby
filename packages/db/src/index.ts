@@ -25,12 +25,14 @@ export {
   getCampaignDetail,
   getSessionDetail,
   getSessionRegenerationInput,
+  getTranscriptRegenerationInput,
   type CampaignMember,
   type CampaignCastMember,
   type CampaignSessionSummary,
   type CampaignDetail,
   type SessionDetail,
   type SessionRegenerationInput,
+  type TranscriptRegenerationInput,
 } from "./queries.ts";
 export {
   upsertSession,
@@ -39,5 +41,7 @@ export {
   saveTranscript,
   saveSummary,
   saveRecap,
+  replaceSessionResults,
   type UpsertSessionInput,
+  type ReplaceSessionResultsInput,
 } from "./sessions.ts";

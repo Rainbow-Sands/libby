@@ -3,9 +3,16 @@
 export { getTemporalClient } from "./client.ts";
 export {
   regenerateSessionWorkflow,
+  regenerateTranscriptWorkflow,
   sessionWorkflow,
   segmentRecorded,
   sessionEnded,
   getStatus,
 } from "./workflows/session.ts";
-export type { RegenerateSessionInput, SegmentRef, SessionInput, SessionStatus } from "./types.ts";
+export type {
+  RegenerateSessionInput,
+  RegenerateTranscriptInput,
+  SegmentRef,
+  SessionInput,
+  SessionStatus,
+} from "./types.ts";
