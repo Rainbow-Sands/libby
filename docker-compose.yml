@@ -17,51 +17,25 @@ services:
       timeout: 5s
       retries: 10
 
-  temporal:
-    image: temporalio/auto-setup:latest
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      DB: postgres12
-      DB_PORT: 5432
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PWD: ${POSTGRES_PASSWORD}
-      POSTGRES_SEEDS: postgres
-    ports:
-      - "7233:7233"
-
-  temporal-ui:
-    image: temporalio/ui:latest
-    depends_on:
-      - temporal
-    environment:
-      TEMPORAL_ADDRESS: temporal:7233
-    ports:
-      - "8080:8080"
+  redis:
+    image: redis:7-alpine
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory-policy
+      - noeviction
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   # ── One-shot setup ──────────────────────────────────────────────────────────
-
-  temporal-setup:
-    image: temporalio/admin-tools:latest
-    depends_on:
-      - temporal
-    entrypoint:
-      - /bin/sh
-      - -ec
-      - |
-        until temporal operator cluster health --address temporal:7233 >/dev/null 2>&1; do
-          echo "Waiting for Temporal..."
-          sleep 2
-        done
-
-        temporal operator namespace create --address temporal:7233 rainbot >/dev/null 2>&1 || true
-        temporal operator search-attribute create --address temporal:7233 --namespace rainbot --name GuildId --type Keyword >/dev/null 2>&1 || true
-        temporal operator search-attribute create --address temporal:7233 --namespace rainbot --name ChannelId --type Keyword >/dev/null 2>&1 || true
-        temporal operator search-attribute create --address temporal:7233 --namespace rainbot --name SegmentCount --type Int >/dev/null 2>&1 || true
-
-        echo "Temporal setup complete."
-    restart: "no"
 
   db-migrate:
     image: ghcr.io/rainbow-sands/rainbot-sands/db:main
@@ -77,29 +51,29 @@ services:
   discord:
     image: ghcr.io/rainbow-sands/rainbot-sands/discord:main
     depends_on:
-      temporal-setup:
-        condition: service_completed_successfully
       db-migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     environment:
       DISCORD_TOKEN: ${DISCORD_TOKEN}
       DISCORD_APPLICATION_ID: ${DISCORD_APPLICATION_ID}
       MEDIA_PATH: /media
-      TEMPORAL_URL: temporal:7233
+      REDIS_URL: redis://redis:6379
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     volumes:
       - media:/media
     restart: unless-stopped
 
-  temporal-worker:
-    image: ghcr.io/rainbow-sands/rainbot-sands/temporal:main
+  worker:
+    image: ghcr.io/rainbow-sands/rainbot-sands/worker:main
     depends_on:
-      temporal-setup:
-        condition: service_completed_successfully
       db-migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     environment:
-      TEMPORAL_URL: temporal:7233
+      REDIS_URL: redis://redis:6379
       TRANSCRIPTION_URL: ${TRANSCRIPTION_URL}
       DISCORD_TOKEN: ${DISCORD_TOKEN}
       WEB_URL: ${ORIGIN}
@@ -110,6 +84,8 @@ services:
       SUMMARIZATION_MODEL: ${SUMMARIZATION_MODEL}
       SUMMARIZATION_REASONING_EFFORT: ${SUMMARIZATION_REASONING_EFFORT}
       SUMMARIZATION_THINKING_BUDGET: ${SUMMARIZATION_THINKING_BUDGET}
+      TRANSCRIPTION_CONCURRENCY: ${TRANSCRIPTION_CONCURRENCY}
+      SUMMARIZATION_CONCURRENCY: ${SUMMARIZATION_CONCURRENCY}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       MEDIA_PATH: /media
     volumes:
@@ -121,6 +97,8 @@ services:
     depends_on:
       db-migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       DISCORD_APPLICATION_ID: ${DISCORD_APPLICATION_ID}
@@ -133,7 +111,7 @@ services:
       CHAT_MODEL: ${CHAT_MODEL}
       CHAT_REASONING_EFFORT: ${CHAT_REASONING_EFFORT}
       CHAT_THINKING_BUDGET: ${CHAT_THINKING_BUDGET}
-      TEMPORAL_URL: temporal:7233
+      REDIS_URL: redis://redis:6379
       MEDIA_PATH: /media
       BODY_SIZE_LIMIT: ${BODY_SIZE_LIMIT:-10G}
     ports:
@@ -144,4 +122,5 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
   media:

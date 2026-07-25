@@ -1,14 +1,13 @@
 import type { VoiceConnection } from "@discordjs/voice";
-import type { WorkflowHandle } from "@temporalio/client";
 
 export interface RecordingSession {
   connection: VoiceConnection;
   guildId: string;
   channelId: string;
   sessionId: string;
+  runId: string;
   sessionDir: string;
   segmentCount: number;
-  workflowHandle: WorkflowHandle;
   end: () => Promise<void>;
 }
 

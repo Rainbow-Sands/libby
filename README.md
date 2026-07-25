@@ -1,15 +1,18 @@
 # rainbot-sands
 
-Discord bot that records tabletop RPG sessions, transcribes them with whisper.cpp, and generates detailed records and recaps with local or cloud language models. Built on Temporal for durable workflow orchestration.
+Discord bot that records tabletop RPG sessions, transcribes them with
+whisper.cpp, and generates detailed records and recaps with local or cloud
+language models. BullMQ executes the pipeline while PostgreSQL holds its durable
+state.
 
 ## Packages
 
-| Package             | Description                                                           |
-| ------------------- | --------------------------------------------------------------------- |
-| `@rainbot/discord`  | Discord bot — joins voice channels, records audio, triggers workflows |
-| `@rainbot/temporal` | Temporal workers — transcription, detailed records, recaps, titles    |
-| `@rainbot/db`       | Drizzle schema and PostgreSQL client                                  |
-| `@rainbot/web`      | SvelteKit frontend                                                    |
+| Package            | Description                                                          |
+| ------------------ | -------------------------------------------------------------------- |
+| `@rainbot/discord` | Discord bot — joins voice channels and records audio                 |
+| `@rainbot/worker`  | BullMQ workers — transcription, aggregation, inference, notification |
+| `@rainbot/db`      | Drizzle schema, PostgreSQL client, and durable processing state      |
+| `@rainbot/web`     | SvelteKit frontend                                                   |
 
 ## Requirements
 
@@ -17,9 +20,9 @@ Discord bot that records tabletop RPG sessions, transcribes them with whisper.cp
 - pnpm
 - ffmpeg (for the Discord bot)
 - PostgreSQL
-- Temporal server
+- Redis with persistence
 - whisper.cpp server
-- llama.cpp server
+- A local or cloud language model provider
 
 ## Setup
 
@@ -28,14 +31,6 @@ pnpm install
 ```
 
 Copy `.env.example` to `.env` and fill in the values.
-
-Register Temporal search attributes (once per namespace):
-
-```sh
-temporal operator search-attribute create --namespace rainbot --name GuildId --type Keyword
-temporal operator search-attribute create --namespace rainbot --name ChannelId --type Keyword
-temporal operator search-attribute create --namespace rainbot --name SegmentCount --type Int
-```
 
 Run database migrations:
 
@@ -46,36 +41,38 @@ pnpm --filter @rainbot/db db:migrate
 ## Development
 
 ```sh
-pnpm dev:discord   # Discord bot
-pnpm dev:temporal  # Temporal worker
-pnpm dev:web       # SvelteKit frontend
+pnpm --filter @rainbot/discord dev
+pnpm --filter @rainbot/worker dev
+pnpm --filter @rainbot/web dev
 ```
 
 ## Environment variables
 
-| Variable                         | Used by                | Description                                                                                                         |
-| -------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `DISCORD_TOKEN`                  | discord, temporal      | Bot token                                                                                                           |
-| `DISCORD_APPLICATION_ID`         | discord                | Application ID                                                                                                      |
-| `MEDIA_PATH`                     | discord, temporal, web | Directory for audio clips, imported files, and transcripts                                                          |
-| `TEMPORAL_URL`                   | discord, temporal, web | Temporal server address (e.g. `localhost:7233`)                                                                     |
-| `TRANSCRIPTION_URL`              | temporal               | Complete transcription endpoint URL, such as `http://whisper-server:8080/inference`                                 |
-| `TRANSCRIPTION_MODEL`            | temporal               | Audio transcription model ID (default: `whisper-large-v3-turbo`)                                                    |
-| `SUMMARIZATION_PROVIDER`         | temporal               | `local`, `openai`, or `anthropic` (default: `local`)                                                                |
-| `SUMMARIZATION_API_KEY`          | temporal               | API key; required for OpenAI and Anthropic, optional for local                                                      |
-| `SUMMARIZATION_BASE_URL`         | temporal               | Required full API root for local summarization; optional cloud API override                                         |
-| `SUMMARIZATION_MODEL`            | temporal               | Detailed-record, recap, and title model ID; required for cloud providers (local default: `qwen3.6-35b-a3b`)         |
-| `SUMMARIZATION_REASONING_EFFORT` | temporal               | Optional cloud reasoning effort: `none`, `low`, `medium`, `high`, `xhigh`, or `max`; OpenAI also supports `minimal` |
-| `SUMMARIZATION_THINKING_BUDGET`  | temporal               | Local llama.cpp reasoning-token budget (default: `8192`)                                                            |
-| `CHAT_PROVIDER`                  | web                    | `local`, `openai`, or `anthropic` (default: `local`)                                                                |
-| `CHAT_API_KEY`                   | web                    | API key; required for OpenAI and Anthropic, optional for local                                                      |
-| `CHAT_BASE_URL`                  | web                    | Required full API root for local chat; optional cloud API override                                                  |
-| `CHAT_MODEL`                     | web                    | Session chat model ID; required for cloud providers (local default: `qwen3.6-35b-a3b`)                              |
-| `CHAT_REASONING_EFFORT`          | web                    | Optional cloud reasoning effort: `none`, `low`, `medium`, `high`, `xhigh`, or `max`; OpenAI also supports `minimal` |
-| `CHAT_THINKING_BUDGET`           | web                    | Local llama.cpp reasoning-token budget for session chat (default: `2048`)                                           |
-| `BODY_SIZE_LIMIT`                | web                    | Maximum manual-upload request size; defaults to `10G` in Docker Compose                                             |
-| `DATABASE_URL`                   | db                     | PostgreSQL connection string                                                                                        |
-| `WEB_URL`                        | temporal               | Public web origin used for completed-session links (for example, `https://libby.bot`)                               |
+| Variable                         | Used by              | Description                                                                                                         |
+| -------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `DISCORD_TOKEN`                  | discord, worker      | Bot token                                                                                                           |
+| `DISCORD_APPLICATION_ID`         | discord              | Application ID                                                                                                      |
+| `MEDIA_PATH`                     | discord, worker, web | Directory for audio clips, imported files, and transcripts                                                          |
+| `REDIS_URL`                      | discord, worker, web | Redis connection URL (for example, `redis://localhost:6379`)                                                        |
+| `TRANSCRIPTION_URL`              | worker               | Complete transcription endpoint URL, such as `http://whisper-server:8080/inference`                                 |
+| `TRANSCRIPTION_MODEL`            | worker               | Audio transcription model ID (default: `whisper-large-v3-turbo`)                                                    |
+| `TRANSCRIPTION_CONCURRENCY`      | worker               | Maximum simultaneous transcription jobs (default: `4`)                                                              |
+| `SUMMARIZATION_PROVIDER`         | worker               | `local`, `openai`, or `anthropic` (default: `local`)                                                                |
+| `SUMMARIZATION_API_KEY`          | worker               | API key; required for OpenAI and Anthropic, optional for local                                                      |
+| `SUMMARIZATION_BASE_URL`         | worker               | Required full API root for local summarization; optional cloud API override                                         |
+| `SUMMARIZATION_MODEL`            | worker               | Detailed-record, recap, and title model ID; required for cloud providers (local default: `qwen3.6-35b-a3b`)         |
+| `SUMMARIZATION_REASONING_EFFORT` | worker               | Optional cloud reasoning effort: `none`, `low`, `medium`, `high`, `xhigh`, or `max`; OpenAI also supports `minimal` |
+| `SUMMARIZATION_THINKING_BUDGET`  | worker               | Local llama.cpp reasoning-token budget (default: `8192`)                                                            |
+| `SUMMARIZATION_CONCURRENCY`      | worker               | Maximum simultaneous jobs in each inference-stage queue (default: `2`)                                              |
+| `CHAT_PROVIDER`                  | web                  | `local`, `openai`, or `anthropic` (default: `local`)                                                                |
+| `CHAT_API_KEY`                   | web                  | API key; required for OpenAI and Anthropic, optional for local                                                      |
+| `CHAT_BASE_URL`                  | web                  | Required full API root for local chat; optional cloud API override                                                  |
+| `CHAT_MODEL`                     | web                  | Session chat model ID; required for cloud providers (local default: `qwen3.6-35b-a3b`)                              |
+| `CHAT_REASONING_EFFORT`          | web                  | Optional cloud reasoning effort: `none`, `low`, `medium`, `high`, `xhigh`, or `max`; OpenAI also supports `minimal` |
+| `CHAT_THINKING_BUDGET`           | web                  | Local llama.cpp reasoning-token budget for session chat (default: `2048`)                                           |
+| `BODY_SIZE_LIMIT`                | web                  | Maximum manual-upload request size; defaults to `10G` in Docker Compose                                             |
+| `DATABASE_URL`                   | db                   | PostgreSQL connection string                                                                                        |
+| `WEB_URL`                        | worker               | Public web origin used for completed-session links (for example, `https://libby.bot`)                               |
 
 For example, to run the post-session pipeline through Claude Sonnet:
 

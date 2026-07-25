@@ -5,4 +5,5 @@ allowBuilds:
   "@discordjs/opus": true
   "@swc/core": true
   esbuild: true
+  msgpackr-extract: true
   protobufjs: true

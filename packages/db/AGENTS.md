@@ -8,8 +8,8 @@ Drizzle ORM schema, Postgres client, and all shared queries. See the root
 - `schema.ts` — table definitions; the single source of truth for the data model.
 - `client.ts` — the `db` instance.
 - `campaigns.ts` — campaign/member mutations.
-- `sessions.ts` — session upserts + summary/recap/title/transcript writes.
-- `queries.ts` — read queries used by web and Temporal.
+- `queries.ts` — read queries used by web and workers.
+- `processing.ts` — durable recording/run/segment state transitions for BullMQ.
 - `transcript.ts` — the `Transcript`/`TranscriptSegment` JSON shape stored in
   `sessions.transcript`, plus display and inference formatting transforms.
 - `index.ts` — the package's **public API**. Export anything other packages need
@@ -43,8 +43,9 @@ pnpm --filter @rainbot/db db:migrate    # applies to the DB in DATABASE_URL
 ## Data model notes
 
 - `sessions` holds `transcript`, `summary`, `recap`, and `title` as **nullable
-  columns directly on the row** (not side tables) — they're 1:1 with a session
-  and written independently as the pipeline produces them.
+  columns directly on the row**. A `processing_runs` row builds replacements
+  and publishes them atomically, so failed regeneration leaves old results
+  intact.
 - `sessions.transcript` is `jsonb`, typed as `Transcript` (see `transcript.ts`):
   every recorded segment, lossless (timestamp, userId, username, text,
   whisper's own per-segment metadata). LLM-facing formatting (retaining
@@ -65,4 +66,4 @@ pnpm --filter @rainbot/db db:migrate    # applies to the DB in DATABASE_URL
   the DM). The cast legend and player management depend on these.
 - `users.is_admin` grants application-wide visibility into every campaign and
   is managed manually.
-- Writes are idempotent upserts so Temporal activity retries are safe.
+- Processing writes use conditional transitions so duplicate BullMQ delivery is safe.

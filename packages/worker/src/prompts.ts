@@ -1,5 +1,4 @@
-// System prompts for the post-session LLM pipeline. Shared by the Temporal
-// activities and the standalone test script so the two never drift.
+// System prompts shared by BullMQ workers and the standalone test script.
 
 export const DETAILED_RECORD_SYSTEM = `Create a loss-minimized factual record from this complete tabletop RPG transcript. It will be treated as a canonical source for future inference, so completeness and fidelity matter more than brevity or literary style.
 

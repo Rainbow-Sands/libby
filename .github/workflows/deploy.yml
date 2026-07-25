@@ -16,7 +16,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        service: [db, discord, temporal, web]
+        service: [db, discord, worker, web]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

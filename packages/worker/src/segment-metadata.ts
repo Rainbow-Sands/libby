@@ -1,7 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import type { Transcript } from "@rainbot/db";
-import type { SegmentRef } from "./types.ts";
+import type { AudioSegmentRef as SegmentRef, Transcript } from "@rainbot/db";
 
 const SEGMENT_METADATA_DIR = "segment-metadata";
 

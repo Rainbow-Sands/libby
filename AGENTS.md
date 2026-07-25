@@ -6,25 +6,26 @@ each `packages/*/AGENTS.md`.
 ## What this is
 
 **rainbot-sands** is a Discord bot that records tabletop RPG sessions, transcribes
-them with whisper.cpp, and generates summaries/recaps/titles with llama.cpp,
-orchestrated durably through Temporal. A SvelteKit web app displays the results.
+them with whisper.cpp, and generates summaries/recaps/titles with local or cloud
+models. BullMQ executes jobs, PostgreSQL owns durable processing state, and a
+SvelteKit web app displays the results.
 
 ## Architecture / data flow
 
 ```
-Discord voice ──/start──▶ Temporal workflow (session.ts)
-   │  per voice-activation                │
-   │  ogg/opus clip + segmentRecorded ────▶ transcribe (whisper.cpp)  [parallel]
-   │                                       ▼
-   └──/stop or empty channel──▶ aggregate ▶ summarize ▶ recap ▶ title (llama.cpp)
+Discord voice ──/start──▶ Postgres session + processing run
+   │  per voice activation             │
+   │  ogg/opus clip ───────────────────▶ BullMQ transcription jobs [parallel]
+   │                                    ▼
+   └──/stop or empty channel──▶ aggregate ▶ detailed record ▶ recap ▶ title
                                             ▼
                                    persist to Postgres ──▶ SvelteKit web app
 ```
 
-- The **discord** bot records audio and signals the workflow; it holds no
-  durable state (recovers by querying Temporal on startup).
-- The **temporal** workers own the pipeline. Workflows orchestrate; activities do
-  all the I/O (whisper, llama, DB, filesystem).
+- The **discord** bot records audio; every activation is registered in Postgres
+  before recording and submitted to BullMQ after its file closes.
+- The **worker** package owns the BullMQ producers and workers. Postgres is the
+  authoritative state machine; Redis holds pending execution only.
 - The **db** package is the single source of truth for the schema and all queries.
 - The **web** app is read-only over the same database.
 
@@ -32,17 +33,17 @@ Discord voice ──/start──▶ Temporal workflow (session.ts)
 
 pnpm workspace; packages depend on each other via `workspace:*`.
 
-| Package             | Role                                                                   |
-| ------------------- | ---------------------------------------------------------------------- |
-| `@rainbot/db`       | Drizzle schema + Postgres client + queries                             |
-| `@rainbot/discord`  | Discord bot, voice recording, session recovery                         |
-| `@rainbot/temporal` | Temporal workers: transcribe / aggregate / summarize / recap / persist |
-| `@rainbot/web`      | SvelteKit frontend (Discord OAuth)                                     |
+| Package            | Role                                                               |
+| ------------------ | ------------------------------------------------------------------ |
+| `@rainbot/db`      | Drizzle schema + Postgres client + queries                         |
+| `@rainbot/discord` | Discord bot, voice recording, session recovery                     |
+| `@rainbot/worker`  | BullMQ producers/workers: transcribe, aggregate, inference, notify |
+| `@rainbot/web`     | SvelteKit frontend (Discord OAuth)                                 |
 
 ## Runtime & tooling — read before writing code
 
 - **Node.js 24 runs TypeScript natively.** There is **no build step** for `db`,
-  `discord`, and `temporal` — `node` executes `.ts` files directly. Do not add
+  `discord`, and `worker` — `node` executes `.ts` files directly. Do not add
   tsx/ts-node/esbuild for these.
 - **Imports must use explicit `.ts` extensions** (`./env.ts`, `../types.ts`).
   This is required by the bundler-style resolution; omitting it breaks at runtime.
@@ -58,7 +59,7 @@ pnpm workspace; packages depend on each other via `workspace:*`.
 pnpm install
 pnpm dev                              # run all package dev scripts (recursive)
 pnpm --filter @rainbot/discord dev    # one service (node --env-file --watch)
-pnpm --filter @rainbot/temporal dev
+pnpm --filter @rainbot/worker dev
 pnpm --filter @rainbot/web dev
 pnpm --filter @rainbot/db db:generate # after editing schema.ts
 pnpm --filter @rainbot/db db:migrate
@@ -75,15 +76,14 @@ when adding a variable. The full table is in `README.md`.
 ## Deployment
 
 `docker-compose.yml` runs everything from prebuilt GHCR images. The
-`.github/workflows/deploy.yml` matrix builds one image per package. Two one-shot
-services gate startup: `db-migrate` (runs Drizzle migrations) and
-`temporal-setup` (creates the namespace + registers search attributes). External
-dependencies: PostgreSQL, Temporal, whisper.cpp server, llama.cpp server, and
-ffmpeg (in the discord image).
+`.github/workflows/deploy.yml` matrix builds one image per package. `db-migrate`
+runs Drizzle migrations before application services start. External
+dependencies: PostgreSQL, persistent Redis, whisper.cpp server, an optional
+local/cloud language model provider, and ffmpeg (in the discord image).
 
 ## Cross-cutting conventions
 
-- **Idempotency:** DB writes are upserts and the workflow tolerates restarts —
-  keep new work recovery-safe.
+- **Idempotency:** BullMQ is at-least-once in the worst case. Stable job IDs and
+  conditional DB transitions make every processing step safe to repeat.
 - **Don't commit secrets.** `.env` and `media/` are gitignored.
 - **Only commit/push when asked.** If asked, branch off `main` first.

@@ -34,8 +34,7 @@ export interface TranscriptTurn {
 
 // Whisper's own per-clip utterance segmentation, already stored verbatim
 // under TranscriptSegment.whisper. Duck-typed since that field is `unknown` —
-// @rainbot/db stays decoupled from any whisper.cpp-specific package, mirroring
-// how @rainbot/temporal independently declares its own WhisperResponse shape.
+// @rainbot/db stays decoupled from the worker's whisper.cpp response type.
 interface WhisperSubSegment {
   start: number; // seconds, relative to the clip
   text: string;
@@ -46,8 +45,8 @@ interface WhisperVerboseJson {
   segments: WhisperSubSegment[];
 }
 
-// Duplicated from packages/temporal/src/activities/transcribe.ts's constant
-// of the same name/value — @rainbot/db must not depend on @rainbot/temporal.
+// Duplicated from packages/worker/src/tasks.ts so @rainbot/db does not depend
+// on worker internals.
 const NO_SPEECH_THRESHOLD = 0.6;
 
 // A single spoken utterance with its own timestamp, finer-grained than a

@@ -4,11 +4,17 @@ import prism from "prism-media";
 import { mkdirSync, statSync } from "fs";
 import { spawn } from "child_process";
 import path from "path";
-import type { WorkflowHandle } from "@temporalio/client";
+import { randomUUID } from "node:crypto";
 import { getActiveSession, setActiveSession } from "./recording.ts";
 import { finishActiveActivations, type FinalizableActivation } from "./session-shutdown.ts";
-import { segmentRecorded, sessionEnded } from "@rainbot/temporal";
-import type { SegmentRef } from "@rainbot/temporal";
+import {
+  beginSessionShutdown,
+  completeAudioSegment,
+  discardAudioSegment,
+  finishSessionShutdown,
+  registerAudioSegment,
+  type SegmentRef,
+} from "@rainbot/worker";
 
 const SAMPLE_RATE = 48000;
 const CHANNELS = 2;
@@ -27,7 +33,7 @@ interface ActiveActivation extends FinalizableActivation {
   completed: Promise<void>;
 }
 
-function hasMeaningfulAudio(filePath: string): boolean {
+export function hasMeaningfulAudio(filePath: string): boolean {
   try {
     return statSync(filePath).size >= MIN_CLIP_BYTES;
   } catch {
@@ -37,17 +43,14 @@ function hasMeaningfulAudio(filePath: string): boolean {
 
 function startActivation(
   sessionDir: string,
-  segmentId: string,
-  userId: string,
-  username: string,
+  ref: SegmentRef,
   connection: ReturnType<typeof joinVoiceChannel>,
-  onDone: (ref: SegmentRef) => Promise<void>,
+  onDone: () => Promise<void>,
+  onDiscard: (reason: string) => Promise<void>,
 ): ActiveActivation {
-  const timestamp = new Date().toISOString();
-  const audioFile = `clips/${segmentId}.ogg`;
-  const outputPath = path.join(sessionDir, audioFile);
+  const outputPath = path.join(sessionDir, ref.audioFile);
 
-  const audioStream = connection.receiver.subscribe(userId, {
+  const audioStream = connection.receiver.subscribe(ref.userId, {
     end: { behavior: EndBehaviorType.AfterSilence, duration: 2000 },
   });
 
@@ -67,7 +70,7 @@ function startActivation(
     outputPath,
   ]);
 
-  ffmpegProcess.on("error", (err) => console.error(`ffmpeg error (${userId}):`, err));
+  ffmpegProcess.on("error", (err) => console.error(`ffmpeg error (${ref.userId}):`, err));
 
   let finishing = false;
   let stdinEnded = false;
@@ -99,7 +102,7 @@ function startActivation(
       if (finishing) endFfmpegInput();
     });
     opusDecoder.on("error", (err) => {
-      console.error(`opus decode error (${userId}), skipping packet:`, err);
+      console.error(`opus decode error (${ref.userId}), skipping packet:`, err);
       opusDecoder.unpipe(ffmpegProcess.stdin! as any);
       opusDecoder.destroy();
       if (finishing) {
@@ -145,7 +148,7 @@ function startActivation(
   // A receiver-level error means no more audio will ever arrive for this
   // activation (unlike a per-packet decode error) — finalize the clip.
   audioStream.on("error", (err) => {
-    console.error(`audio stream error (${userId}):`, err);
+    console.error(`audio stream error (${ref.userId}):`, err);
     void finish();
   });
   audioStream.on("end", () => {
@@ -160,8 +163,14 @@ function startActivation(
   ffmpegProcess.on("close", async (code) => {
     try {
       if (code === 0 && hasMeaningfulAudio(outputPath)) {
-        await onDone({ segmentId, audioFile, timestamp, userId, username });
+        await onDone();
+      } else {
+        await onDiscard(
+          code === 0 ? "Audio clip did not contain meaningful data" : `ffmpeg exited with ${code}`,
+        );
       }
+    } catch (error) {
+      console.error(`[session] could not finalize segment ${ref.segmentId}:`, error);
     } finally {
       resolveCompleted();
     }
@@ -173,11 +182,12 @@ function startActivation(
 export function attachRecordingSession(
   client: Client,
   voiceChannel: VoiceBasedChannel,
-  workflowHandle: WorkflowHandle,
   guildId: string,
   channelId: string,
   sessionId: string,
+  runId: string,
   sessionDir: string,
+  initialSegmentCount = 0,
 ): void {
   mkdirSync(path.join(sessionDir, "clips"), { recursive: true });
   mkdirSync(path.join(sessionDir, "transcripts"), { recursive: true });
@@ -189,17 +199,11 @@ export function attachRecordingSession(
     selfDeaf: false,
   });
 
-  let segmentCounter = 0;
+  let segmentCounter = initialSegmentCount;
   let ending: Promise<void> | null = null;
   const activeActivations = new Map<string, ActiveActivation>();
-
-  const onSegmentDone = async (ref: SegmentRef) => {
-    try {
-      await workflowHandle.signal(segmentRecorded, ref);
-    } catch (err) {
-      console.error("[workflow] signal error:", err);
-    }
-  };
+  const startingActivations = new Set<Promise<void>>();
+  const startingUsers = new Set<string>();
 
   const endSession = (): Promise<void> => {
     if (ending) return ending;
@@ -209,13 +213,13 @@ export function attachRecordingSession(
       client.off(Events.VoiceStateUpdate, voiceStateHandler);
       connection.receiver.speaking.off("start", speakingStartHandler);
 
+      await Promise.allSettled(startingActivations);
+      await beginSessionShutdown(sessionId, runId);
       await finishActiveActivations(activeActivations.values());
 
       connection.destroy();
       setActiveSession(guildId, null);
-      await workflowHandle
-        .signal(sessionEnded)
-        .catch((err: unknown) => console.error("[workflow] sessionEnded signal error:", err));
+      await finishSessionShutdown(sessionId, runId);
       console.log(`[session] ended — ${guildId}:${sessionId}`);
     })();
 
@@ -243,36 +247,54 @@ export function attachRecordingSession(
     guildId,
     channelId,
     sessionId,
+    runId,
     sessionDir,
-    segmentCount: 0,
-    workflowHandle,
+    segmentCount: initialSegmentCount,
     end: endSession,
   });
 
   const speakingStartHandler = (userId: string) => {
-    if (ending || activeActivations.has(userId)) return;
+    if (ending || activeActivations.has(userId) || startingUsers.has(userId)) return;
+    startingUsers.add(userId);
 
-    const segId = String(segmentCounter++).padStart(4, "0");
+    const segmentId = randomUUID();
+    segmentCounter++;
     // Resolve a readable label for the transcript. Use the account username so it
     // matches the username stored for campaign members; fall back to the id.
     const username = voiceChannel.guild.members.cache.get(userId)?.user.username ?? userId;
-    const activation = startActivation(
-      sessionDir,
-      segId,
-      userId,
-      username,
-      connection,
-      onSegmentDone,
-    );
-    activeActivations.set(userId, activation);
-    void activation.completed.finally(() => {
-      if (activeActivations.get(userId) === activation) {
-        activeActivations.delete(userId);
-      }
-    });
-
     const session = getActiveSession(guildId);
     if (session) session.segmentCount = segmentCounter;
+
+    const ref: SegmentRef = {
+      segmentId,
+      audioFile: `clips/${segmentId}.ogg`,
+      timestamp: new Date().toISOString(),
+      userId,
+      username,
+    };
+    const starting = (async () => {
+      await registerAudioSegment(sessionId, runId, sessionDir, ref);
+      const activation = startActivation(
+        sessionDir,
+        ref,
+        connection,
+        () => completeAudioSegment(sessionId, runId, segmentId),
+        (reason) => discardAudioSegment(sessionId, runId, segmentId, reason),
+      );
+      activeActivations.set(userId, activation);
+      void activation.completed.finally(() => {
+        if (activeActivations.get(userId) === activation) {
+          activeActivations.delete(userId);
+        }
+      });
+    })();
+    startingActivations.add(starting);
+    void starting
+      .catch((error) => console.error(`[session] could not start segment ${segmentId}:`, error))
+      .finally(() => {
+        startingActivations.delete(starting);
+        startingUsers.delete(userId);
+      });
   };
 
   connection.receiver.speaking.on("start", speakingStartHandler);

@@ -186,31 +186,6 @@ export async function getSessionDetail(sessionId: string): Promise<SessionDetail
   };
 }
 
-export interface SessionRegenerationInput {
-  id: string;
-  campaignId: string;
-  sessionDir: string;
-  transcript: Transcript;
-}
-
-export async function getSessionRegenerationInput(
-  sessionId: string,
-): Promise<SessionRegenerationInput | null> {
-  const [session] = await db
-    .select({
-      id: sessions.id,
-      campaignId: sessions.campaignId,
-      sessionDir: sessions.sessionDir,
-      transcript: sessions.transcript,
-    })
-    .from(sessions)
-    .where(eq(sessions.id, sessionId))
-    .limit(1);
-
-  if (!session?.transcript) return null;
-  return { ...session, transcript: session.transcript };
-}
-
 export interface TranscriptRegenerationInput {
   id: string;
   campaignId: string;

@@ -1,5 +1,4 @@
-// Post-processing for LLM responses. Shared by the Temporal activities and the
-// standalone test script so the cleanup behaviour is identical in both.
+// Post-processing shared by BullMQ workers and the standalone test script.
 
 // Models often wrap a markdown response in a ```markdown … ``` fence despite
 // being asked for raw markdown. Unwrap it, but only when the whole response is a

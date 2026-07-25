@@ -3,13 +3,12 @@ import {
   type ChatInputCommandInteraction,
   type VoiceBasedChannel,
 } from "discord.js";
-import { getTemporalClient, sessionWorkflow } from "@rainbot/temporal";
-import { getCampaignsForGuild } from "@rainbot/db";
+import { getCampaignsForGuild, hasOpenRecordingForGuild } from "@rainbot/db";
+import { startRecordingSession } from "@rainbot/worker";
 import { getActiveSession } from "../recording.ts";
 import { attachRecordingSession } from "../session.ts";
 import { campaignAutocomplete } from "./autocomplete.ts";
 import { MEDIA_PATH } from "../env.ts";
-import type { SessionInput } from "@rainbot/temporal";
 import path from "path";
 
 export const start = {
@@ -32,7 +31,7 @@ export const start = {
 
     const guildId = interaction.guildId;
 
-    if (getActiveSession(guildId)) {
+    if (getActiveSession(guildId) || (await hasOpenRecordingForGuild(guildId))) {
       await interaction.reply("A recording is already in progress. Use `/stop` to stop it first.");
       return;
     }
@@ -66,29 +65,22 @@ export const start = {
     const sessionId = Date.now().toString();
     const sessionDir = path.join(MEDIA_PATH, guildId, sessionId);
 
-    const client = await getTemporalClient();
-    const workflowHandle = await client.workflow.start(sessionWorkflow, {
-      taskQueue: "rainbot",
-      workflowId: `session:${guildId}:${channelId}:${sessionId}`,
-      args: [
-        {
-          guildId,
-          channelId,
-          notificationChannelId: interaction.channelId,
-          campaignId,
-          sessionId,
-          sessionDir,
-        } satisfies SessionInput,
-      ],
+    const runId = await startRecordingSession({
+      id: sessionId,
+      guildId,
+      channelId,
+      notificationChannelId: interaction.channelId,
+      campaignId,
+      sessionDir,
     });
 
     attachRecordingSession(
       interaction.client,
       voiceChannel,
-      workflowHandle,
       guildId,
       channelId,
       sessionId,
+      runId,
       sessionDir,
     );
 

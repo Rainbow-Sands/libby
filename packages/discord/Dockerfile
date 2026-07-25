@@ -10,13 +10,13 @@ RUN corepack enable
 WORKDIR /app
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY packages/db/package.json ./packages/db/
-COPY packages/temporal/package.json ./packages/temporal/
+COPY packages/worker/package.json ./packages/worker/
 COPY packages/discord/package.json ./packages/discord/
 
 RUN pnpm install --frozen-lockfile --filter @rainbot/discord...
 
 COPY packages/db ./packages/db
-COPY packages/temporal ./packages/temporal
+COPY packages/worker ./packages/worker
 COPY packages/discord ./packages/discord
 
 ENTRYPOINT ["node", "packages/discord/src/index.ts"]

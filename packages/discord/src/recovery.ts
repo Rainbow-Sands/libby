@@ -1,45 +1,94 @@
 import type { Client, VoiceBasedChannel } from "discord.js";
-import { getTemporalClient, sessionEnded } from "@rainbot/temporal";
-import { attachRecordingSession } from "./session.ts";
-import { MEDIA_PATH } from "./env.ts";
-import path from "path";
+import { getAudioSegmentsForRecovery, getRecoverableSessionsForGuild } from "@rainbot/db";
+import {
+  beginSessionShutdown,
+  completeAudioSegment,
+  discardAudioSegment,
+  finishSessionShutdown,
+} from "@rainbot/worker";
+import { attachRecordingSession, hasMeaningfulAudio } from "./session.ts";
+import path from "node:path";
+
+async function recoverSegments(
+  sessionId: string,
+  runId: string,
+  sessionDir: string,
+): Promise<number> {
+  const segments = await getAudioSegmentsForRecovery(sessionId);
+  for (const segment of segments) {
+    if (segment.runId !== runId) continue;
+    if (segment.audioStatus === "ready") {
+      if (["pending", "processing"].includes(segment.transcriptionStatus ?? "")) {
+        await completeAudioSegment(sessionId, runId, segment.segmentId);
+      }
+      continue;
+    }
+
+    const audioPath = path.join(sessionDir, segment.audioFile);
+    if (hasMeaningfulAudio(audioPath)) {
+      await completeAudioSegment(sessionId, runId, segment.segmentId);
+    } else {
+      await discardAudioSegment(
+        sessionId,
+        runId,
+        segment.segmentId,
+        "Recording was interrupted before a usable clip was written",
+      );
+    }
+  }
+  return segments.length;
+}
+
+async function closeRecoveredSession(
+  sessionId: string,
+  runId: string,
+  status: string,
+): Promise<void> {
+  if (status === "recording") await beginSessionShutdown(sessionId, runId);
+  await finishSessionShutdown(sessionId, runId);
+}
 
 export async function recoverSessions(bot: Client): Promise<void> {
-  console.log("Recovering any active sessions.");
-  const temporalClient = await getTemporalClient();
+  console.log("Recovering active sessions from Postgres.");
 
   for (const [guildId, guild] of bot.guilds.cache) {
-    const iter = temporalClient.workflow.list({
-      query: `GuildId = "${guildId}" AND ExecutionStatus = "Running"`,
-    });
+    for (const session of await getRecoverableSessionsForGuild(guildId)) {
+      const segmentCount = await recoverSegments(session.id, session.runId, session.sessionDir);
 
-    for await (const workflow of iter) {
-      // workflowId format: "session:{guildId}:{channelId}:{sessionId}"
-      const parts = workflow.workflowId.split(":");
-      if (parts.length !== 4 || parts[0] !== "session") continue;
+      if (session.status === "closing") {
+        console.log(`[recovery] completing shutdown for session ${session.id}`);
+        await closeRecoveredSession(session.id, session.runId, session.status);
+        continue;
+      }
 
-      const [, , channelId, sessionId] = parts;
-      const handle = temporalClient.workflow.getHandle(workflow.workflowId);
-      const sessionDir = path.join(MEDIA_PATH, guildId, sessionId);
-
-      const channel = guild.channels.cache.get(channelId);
+      const channel = guild.channels.cache.get(session.channelId);
       if (!channel?.isVoiceBased()) {
-        console.log(`[recovery] channel ${channelId} not found, ending workflow`);
-        await handle.signal(sessionEnded).catch(() => {});
+        console.log(`[recovery] channel ${session.channelId} not found, ending session`);
+        await closeRecoveredSession(session.id, session.runId, session.status);
         continue;
       }
 
       const voiceChannel = channel as VoiceBasedChannel;
-      const humanCount = [...voiceChannel.members.values()].filter((m) => !m.user.bot).length;
-
+      const humanCount = [...voiceChannel.members.values()].filter(
+        (member) => !member.user.bot,
+      ).length;
       if (humanCount === 0) {
-        console.log(`[recovery] channel empty for session ${sessionId}, ending workflow`);
-        await handle.signal(sessionEnded).catch(() => {});
+        console.log(`[recovery] channel empty for session ${session.id}, ending session`);
+        await closeRecoveredSession(session.id, session.runId, session.status);
         continue;
       }
 
-      console.log(`[recovery] resuming session ${sessionId} in guild ${guildId}`);
-      attachRecordingSession(bot, voiceChannel, handle, guildId, channelId, sessionId, sessionDir);
+      console.log(`[recovery] resuming session ${session.id} in guild ${guildId}`);
+      attachRecordingSession(
+        bot,
+        voiceChannel,
+        guildId,
+        session.channelId,
+        session.id,
+        session.runId,
+        session.sessionDir,
+        segmentCount,
+      );
     }
   }
 }

@@ -1,7 +1,7 @@
 // Standalone harness to exercise the summarization pipeline against a
-// transcript.txt, independent of Discord/Temporal. Runs the exact same prompts
-// and post-processing as the real activities (imported from ../prompts.ts and
-// ../text.ts), so what you see here is what the workflow would produce.
+// transcript.txt, independent of Discord/BullMQ. Runs the exact same prompts
+// and post-processing as the real workers, so what you see here is what the
+// pipeline would produce.
 //
 // Usage:
 //   pnpm test:summarize <transcript.txt>          # loads provider settings from root .env

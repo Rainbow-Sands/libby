@@ -1,11 +1,12 @@
 import { error, fail, redirect } from "@sveltejs/kit";
 import { getCampaignDetail, isCampaignMember } from "@rainbot/db";
 import {
-  getTemporalClient,
-  segmentRecorded,
-  sessionEnded,
-  sessionWorkflow,
-} from "@rainbot/temporal";
+  beginSessionShutdown,
+  completeAudioSegment,
+  finishSessionShutdown,
+  registerAudioSegment,
+  startRecordingSession,
+} from "@rainbot/worker";
 import { createWriteStream } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -73,7 +74,7 @@ export const actions: Actions = {
         });
       }
 
-      const speaker = campaign.members.find((member) => member.id === userId);
+      const speaker = campaign.members.find((campaignMember) => campaignMember.id === userId);
       if (!speaker) {
         return fail(400, { message: "Each recording's speaker must belong to this campaign." });
       }
@@ -99,23 +100,24 @@ export const actions: Actions = {
       }),
     );
 
-    const client = await getTemporalClient();
-    const workflow = await client.workflow.start(sessionWorkflow, {
-      taskQueue: "rainbot",
-      workflowId: `manual:${params.id}:${sessionId}`,
-      args: [
-        {
-          guildId: "manual",
-          channelId: "manual",
-          campaignId: params.id,
-          sessionId,
-          sessionDir,
-        },
-      ],
+    const runId = await startRecordingSession({
+      id: sessionId,
+      channelId: "manual",
+      campaignId: params.id,
+      sessionDir,
     });
 
-    await Promise.all(segments.map((segment) => workflow.signal(segmentRecorded, segment)));
-    await workflow.signal(sessionEnded);
+    await Promise.all(
+      segments.map((segment) => registerAudioSegment(sessionId, runId, sessionDir, segment)),
+    );
+    await beginSessionShutdown(sessionId, runId);
+    try {
+      await Promise.all(
+        segments.map((segment) => completeAudioSegment(sessionId, runId, segment.segmentId)),
+      );
+    } finally {
+      await finishSessionShutdown(sessionId, runId);
+    }
 
     throw redirect(303, `/campaigns/${params.id}`);
   },

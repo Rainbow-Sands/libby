@@ -7,7 +7,7 @@ function get(name: string, fallback?: string): string {
 
 import { loadSummarizationConfig } from "./summarization-inference.ts";
 
-export const TEMPORAL_URL = get("TEMPORAL_URL");
+export const REDIS_URL = get("REDIS_URL");
 export const TRANSCRIPTION_URL = get("TRANSCRIPTION_URL");
 export const DISCORD_TOKEN = get("DISCORD_TOKEN");
 export const WEB_URL = get("WEB_URL");

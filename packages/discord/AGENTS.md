@@ -32,10 +32,10 @@ management commands use `commands/guard.ts` (`requireDmOfCampaign`).
 
 - Gateway intents: `Guilds` and `GuildVoiceStates` (voice state cache is how we
   find the caller's channel and resolve usernames).
-- Each voice activation becomes one ogg/opus clip via **ffmpeg** (required at
-  runtime), then signals `segmentRecorded` to the workflow.
-- Session shutdown finalizes all active receiver/decoder/ffmpeg pipelines and
-  awaits their `segmentRecorded` signals before sending `sessionEnded`. Keep
+- Each voice activation is registered in Postgres before recording, becomes one
+  ogg/opus clip via **ffmpeg**, and is then submitted to BullMQ.
+- Session shutdown first stops new activations, then finalizes all active
+  receiver/decoder/ffmpeg pipelines before closing the durable session. Keep
   this ordering so speech in progress during `/stop` or auto-end is retained.
 - The transcript speaker label is the **account username** resolved from the
   guild member cache (`session.ts`), falling back to the user id. It is joined to
@@ -43,7 +43,7 @@ management commands use `commands/guard.ts` (`requireDmOfCampaign`).
 
 ## State & recovery
 
-There is **no on-disk session state** — the bot is horizontally scalable. On
-startup, `recoverSessions()` queries Temporal for running workflows in each guild
-and either rejoins the voice channel or signals the workflow to end. Keep session
-state in the `activeSessions` map + Temporal, not on the filesystem.
+On startup, `recoverSessions()` queries Postgres for recording/closing sessions,
+repairs clips interrupted by a crash, and either rejoins the voice channel or
+finishes shutdown. Segment IDs must remain globally unique so a restarted bot
+cannot overwrite clips from the previous process.

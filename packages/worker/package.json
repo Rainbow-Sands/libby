@@ -1,5 +1,5 @@
 {
-  "name": "@rainbot/temporal",
+  "name": "@rainbot/worker",
   "version": "0.0.1",
   "type": "module",
   "exports": {
@@ -17,11 +17,9 @@
     "@ai-sdk/openai-compatible": "^3.0.14",
     "@ai-sdk/provider": "^4.0.3",
     "@rainbot/db": "workspace:*",
-    "@temporalio/activity": "^1.18.1",
-    "@temporalio/client": "^1.18.1",
-    "@temporalio/worker": "^1.18.1",
-    "@temporalio/workflow": "^1.18.1",
-    "ai": "^7.0.34"
+    "ai": "^7.0.34",
+    "bullmq": "^5.58.0",
+    "ioredis": "^5.7.0"
   },
   "devDependencies": {
     "@types/node": "^25.0.0",
