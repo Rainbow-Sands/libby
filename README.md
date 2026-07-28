@@ -30,7 +30,7 @@ state, while S3-compatible object storage holds activation audio.
 pnpm install
 ```
 
-Copy `.env.example` to `.env` and fill in the values.
+Create a root `.env` and fill in the values needed by the services you run.
 
 Run database migrations:
 
@@ -48,72 +48,57 @@ pnpm --filter @rainbot/web dev
 
 ## Environment variables
 
-| Variable                           | Used by              | Description                                                                                                         |
-| ---------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `DISCORD_TOKEN`                    | discord, worker      | Bot token                                                                                                           |
-| `DISCORD_APPLICATION_ID`           | discord              | Application ID                                                                                                      |
-| `AUDIO_S3_ENDPOINT`                | discord, worker, web | Optional S3-compatible endpoint; omit for AWS S3                                                                    |
-| `AUDIO_S3_REGION`                  | discord, worker, web | Object-storage region                                                                                               |
-| `AUDIO_S3_BUCKET`                  | discord, worker, web | Private bucket containing activation audio                                                                          |
-| `AUDIO_S3_ACCESS_KEY_ID`           | discord, worker, web | Optional static access key; omit with the secret to use the AWS credential provider chain                           |
-| `AUDIO_S3_SECRET_ACCESS_KEY`       | discord, worker, web | Optional static secret key; must be set together with the access key                                                |
-| `AUDIO_S3_FORCE_PATH_STYLE`        | discord, worker, web | Set to `true` for S3-compatible providers that require path-style requests                                          |
-| `TRANSCRIPTION_URL`                | worker               | Complete transcription endpoint URL, such as `http://whisper-server:8080/inference`                                 |
-| `TRANSCRIPTION_MODEL`              | worker               | Audio transcription model ID (default: `whisper-large-v3-turbo`)                                                    |
-| `TRANSCRIPTION_CONCURRENCY`        | worker               | Maximum simultaneous transcription jobs (default: `4`)                                                              |
-| `PROCESSING_CONCURRENCY`           | worker               | Maximum sessions processed concurrently by one worker (default: `2`)                                                |
-| `PROCESSING_MAX_ATTEMPTS`          | worker               | Maximum attempts before a run or transcription permanently fails (default: `3`)                                     |
-| `DELETE_AUDIO_AFTER_TRANSCRIPTION` | worker               | Set to `true` to delete each S3 object after its transcript is durable                                              |
-| `SUMMARIZATION_PROVIDER`           | worker               | `local`, `openai`, or `anthropic` (default: `local`)                                                                |
-| `SUMMARIZATION_API_KEY`            | worker               | API key; required for OpenAI and Anthropic, optional for local                                                      |
-| `SUMMARIZATION_BASE_URL`           | worker               | Required full API root for local summarization; optional cloud API override                                         |
-| `SUMMARIZATION_MODEL`              | worker               | Detailed-record, recap, and title model ID; required for cloud providers (local default: `qwen3.6-35b-a3b`)         |
-| `SUMMARIZATION_REASONING_EFFORT`   | worker               | Optional cloud reasoning effort: `none`, `low`, `medium`, `high`, `xhigh`, or `max`; OpenAI also supports `minimal` |
-| `SUMMARIZATION_THINKING_BUDGET`    | worker               | Local llama.cpp reasoning-token budget (default: `8192`)                                                            |
-| `CHAT_PROVIDER`                    | web                  | `local`, `openai`, or `anthropic` (default: `local`)                                                                |
-| `CHAT_API_KEY`                     | web                  | API key; required for OpenAI and Anthropic, optional for local                                                      |
-| `CHAT_BASE_URL`                    | web                  | Required full API root for local chat; optional cloud API override                                                  |
-| `CHAT_MODEL`                       | web                  | Session chat model ID; required for cloud providers (local default: `qwen3.6-35b-a3b`)                              |
-| `CHAT_REASONING_EFFORT`            | web                  | Optional cloud reasoning effort: `none`, `low`, `medium`, `high`, `xhigh`, or `max`; OpenAI also supports `minimal` |
-| `CHAT_THINKING_BUDGET`             | web                  | Local llama.cpp reasoning-token budget for session chat (default: `2048`)                                           |
-| `BODY_SIZE_LIMIT`                  | web                  | Maximum manual-upload request size; defaults to `10G` in Docker Compose                                             |
-| `DATABASE_URL`                     | db                   | PostgreSQL connection string                                                                                        |
-| `WEB_URL`                          | worker               | Public web origin used for completed-session links (for example, `https://libby.bot`)                               |
+Service names below match `docker-compose.yml`; `db-migrate` is the
+`@rainbot/db` migration image.
 
-For example, to run the post-session pipeline through Claude Sonnet:
+### Core and authentication
 
-```env
-SUMMARIZATION_PROVIDER=anthropic
-SUMMARIZATION_API_KEY=sk-ant-...
-SUMMARIZATION_MODEL=claude-sonnet-5
-SUMMARIZATION_REASONING_EFFORT=high
-```
+| Variable                                            | Used by                          | Description                                                                      |
+| --------------------------------------------------- | -------------------------------- | -------------------------------------------------------------------------------- |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | postgres, Docker Compose         | Creates PostgreSQL and constructs container `DATABASE_URL` values                |
+| `DATABASE_URL`                                      | db-migrate, discord, worker, web | PostgreSQL connection string                                                     |
+| `DISCORD_TOKEN`                                     | discord, worker                  | Bot token; worker uses it to post completed-session links                        |
+| `DISCORD_APPLICATION_ID`                            | discord, web                     | Discord application ID for commands and OAuth                                    |
+| `DISCORD_CLIENT_SECRET`                             | web                              | Discord OAuth client secret                                                      |
+| `SESSION_SECRET`                                    | web                              | Secret used to sign login sessions                                               |
+| `ORIGIN`                                            | web, Docker Compose              | Public web origin; Compose also passes it to worker as `WEB_URL`                 |
+| `WEB_URL`                                           | worker                           | Public web origin used in completed-session links; required when running locally |
+| `BODY_SIZE_LIMIT`                                   | web                              | Maximum manual-upload request size; Compose defaults it to `10G`                 |
 
-Chat uses a separate provider profile, so it can use a smaller or less expensive
-model without changing the post-session pipeline:
+### Audio and processing
 
-```env
-CHAT_PROVIDER=anthropic
-CHAT_API_KEY=sk-ant-...
-CHAT_MODEL=claude-haiku-4-5
-```
+| Variable                           | Used by              | Description                                                                        |
+| ---------------------------------- | -------------------- | ---------------------------------------------------------------------------------- |
+| `AUDIO_S3_ENDPOINT`                | discord, worker, web | Optional S3-compatible endpoint; omit for AWS S3                                   |
+| `AUDIO_S3_REGION`                  | discord, worker, web | Object-storage region                                                              |
+| `AUDIO_S3_BUCKET`                  | discord, worker, web | Private activation-audio bucket                                                    |
+| `AUDIO_S3_ACCESS_KEY_ID`           | discord, worker, web | Optional static access key; omit both credentials to use the AWS provider chain    |
+| `AUDIO_S3_SECRET_ACCESS_KEY`       | discord, worker, web | Optional static secret; must be set with the access key                            |
+| `AUDIO_S3_FORCE_PATH_STYLE`        | discord, worker, web | Set to `true` when the storage provider requires path-style requests               |
+| `TRANSCRIPTION_URL`                | worker               | Complete transcription endpoint, such as `http://whisper-server:8080/inference`    |
+| `TRANSCRIPTION_MODEL`              | worker               | Transcription model ID (default: `whisper-large-v3-turbo`)                         |
+| `TRANSCRIPTION_CONCURRENCY`        | worker               | Simultaneous activation transcriptions (default: `4`)                              |
+| `PROCESSING_CONCURRENCY`           | worker               | Sessions processed concurrently by one worker (default: `2`)                       |
+| `PROCESSING_POLL_MILLISECONDS`     | worker               | Delay between Postgres queue polls (default: `2000`)                               |
+| `PROCESSING_MAX_ATTEMPTS`          | worker               | Maximum attempts for a session or activation before failure (default: `3`)         |
+| `DELETE_AUDIO_AFTER_TRANSCRIPTION` | worker               | Set to `true` to delete audio after its transcript is committed (default: `false`) |
 
-For local inference, configure each service explicitly. These may point to the
-same OpenAI-compatible server, but they are not coupled:
+### Language-model inference
 
-```env
-TRANSCRIPTION_URL=http://whisper-server:8080/inference
-```
-
-Local LLM inference is configured separately and may use any OpenAI-compatible
-server:
-
-```env
-SUMMARIZATION_PROVIDER=local
-SUMMARIZATION_BASE_URL=http://llama-swap:8080/v1
-CHAT_PROVIDER=local
-CHAT_BASE_URL=http://llama-swap:8080/v1
-```
+| Variable                         | Used by | Description                                                                                         |
+| -------------------------------- | ------- | --------------------------------------------------------------------------------------------------- |
+| `SUMMARIZATION_PROVIDER`         | worker  | Detailed record, recap, and title provider: `local`, `openai`, or `anthropic` (default: `local`)    |
+| `SUMMARIZATION_API_KEY`          | worker  | Required for OpenAI and Anthropic; optional for local                                               |
+| `SUMMARIZATION_BASE_URL`         | worker  | Required for local; optional OpenAI or Anthropic endpoint override                                  |
+| `SUMMARIZATION_MODEL`            | worker  | Required for cloud providers; local default: `qwen3.6-35b-a3b`                                      |
+| `SUMMARIZATION_REASONING_EFFORT` | worker  | Optional cloud effort: `none`, `low`, `medium`, `high`, `xhigh`, or `max`; `minimal` is OpenAI-only |
+| `SUMMARIZATION_THINKING_BUDGET`  | worker  | Local llama.cpp reasoning budget (default: `8192`)                                                  |
+| `CHAT_PROVIDER`                  | web     | Session-chat provider: `local`, `openai`, or `anthropic` (default: `local`)                         |
+| `CHAT_API_KEY`                   | web     | Required for OpenAI and Anthropic; optional for local                                               |
+| `CHAT_BASE_URL`                  | web     | Required for local; optional OpenAI or Anthropic endpoint override                                  |
+| `CHAT_MODEL`                     | web     | Required for cloud providers; local default: `qwen3.6-35b-a3b`                                      |
+| `CHAT_REASONING_EFFORT`          | web     | Optional cloud effort: `none`, `low`, `medium`, `high`, `xhigh`, or `max`; `minimal` is OpenAI-only |
+| `CHAT_THINKING_BUDGET`           | web     | Local llama.cpp reasoning budget (default: `2048`)                                                  |
 
 Keep the audio bucket private. `DELETE_AUDIO_AFTER_TRANSCRIPTION=true` deletes
 each activation after its transcript has been committed to Postgres. Configure
@@ -123,18 +108,6 @@ Leave application deletion disabled while transcript regeneration is needed.
 Recorder and manual-upload scratch files use each service's local temporary
 directory and are removed after upload; no shared filesystem is required.
 
-The detailed record is generated from the complete formatted transcript in one
-request. Its output then feeds one recap request, and the recap feeds one title
-request. There is no transcript chunking or context-size preflight.
-
-Local thinking budgets are passed to llama.cpp as `thinking_budget_tokens`. Override a
-budget with `0` to end thinking immediately, a positive integer to cap thinking
-tokens, or `-1` for unrestricted thinking. Per-request budgets require a recent
-llama.cpp build and are ignored when the server was started with a fixed
-`--reasoning-budget`. A zero budget also passes
-`chat_template_kwargs.enable_thinking=false`; positive and unrestricted budgets
-pass `enable_thinking=true`. This makes Qwen's chat-template mode explicit on
-every local request. OpenAI and Anthropic instead use
-their corresponding `SUMMARIZATION_REASONING_EFFORT` or
-`CHAT_REASONING_EFFORT` when set; Anthropic enables adaptive thinking for
-non-`none` effort levels.
+Summarization and chat use independent provider profiles. Local thinking budgets
+accept `0` to disable thinking, a positive token limit, or `-1` for unlimited.
+Cloud providers use their corresponding reasoning-effort setting.
