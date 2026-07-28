@@ -127,10 +127,9 @@ export const processingRuns = pgTable(
   ],
 );
 
-// Audio metadata is the durable manifest for a session. New audio is stored in
-// S3-compatible object storage; audioFile remains the recorder-local relative
-// path so an interrupted recording can be recovered before upload. Existing
-// rows default to local storage and remain readable during migration.
+// Audio metadata is the durable manifest for a session. Cross-service audio is
+// stored exclusively in S3-compatible object storage; audioFile only preserves
+// the activation's original filename for transcript metadata and local recovery.
 export const sessionSegments = pgTable(
   "session_segments",
   {

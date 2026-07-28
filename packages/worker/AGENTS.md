@@ -12,7 +12,6 @@ root `AGENTS.md` for workspace-wide conventions.
 - `tasks.ts` — whisper and inference calls.
 - `prompts.ts` / `text.ts` — shared prompts and response cleanup.
 - `summarization-inference.ts` — local/OpenAI/Anthropic provider configuration.
-- `segment-metadata.ts` — legacy filesystem manifest compatibility.
 - `scripts/test-summarize.ts` — standalone detailed-record pipeline harness.
 
 ## Durable state
@@ -27,9 +26,8 @@ Postgres is both the queue and the source of truth:
 - A lease may expire and duplicate work may occur. Keep transitions idempotent
   and reject stale run IDs.
 
-New activation audio uses private S3-compatible storage. Existing
-`audio_storage = 'local'` rows remain readable from `MEDIA_PATH` during
-migration. Store object keys in Postgres, never expiring signed URLs.
+Activation audio uses private S3-compatible storage. Workers never depend on a
+shared filesystem. Store object keys in Postgres, never expiring signed URLs.
 
 ## Prompts and inference
 

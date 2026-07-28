@@ -52,7 +52,6 @@ pnpm --filter @rainbot/web dev
 | ---------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `DISCORD_TOKEN`                    | discord, worker      | Bot token                                                                                                           |
 | `DISCORD_APPLICATION_ID`           | discord              | Application ID                                                                                                      |
-| `MEDIA_PATH`                       | discord, worker, web | Recorder scratch directory and legacy local-audio compatibility path                                                |
 | `AUDIO_S3_ENDPOINT`                | discord, worker, web | Optional S3-compatible endpoint; omit for AWS S3                                                                    |
 | `AUDIO_S3_REGION`                  | discord, worker, web | Object-storage region                                                                                               |
 | `AUDIO_S3_BUCKET`                  | discord, worker, web | Private bucket containing activation audio                                                                          |
@@ -121,6 +120,8 @@ each activation after its transcript has been committed to Postgres. Configure
 a bucket lifecycle expiration as a second, provider-enforced retention boundary;
 the application stores stable object keys and does not depend on signed URLs.
 Leave application deletion disabled while transcript regeneration is needed.
+Recorder and manual-upload scratch files use each service's local temporary
+directory and are removed after upload; no shared filesystem is required.
 
 The detailed record is generated from the complete formatted transcript in one
 request. Its output then feeds one recap request, and the recap feeds one title

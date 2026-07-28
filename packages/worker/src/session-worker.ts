@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import path from "node:path";
@@ -86,11 +85,9 @@ async function materializeAudio(
   segment: SegmentForTranscription,
 ): Promise<{ audioPath: string; cleanup: () => Promise<void> }> {
   if (segment.audioStorage !== "s3") {
-    const audioPath = path.join(segment.sessionDir, segment.audioFile);
-    if (!existsSync(audioPath)) {
-      throw new UnrecoverableTaskError(`Audio file not found: ${segment.audioFile}`);
-    }
-    return { audioPath, cleanup: async () => undefined };
+    throw new UnrecoverableTaskError(
+      `Segment ${segment.segmentId} is not stored in S3-compatible object storage`,
+    );
   }
 
   if (!segment.audioObjectKey) {

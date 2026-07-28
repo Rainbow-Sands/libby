@@ -8,7 +8,7 @@ import { startRecordingSession } from "@rainbot/worker";
 import { getActiveSession } from "../recording.ts";
 import { attachRecordingSession } from "../session.ts";
 import { campaignAutocomplete } from "./autocomplete.ts";
-import { MEDIA_PATH } from "../env.ts";
+import { tmpdir } from "node:os";
 import path from "path";
 
 export const start = {
@@ -63,7 +63,7 @@ export const start = {
 
     const channelId = voiceChannel.id;
     const sessionId = Date.now().toString();
-    const sessionDir = path.join(MEDIA_PATH, guildId, sessionId);
+    const sessionDir = path.join(tmpdir(), "rainbot", guildId, sessionId);
 
     const runId = await startRecordingSession({
       id: sessionId,

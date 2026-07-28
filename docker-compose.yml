@@ -38,7 +38,6 @@ services:
     environment:
       DISCORD_TOKEN: ${DISCORD_TOKEN}
       DISCORD_APPLICATION_ID: ${DISCORD_APPLICATION_ID}
-      MEDIA_PATH: /media
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       AUDIO_S3_ENDPOINT: ${AUDIO_S3_ENDPOINT}
       AUDIO_S3_REGION: ${AUDIO_S3_REGION}
@@ -46,8 +45,6 @@ services:
       AUDIO_S3_ACCESS_KEY_ID: ${AUDIO_S3_ACCESS_KEY_ID}
       AUDIO_S3_SECRET_ACCESS_KEY: ${AUDIO_S3_SECRET_ACCESS_KEY}
       AUDIO_S3_FORCE_PATH_STYLE: ${AUDIO_S3_FORCE_PATH_STYLE}
-    volumes:
-      - media:/media
     restart: unless-stopped
 
   worker:
@@ -71,15 +68,12 @@ services:
       PROCESSING_MAX_ATTEMPTS: ${PROCESSING_MAX_ATTEMPTS}
       DELETE_AUDIO_AFTER_TRANSCRIPTION: ${DELETE_AUDIO_AFTER_TRANSCRIPTION}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      MEDIA_PATH: /media
       AUDIO_S3_ENDPOINT: ${AUDIO_S3_ENDPOINT}
       AUDIO_S3_REGION: ${AUDIO_S3_REGION}
       AUDIO_S3_BUCKET: ${AUDIO_S3_BUCKET}
       AUDIO_S3_ACCESS_KEY_ID: ${AUDIO_S3_ACCESS_KEY_ID}
       AUDIO_S3_SECRET_ACCESS_KEY: ${AUDIO_S3_SECRET_ACCESS_KEY}
       AUDIO_S3_FORCE_PATH_STYLE: ${AUDIO_S3_FORCE_PATH_STYLE}
-    volumes:
-      - media:/media
     restart: unless-stopped
 
   web:
@@ -99,7 +93,6 @@ services:
       CHAT_MODEL: ${CHAT_MODEL}
       CHAT_REASONING_EFFORT: ${CHAT_REASONING_EFFORT}
       CHAT_THINKING_BUDGET: ${CHAT_THINKING_BUDGET}
-      MEDIA_PATH: /media
       AUDIO_S3_ENDPOINT: ${AUDIO_S3_ENDPOINT}
       AUDIO_S3_REGION: ${AUDIO_S3_REGION}
       AUDIO_S3_BUCKET: ${AUDIO_S3_BUCKET}
@@ -109,10 +102,7 @@ services:
       BODY_SIZE_LIMIT: ${BODY_SIZE_LIMIT:-10G}
     ports:
       - "3000:3000"
-    volumes:
-      - media:/media
     restart: unless-stopped
 
 volumes:
   postgres_data:
-  media:

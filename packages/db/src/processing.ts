@@ -262,7 +262,6 @@ export async function finishClosingSession(sessionId: string, runId: string): Pr
 export interface SegmentForTranscription extends AudioSegmentRef {
   sessionId: string;
   runId: string;
-  sessionDir: string;
 }
 
 export async function listSegmentsForTranscription(
@@ -281,10 +280,8 @@ export async function listSegmentsForTranscription(
       timestamp: sessionSegments.recordedAt,
       userId: sessionSegments.userId,
       username: sessionSegments.username,
-      sessionDir: sessions.sessionDir,
     })
     .from(sessionSegments)
-    .innerJoin(sessions, eq(sessionSegments.sessionId, sessions.id))
     .where(
       and(
         eq(sessionSegments.transcriptionRunId, runId),
@@ -308,7 +305,6 @@ export async function listSegmentsForTranscription(
       timestamp: row.timestamp,
       userId: row.userId,
       ...(row.username ? { username: row.username } : {}),
-      sessionDir: row.sessionDir,
     }));
 }
 
@@ -475,7 +471,6 @@ export interface ProcessingRunData {
   id: string;
   sessionId: string;
   campaignId: string;
-  sessionDir: string;
   kind: string;
   status: string;
   transcript: Transcript | null;
@@ -495,7 +490,6 @@ export async function getProcessingRun(runId: string): Promise<ProcessingRunData
       id: processingRuns.id,
       sessionId: processingRuns.sessionId,
       campaignId: sessions.campaignId,
-      sessionDir: sessions.sessionDir,
       kind: processingRuns.kind,
       status: processingRuns.status,
       transcript: processingRuns.transcript,
@@ -741,7 +735,8 @@ export async function getAudioSegmentRefs(sessionId: string): Promise<AudioSegme
     .where(
       and(
         eq(sessionSegments.sessionId, sessionId),
-        inArray(sessionSegments.audioStatus, ["recording", "ready"]),
+        eq(sessionSegments.audioStorage, "s3"),
+        eq(sessionSegments.audioStatus, "ready"),
       ),
     )
     .then((rows) =>

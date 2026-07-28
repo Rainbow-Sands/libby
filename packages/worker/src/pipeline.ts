@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { unlink } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -6,7 +5,6 @@ import {
   createRecordingSession,
   finishClosingSession,
   getAudioSegmentRefs,
-  getTranscriptRegenerationInput,
   markSegmentAudioFailed,
   markSegmentDiscarded,
   markSegmentReady,
@@ -16,7 +14,6 @@ import {
   type AudioSegmentRef,
   type CreateRecordingSessionInput,
 } from "@rainbot/db";
-import { loadSegmentMetadata, persistSegmentMetadata } from "./segment-metadata.ts";
 import { audioObjectKey, getAudioStorage } from "./storage.ts";
 
 function audioMimeType(filename: string): string {
@@ -71,26 +68,17 @@ export async function startRecordingSession(input: CreateRecordingSessionInput):
 export async function registerAudioSegment(
   sessionId: string,
   runId: string,
-  sessionDir: string,
   ref: AudioSegmentRef,
 ): Promise<void> {
   await registerRecordingSegment(sessionId, runId, s3Ref(sessionId, ref));
-  try {
-    persistSegmentMetadata(sessionDir, ref);
-  } catch (error) {
-    // Postgres is authoritative. This sidecar only supports legacy local
-    // recordings while existing deployments migrate to object storage.
-    console.error(`[segment] could not write compatibility metadata for ${ref.segmentId}:`, error);
-  }
 }
 
 export async function completeAudioSegment(
   sessionId: string,
   runId: string,
-  sessionDir: string,
+  localPath: string,
   ref: AudioSegmentRef,
 ): Promise<void> {
-  const localPath = path.join(sessionDir, ref.audioFile);
   const stored = s3Ref(sessionId, ref);
   if (!stored.audioObjectKey) throw new Error(`No object key for segment ${ref.segmentId}`);
 
@@ -135,15 +123,7 @@ export async function requestInferenceRegeneration(sessionId: string): Promise<s
 }
 
 export async function requestTranscriptRegeneration(sessionId: string): Promise<string> {
-  let refs = await getAudioSegmentRefs(sessionId);
-  if (refs.length === 0) {
-    const session = await getTranscriptRegenerationInput(sessionId);
-    if (!session) throw new Error(`Session ${sessionId} was not found`);
-    refs = loadSegmentMetadata(session.sessionDir, session.transcript).filter((ref) =>
-      existsSync(path.join(session.sessionDir, ref.audioFile)),
-    );
-  }
-
+  const refs = await getAudioSegmentRefs(sessionId);
   const { runId } = await startTranscriptRegeneration(sessionId, refs);
   return runId;
 }

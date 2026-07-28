@@ -8,12 +8,12 @@ import {
   startRecordingSession,
 } from "@rainbot/worker";
 import { createWriteStream } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { MEDIA_PATH } from "$lib/server/env";
 import type { Actions, PageServerLoad } from "./$types";
 
 const AUDIO_EXTENSIONS = new Set([
@@ -82,41 +82,48 @@ export const actions: Actions = {
     }
 
     const sessionId = `manual-${Date.now()}-${randomUUID().slice(0, 8)}`;
-    const sessionDir = path.join(MEDIA_PATH, "manual", sessionId);
-    const clipsDir = path.join(sessionDir, "clips");
-    await mkdir(clipsDir, { recursive: true });
-
-    const timestamp = new Date().toISOString();
-    const segments = await Promise.all(
-      uploads.map(async ({ file, userId, username }, index) => {
-        const extension = path.extname(file.name).toLowerCase();
-        const segmentId = `${index}-${randomUUID()}`;
-        const audioFile = `clips/${segmentId}${extension}`;
-        await pipeline(
-          Readable.fromWeb(file.stream() as unknown as Parameters<typeof Readable.fromWeb>[0]),
-          createWriteStream(path.join(sessionDir, audioFile)),
-        );
-        return { segmentId, audioFile, timestamp, userId, username };
-      }),
-    );
-
-    const runId = await startRecordingSession({
-      id: sessionId,
-      channelId: "manual",
-      campaignId: params.id,
-      sessionDir,
-    });
-
-    await Promise.all(
-      segments.map((segment) => registerAudioSegment(sessionId, runId, sessionDir, segment)),
-    );
-    await beginSessionShutdown(sessionId, runId);
+    const sessionDir = await mkdtemp(path.join(tmpdir(), "rainbot-manual-"));
     try {
-      await Promise.all(
-        segments.map((segment) => completeAudioSegment(sessionId, runId, sessionDir, segment)),
+      const clipsDir = path.join(sessionDir, "clips");
+      await mkdir(clipsDir, { recursive: true });
+
+      const timestamp = new Date().toISOString();
+      const segments = await Promise.all(
+        uploads.map(async ({ file, userId, username }, index) => {
+          const extension = path.extname(file.name).toLowerCase();
+          const segmentId = `${index}-${randomUUID()}`;
+          const audioFile = `clips/${segmentId}${extension}`;
+          await pipeline(
+            Readable.fromWeb(file.stream() as unknown as Parameters<typeof Readable.fromWeb>[0]),
+            createWriteStream(path.join(sessionDir, audioFile)),
+          );
+          return { segmentId, audioFile, timestamp, userId, username };
+        }),
       );
-    } finally {
+
+      const runId = await startRecordingSession({
+        id: sessionId,
+        channelId: "manual",
+        campaignId: params.id,
+        sessionDir,
+      });
+
+      await Promise.all(segments.map((segment) => registerAudioSegment(sessionId, runId, segment)));
+      await beginSessionShutdown(sessionId, runId);
+      const results = await Promise.allSettled(
+        segments.map((segment) =>
+          completeAudioSegment(sessionId, runId, path.join(sessionDir, segment.audioFile), segment),
+        ),
+      );
       await finishSessionShutdown(sessionId, runId);
+      const failedUpload = results.find(
+        (result): result is PromiseRejectedResult => result.status === "rejected",
+      );
+      if (failedUpload) {
+        throw failedUpload.reason;
+      }
+    } finally {
+      await rm(sessionDir, { recursive: true, force: true });
     }
 
     throw redirect(303, `/campaigns/${params.id}`);

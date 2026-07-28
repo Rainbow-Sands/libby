@@ -11,7 +11,7 @@ root `AGENTS.md` for workspace-wide conventions.
 - `session.ts` — voice join, per-activation recording, workflow signalling.
 - `recording.ts` — in-memory `activeSessions` map (keyed by guildId).
 - `recovery.ts` — rejoin/resume running sessions after a restart.
-- `env.ts` — asserts `DISCORD_TOKEN`, `DISCORD_APPLICATION_ID`, `MEDIA_PATH`.
+- `env.ts` — asserts Discord and S3-compatible storage configuration.
 
 ## Commands
 

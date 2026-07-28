@@ -17,11 +17,11 @@ export const stop = {
       return;
     }
 
-    const { segmentCount, sessionDir } = session;
+    const { segmentCount } = session;
     await session.end();
 
     await interaction.reply(
-      `Recording stopped. ${segmentCount} segment(s) recorded. Transcript and recap will be saved to \`${sessionDir}\`.`,
+      `Recording stopped. ${segmentCount} segment(s) recorded. Transcription and recap generation have started.`,
     );
   },
 };

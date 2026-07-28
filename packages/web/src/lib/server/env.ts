@@ -14,7 +14,6 @@ function get(name: string, fallback?: string): string {
 export const DISCORD_APPLICATION_ID = get("DISCORD_APPLICATION_ID");
 export const DISCORD_CLIENT_SECRET = get("DISCORD_CLIENT_SECRET");
 export const SESSION_SECRET = get("SESSION_SECRET");
-export const MEDIA_PATH = get("MEDIA_PATH");
 export const AUDIO_S3_REGION = get("AUDIO_S3_REGION");
 export const AUDIO_S3_BUCKET = get("AUDIO_S3_BUCKET");
 export const CHAT_INFERENCE_CONFIG = loadChatInferenceConfig(env, !building);

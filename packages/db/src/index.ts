@@ -24,13 +24,11 @@ export {
   getCampaignCast,
   getCampaignDetail,
   getSessionDetail,
-  getTranscriptRegenerationInput,
   type CampaignMember,
   type CampaignCastMember,
   type CampaignSessionSummary,
   type CampaignDetail,
   type SessionDetail,
-  type TranscriptRegenerationInput,
 } from "./queries.ts";
 export {
   beginClosingSession,

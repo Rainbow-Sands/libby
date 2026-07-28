@@ -2,6 +2,7 @@ import { Events, type Client, type VoiceBasedChannel, type VoiceState } from "di
 import { joinVoiceChannel, EndBehaviorType } from "@discordjs/voice";
 import prism from "prism-media";
 import { mkdirSync, statSync } from "fs";
+import { rm } from "node:fs/promises";
 import { spawn } from "child_process";
 import path from "path";
 import { randomUUID } from "node:crypto";
@@ -190,7 +191,6 @@ export function attachRecordingSession(
   initialSegmentCount = 0,
 ): void {
   mkdirSync(path.join(sessionDir, "clips"), { recursive: true });
-  mkdirSync(path.join(sessionDir, "transcripts"), { recursive: true });
 
   const connection = joinVoiceChannel({
     channelId,
@@ -219,7 +219,11 @@ export function attachRecordingSession(
 
       connection.destroy();
       setActiveSession(guildId, null);
-      await finishSessionShutdown(sessionId, runId);
+      try {
+        await finishSessionShutdown(sessionId, runId);
+      } finally {
+        await rm(sessionDir, { recursive: true, force: true });
+      }
       console.log(`[session] ended — ${guildId}:${sessionId}`);
     })();
 
@@ -273,12 +277,12 @@ export function attachRecordingSession(
       username,
     };
     const starting = (async () => {
-      await registerAudioSegment(sessionId, runId, sessionDir, ref);
+      await registerAudioSegment(sessionId, runId, ref);
       const activation = startActivation(
         sessionDir,
         ref,
         connection,
-        () => completeAudioSegment(sessionId, runId, sessionDir, ref),
+        () => completeAudioSegment(sessionId, runId, path.join(sessionDir, ref.audioFile), ref),
         (reason) => discardAudioSegment(sessionId, runId, segmentId, reason),
       );
       activeActivations.set(userId, activation);
