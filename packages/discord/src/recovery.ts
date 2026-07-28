@@ -18,15 +18,12 @@ async function recoverSegments(
   for (const segment of segments) {
     if (segment.runId !== runId) continue;
     if (segment.audioStatus === "ready") {
-      if (["pending", "processing"].includes(segment.transcriptionStatus ?? "")) {
-        await completeAudioSegment(sessionId, runId, segment.segmentId);
-      }
       continue;
     }
 
     const audioPath = path.join(sessionDir, segment.audioFile);
     if (hasMeaningfulAudio(audioPath)) {
-      await completeAudioSegment(sessionId, runId, segment.segmentId);
+      await completeAudioSegment(sessionId, runId, sessionDir, segment);
     } else {
       await discardAudioSegment(
         sessionId,

@@ -9,7 +9,7 @@ Drizzle ORM schema, Postgres client, and all shared queries. See the root
 - `client.ts` — the `db` instance.
 - `campaigns.ts` — campaign/member mutations.
 - `queries.ts` — read queries used by web and workers.
-- `processing.ts` — durable recording/run/segment state transitions for BullMQ.
+- `processing.ts` — durable recording/run/segment state transitions and leases.
 - `transcript.ts` — the `Transcript`/`TranscriptSegment` JSON shape stored in
   `sessions.transcript`, plus display and inference formatting transforms.
 - `index.ts` — the package's **public API**. Export anything other packages need
@@ -66,4 +66,4 @@ pnpm --filter @rainbot/db db:migrate    # applies to the DB in DATABASE_URL
   the DM). The cast legend and player management depend on these.
 - `users.is_admin` grants application-wide visibility into every campaign and
   is managed manually.
-- Processing writes use conditional transitions so duplicate BullMQ delivery is safe.
+- Processing writes use conditional transitions so expired leases and repeated work are safe.

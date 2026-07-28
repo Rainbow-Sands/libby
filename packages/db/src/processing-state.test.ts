@@ -41,5 +41,10 @@ describe("transcription completion barrier", () => {
     expect(
       evaluateTranscriptionBarrier("run-1", [{ ...completed, transcriptionStatus: "failed" }]),
     ).toBe("failed");
+    expect(
+      evaluateTranscriptionBarrier("run-1", [
+        { ...completed, audioStatus: "failed", transcriptionStatus: "failed" },
+      ]),
+    ).toBe("failed");
   });
 });

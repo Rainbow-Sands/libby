@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { UnrecoverableError } from "bullmq";
 import { DISCORD_TOKEN, WEB_URL } from "./env.ts";
+import { UnrecoverableTaskError } from "./errors.ts";
 
 interface SessionNotification {
   channelId: string;
@@ -36,7 +36,7 @@ export async function postSessionLink(input: SessionNotification): Promise<void>
   const detail = await response.text();
   const message = `Discord rejected the session notification (${response.status}): ${detail}`;
   if (response.status >= 400 && response.status < 500 && response.status !== 429) {
-    throw new UnrecoverableError(message);
+    throw new UnrecoverableTaskError(message);
   }
   throw new Error(message);
 }

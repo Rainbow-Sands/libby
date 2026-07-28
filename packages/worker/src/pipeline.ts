@@ -1,10 +1,13 @@
+import { existsSync } from "node:fs";
+import { unlink } from "node:fs/promises";
+import path from "node:path";
 import {
   beginClosingSession,
-  claimAggregationIfReady,
   createRecordingSession,
   finishClosingSession,
   getAudioSegmentRefs,
   getTranscriptRegenerationInput,
+  markSegmentAudioFailed,
   markSegmentDiscarded,
   markSegmentReady,
   registerRecordingSegment,
@@ -14,22 +17,51 @@ import {
   type CreateRecordingSessionInput,
 } from "@rainbot/db";
 import { loadSegmentMetadata, persistSegmentMetadata } from "./segment-metadata.ts";
-import {
-  enqueueAggregation,
-  enqueueSummarization,
-  enqueueTranscription,
-  enqueueTranscriptions,
-} from "./queues.ts";
+import { audioObjectKey, getAudioStorage } from "./storage.ts";
 
-async function publish(description: string, operation: () => Promise<void>): Promise<void> {
-  try {
-    await operation();
-  } catch (error) {
-    // Postgres already contains enough state for worker reconciliation to
-    // publish this job later. Do not turn a brief Redis outage into lost audio
-    // or a misleading failed upload.
-    console.error(`[queue] ${description} will be retried by reconciliation:`, error);
+function audioMimeType(filename: string): string {
+  switch (path.extname(filename).toLowerCase()) {
+    case ".mp3":
+      return "audio/mpeg";
+    case ".wav":
+      return "audio/wav";
+    case ".m4a":
+    case ".mp4":
+      return "audio/mp4";
+    case ".webm":
+      return "audio/webm";
+    case ".flac":
+      return "audio/flac";
+    default:
+      return "audio/ogg";
   }
+}
+
+function s3Ref(sessionId: string, ref: AudioSegmentRef): AudioSegmentRef {
+  return {
+    ...ref,
+    audioStorage: "s3",
+    audioObjectKey: ref.audioObjectKey ?? audioObjectKey(sessionId, ref.segmentId, ref.audioFile),
+  };
+}
+
+async function uploadWithRetry(
+  objectKey: string,
+  localPath: string,
+  contentType: string,
+): Promise<{ objectKey: string; byteSize: number }> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      return await getAudioStorage().uploadFile(objectKey, localPath, contentType);
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, 1_000 * 2 ** (attempt - 1)));
+      }
+    }
+  }
+  throw lastError;
 }
 
 export async function startRecordingSession(input: CreateRecordingSessionInput): Promise<string> {
@@ -42,12 +74,12 @@ export async function registerAudioSegment(
   sessionDir: string,
   ref: AudioSegmentRef,
 ): Promise<void> {
-  await registerRecordingSegment(sessionId, runId, ref);
+  await registerRecordingSegment(sessionId, runId, s3Ref(sessionId, ref));
   try {
     persistSegmentMetadata(sessionDir, ref);
   } catch (error) {
-    // The DB row is authoritative; this sidecar only supports older sessions
-    // and manual filesystem inspection.
+    // Postgres is authoritative. This sidecar only supports legacy local
+    // recordings while existing deployments migrate to object storage.
     console.error(`[segment] could not write compatibility metadata for ${ref.segmentId}:`, error);
   }
 }
@@ -55,12 +87,30 @@ export async function registerAudioSegment(
 export async function completeAudioSegment(
   sessionId: string,
   runId: string,
-  segmentId: string,
+  sessionDir: string,
+  ref: AudioSegmentRef,
 ): Promise<void> {
-  await markSegmentReady(sessionId, runId, segmentId);
-  await publish(`transcription ${runId}/${segmentId}`, () =>
-    enqueueTranscription({ runId, sessionId, segmentId }),
-  );
+  const localPath = path.join(sessionDir, ref.audioFile);
+  const stored = s3Ref(sessionId, ref);
+  if (!stored.audioObjectKey) throw new Error(`No object key for segment ${ref.segmentId}`);
+
+  try {
+    const uploaded = await uploadWithRetry(
+      stored.audioObjectKey,
+      localPath,
+      audioMimeType(ref.audioFile),
+    );
+    await markSegmentReady(sessionId, runId, ref.segmentId, {
+      storage: "s3",
+      objectKey: uploaded.objectKey,
+      byteSize: uploaded.byteSize,
+    });
+    await unlink(localPath).catch(() => undefined);
+  } catch (error) {
+    const message = error instanceof Error ? error.stack || error.message : String(error);
+    await markSegmentAudioFailed(sessionId, runId, ref.segmentId, message);
+    throw error;
+  }
 }
 
 export async function discardAudioSegment(
@@ -78,19 +128,10 @@ export async function beginSessionShutdown(sessionId: string, runId: string): Pr
 
 export async function finishSessionShutdown(sessionId: string, runId: string): Promise<void> {
   await finishClosingSession(sessionId, runId);
-  await scheduleAggregationIfReady(runId);
-}
-
-export async function scheduleAggregationIfReady(runId: string): Promise<boolean> {
-  const claimed = await claimAggregationIfReady(runId);
-  if (claimed) await publish(`aggregation ${runId}`, () => enqueueAggregation(runId));
-  return claimed;
 }
 
 export async function requestInferenceRegeneration(sessionId: string): Promise<string> {
-  const runId = await startInferenceRegeneration(sessionId);
-  await publish(`summarization ${runId}`, () => enqueueSummarization(runId));
-  return runId;
+  return startInferenceRegeneration(sessionId);
 }
 
 export async function requestTranscriptRegeneration(sessionId: string): Promise<string> {
@@ -98,13 +139,11 @@ export async function requestTranscriptRegeneration(sessionId: string): Promise<
   if (refs.length === 0) {
     const session = await getTranscriptRegenerationInput(sessionId);
     if (!session) throw new Error(`Session ${sessionId} was not found`);
-    refs = loadSegmentMetadata(session.sessionDir, session.transcript);
+    refs = loadSegmentMetadata(session.sessionDir, session.transcript).filter((ref) =>
+      existsSync(path.join(session.sessionDir, ref.audioFile)),
+    );
   }
 
-  const { runId, segmentIds } = await startTranscriptRegeneration(sessionId, refs);
-  await publish(`retranscription ${runId}`, () =>
-    enqueueTranscriptions(segmentIds.map((segmentId) => ({ runId, sessionId, segmentId }))),
-  );
-  await scheduleAggregationIfReady(runId);
+  const { runId } = await startTranscriptRegeneration(sessionId, refs);
   return runId;
 }

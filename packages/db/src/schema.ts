@@ -1,6 +1,8 @@
 import {
+  bigint,
   boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   primaryKey,
@@ -110,19 +112,25 @@ export const processingRuns = pgTable(
     notificationChannelId: varchar("notification_channel_id", { length: 20 }),
     notificationStatus: varchar("notification_status", { length: 20 }),
     error: text("error"),
+    availableAt: timestamp("available_at").defaultNow().notNull(),
+    lockedBy: text("locked_by"),
+    leaseExpiresAt: timestamp("lease_expires_at"),
+    attemptCount: integer("attempt_count").default(0).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
     finishedAt: timestamp("finished_at"),
   },
   (t) => [
+    index("processing_runs_queue_idx").on(t.status, t.availableAt, t.leaseExpiresAt),
     index("processing_runs_status_idx").on(t.status),
     index("processing_runs_session_idx").on(t.sessionId),
   ],
 );
 
-// Audio metadata is permanent. Transcription state/result belongs to the run
-// currently named by transcriptionRunId, which prevents a stale BullMQ job
-// from overwriting a newer regeneration.
+// Audio metadata is the durable manifest for a session. New audio is stored in
+// S3-compatible object storage; audioFile remains the recorder-local relative
+// path so an interrupted recording can be recovered before upload. Existing
+// rows default to local storage and remain readable during migration.
 export const sessionSegments = pgTable(
   "session_segments",
   {
@@ -131,6 +139,10 @@ export const sessionSegments = pgTable(
       .notNull(),
     segmentId: varchar("segment_id", { length: 100 }).notNull(),
     audioFile: text("audio_file").notNull(),
+    audioStorage: varchar("audio_storage", { length: 20 }).default("local").notNull(),
+    audioObjectKey: text("audio_object_key"),
+    audioByteSize: bigint("audio_byte_size", { mode: "number" }),
+    audioDeletedAt: timestamp("audio_deleted_at"),
     recordedAt: text("recorded_at").notNull(),
     userId: varchar("user_id", { length: 20 }).notNull(),
     username: text("username"),
@@ -148,5 +160,6 @@ export const sessionSegments = pgTable(
     primaryKey({ columns: [t.sessionId, t.segmentId] }),
     index("session_segments_run_status_idx").on(t.transcriptionRunId, t.transcriptionStatus),
     index("session_segments_session_audio_idx").on(t.sessionId, t.audioStatus),
+    index("session_segments_audio_status_idx").on(t.audioStatus),
   ],
 );

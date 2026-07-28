@@ -7,15 +7,15 @@ each `packages/*/AGENTS.md`.
 
 **rainbot-sands** is a Discord bot that records tabletop RPG sessions, transcribes
 them with whisper.cpp, and generates summaries/recaps/titles with local or cloud
-models. BullMQ executes jobs, PostgreSQL owns durable processing state, and a
-SvelteKit web app displays the results.
+models. PostgreSQL owns the durable processing queue and state, S3-compatible
+object storage holds activation audio, and a SvelteKit web app displays results.
 
 ## Architecture / data flow
 
 ```
 Discord voice ──/start──▶ Postgres session + processing run
    │  per voice activation             │
-   │  ogg/opus clip ───────────────────▶ BullMQ transcription jobs [parallel]
+   │  ogg/opus clip ───────────────▶ private S3-compatible object storage
    │                                    ▼
    └──/stop or empty channel──▶ aggregate ▶ detailed record ▶ recap ▶ title
                                             ▼
@@ -23,9 +23,9 @@ Discord voice ──/start──▶ Postgres session + processing run
 ```
 
 - The **discord** bot records audio; every activation is registered in Postgres
-  before recording and submitted to BullMQ after its file closes.
-- The **worker** package owns the BullMQ producers and workers. Postgres is the
-  authoritative state machine; Redis holds pending execution only.
+  before recording and uploaded after its file closes.
+- The **worker** package claims session processing runs from Postgres with
+  leases and processes their activation manifests with bounded concurrency.
 - The **db** package is the single source of truth for the schema and all queries.
 - The **web** app is read-only over the same database.
 
@@ -33,12 +33,12 @@ Discord voice ──/start──▶ Postgres session + processing run
 
 pnpm workspace; packages depend on each other via `workspace:*`.
 
-| Package            | Role                                                               |
-| ------------------ | ------------------------------------------------------------------ |
-| `@rainbot/db`      | Drizzle schema + Postgres client + queries                         |
-| `@rainbot/discord` | Discord bot, voice recording, session recovery                     |
-| `@rainbot/worker`  | BullMQ producers/workers: transcribe, aggregate, inference, notify |
-| `@rainbot/web`     | SvelteKit frontend (Discord OAuth)                                 |
+| Package            | Role                                                              |
+| ------------------ | ----------------------------------------------------------------- |
+| `@rainbot/db`      | Drizzle schema + Postgres client + queries                        |
+| `@rainbot/discord` | Discord bot, voice recording, session recovery                    |
+| `@rainbot/worker`  | Postgres session worker: transcribe, aggregate, inference, notify |
+| `@rainbot/web`     | SvelteKit frontend (Discord OAuth)                                |
 
 ## Runtime & tooling — read before writing code
 
@@ -78,12 +78,12 @@ when adding a variable. The full table is in `README.md`.
 `docker-compose.yml` runs everything from prebuilt GHCR images. The
 `.github/workflows/deploy.yml` matrix builds one image per package. `db-migrate`
 runs Drizzle migrations before application services start. External
-dependencies: PostgreSQL, persistent Redis, whisper.cpp server, an optional
+dependencies: PostgreSQL, S3-compatible object storage, whisper.cpp server, an optional
 local/cloud language model provider, and ffmpeg (in the discord image).
 
 ## Cross-cutting conventions
 
-- **Idempotency:** BullMQ is at-least-once in the worst case. Stable job IDs and
-  conditional DB transitions make every processing step safe to repeat.
+- **Idempotency:** Worker leases can expire and work may be repeated.
+  Conditional DB transitions make every processing step safe to repeat.
 - **Don't commit secrets.** `.env` and `media/` are gitignored.
 - **Only commit/push when asked.** If asked, branch off `main` first.

@@ -1,0 +1,2 @@
+CREATE INDEX "processing_runs_queue_idx" ON "processing_runs" USING btree ("status","available_at","lease_expires_at");--> statement-breakpoint
+CREATE INDEX "session_segments_audio_status_idx" ON "session_segments" USING btree ("audio_status");

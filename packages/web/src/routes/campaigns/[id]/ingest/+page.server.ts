@@ -113,7 +113,7 @@ export const actions: Actions = {
     await beginSessionShutdown(sessionId, runId);
     try {
       await Promise.all(
-        segments.map((segment) => completeAudioSegment(sessionId, runId, segment.segmentId)),
+        segments.map((segment) => completeAudioSegment(sessionId, runId, sessionDir, segment)),
       );
     } finally {
       await finishSessionShutdown(sessionId, runId);

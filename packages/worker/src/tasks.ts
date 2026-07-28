@@ -1,8 +1,8 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
-import path from "path";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { APICallError } from "ai";
-import { UnrecoverableError } from "bullmq";
 import type { SegmentRef } from "./types.ts";
+import { UnrecoverableTaskError } from "./errors.ts";
 import { SUMMARIZATION_CONFIG, TRANSCRIPTION_MODEL, TRANSCRIPTION_URL } from "./env.ts";
 import { TITLE_SYSTEM } from "./prompts.ts";
 import { stripCodeFence, normalizeTitle } from "./text.ts";
@@ -44,12 +44,11 @@ function audioMimeType(audioPath: string): string {
 // ── Transcription ─────────────────────────────────────────────────────────────
 
 export async function transcribeSegment(
-  sessionDir: string,
+  audioPath: string,
   ref: SegmentRef,
 ): Promise<TranscriptSegment | null> {
-  const audioPath = path.join(sessionDir, ref.audioFile);
   if (!existsSync(audioPath)) {
-    throw new UnrecoverableError(`Audio file not found: ${ref.audioFile}`);
+    throw new UnrecoverableTaskError(`Audio file not found: ${ref.audioFile}`);
   }
   const form = new FormData();
   form.append(
@@ -68,7 +67,7 @@ export async function transcribeSegment(
   });
 
   if (res.status >= 400 && res.status < 500) {
-    throw new UnrecoverableError(`Whisper rejected the request: ${res.status}`);
+    throw new UnrecoverableTaskError(`Whisper rejected the request: ${res.status}`);
   }
   if (!res.ok) throw new Error(`Whisper server returned ${res.status}`);
 
@@ -101,11 +100,6 @@ export async function transcribeSegment(
     whisper: result,
   };
 
-  const outDir = path.join(sessionDir, "transcripts");
-  mkdirSync(outDir, { recursive: true });
-  const outPath = path.join(outDir, `${ref.segmentId}.json`);
-  writeFileSync(outPath, JSON.stringify(segment, null, 2), "utf8");
-
   return segment;
 }
 
@@ -118,7 +112,7 @@ async function inferenceComplete(prompt: string, system: string): Promise<string
       `[inference] ${data.provider}/${data.model}: ${data.inputTokens ?? "?"} input tokens, ${data.outputTokens ?? "?"} output tokens`,
     );
     if (data.finishReason === "length") {
-      throw new UnrecoverableError(
+      throw new UnrecoverableTaskError(
         "Inference output reached the provider or model output limit and was truncated",
       );
     }
@@ -127,7 +121,7 @@ async function inferenceComplete(prompt: string, system: string): Promise<string
     return content;
   } catch (error) {
     if (APICallError.isInstance(error) && !error.isRetryable) {
-      throw new UnrecoverableError(
+      throw new UnrecoverableTaskError(
         `Summarization provider rejected the request${error.statusCode ? ` (${error.statusCode})` : ""}: ${error.message}`,
       );
     }

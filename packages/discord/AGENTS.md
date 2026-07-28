@@ -33,7 +33,9 @@ management commands use `commands/guard.ts` (`requireDmOfCampaign`).
 - Gateway intents: `Guilds` and `GuildVoiceStates` (voice state cache is how we
   find the caller's channel and resolve usernames).
 - Each voice activation is registered in Postgres before recording, becomes one
-  ogg/opus clip via **ffmpeg**, and is then submitted to BullMQ.
+  ogg/opus clip via **ffmpeg**, and is uploaded to S3-compatible object storage.
+- Activations are not transcribed live. Closing a session makes its durable
+  processing run claimable by the Postgres worker.
 - Session shutdown first stops new activations, then finalizes all active
   receiver/decoder/ffmpeg pipelines before closing the durable session. Keep
   this ordering so speech in progress during `/stop` or auto-end is retained.

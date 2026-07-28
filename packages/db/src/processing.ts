@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, notInArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
 import { db } from "./client.ts";
 import { evaluateTranscriptionBarrier } from "./processing-state.ts";
 import { processingRuns, sessionSegments, sessions } from "./schema.ts";
@@ -8,6 +8,9 @@ import type { Transcript, TranscriptSegment } from "./transcript.ts";
 export interface AudioSegmentRef {
   segmentId: string;
   audioFile: string;
+  audioStorage?: "local" | "s3";
+  audioObjectKey?: string;
+  audioByteSize?: number;
   timestamp: string;
   userId: string;
   username?: string;
@@ -105,6 +108,9 @@ export async function registerRecordingSegment(
         sessionId,
         segmentId: ref.segmentId,
         audioFile: ref.audioFile,
+        audioStorage: ref.audioStorage ?? "local",
+        audioObjectKey: ref.audioObjectKey,
+        audioByteSize: ref.audioByteSize,
         recordedAt: ref.timestamp,
         userId: ref.userId,
         username: ref.username,
@@ -119,14 +125,45 @@ export async function markSegmentReady(
   sessionId: string,
   runId: string,
   segmentId: string,
+  audio?: { storage: "local" | "s3"; objectKey?: string; byteSize?: number },
 ): Promise<void> {
   await db
     .update(sessionSegments)
     .set({
       audioStatus: "ready",
+      ...(audio
+        ? {
+            audioStorage: audio.storage,
+            audioObjectKey: audio.objectKey,
+            audioByteSize: audio.byteSize,
+          }
+        : {}),
       transcriptionStatus: "pending",
       transcript: null,
       error: null,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(sessionSegments.sessionId, sessionId),
+        eq(sessionSegments.segmentId, segmentId),
+        eq(sessionSegments.transcriptionRunId, runId),
+      ),
+    );
+}
+
+export async function markSegmentAudioFailed(
+  sessionId: string,
+  runId: string,
+  segmentId: string,
+  message: string,
+): Promise<void> {
+  await db
+    .update(sessionSegments)
+    .set({
+      audioStatus: "failed",
+      transcriptionStatus: "failed",
+      error: message,
       updatedAt: new Date(),
     })
     .where(
@@ -228,53 +265,81 @@ export interface SegmentForTranscription extends AudioSegmentRef {
   sessionDir: string;
 }
 
-export async function getSegmentForTranscription(
+export async function listSegmentsForTranscription(
   runId: string,
-  sessionId: string,
-  segmentId: string,
-): Promise<SegmentForTranscription | null> {
-  const [row] = await db
+  limit = 200,
+): Promise<SegmentForTranscription[]> {
+  const rows = await db
     .select({
       sessionId: sessionSegments.sessionId,
       runId: sessionSegments.transcriptionRunId,
       segmentId: sessionSegments.segmentId,
       audioFile: sessionSegments.audioFile,
+      audioStorage: sessionSegments.audioStorage,
+      audioObjectKey: sessionSegments.audioObjectKey,
+      audioByteSize: sessionSegments.audioByteSize,
       timestamp: sessionSegments.recordedAt,
       userId: sessionSegments.userId,
       username: sessionSegments.username,
       sessionDir: sessions.sessionDir,
-      audioStatus: sessionSegments.audioStatus,
-      transcriptionStatus: sessionSegments.transcriptionStatus,
     })
     .from(sessionSegments)
     .innerJoin(sessions, eq(sessionSegments.sessionId, sessions.id))
     .where(
       and(
-        eq(sessionSegments.sessionId, sessionId),
-        eq(sessionSegments.segmentId, segmentId),
         eq(sessionSegments.transcriptionRunId, runId),
+        eq(sessionSegments.audioStatus, "ready"),
+        inArray(sessionSegments.transcriptionStatus, ["pending", "processing"]),
       ),
     )
-    .limit(1);
+    .orderBy(asc(sessionSegments.recordedAt), asc(sessionSegments.segmentId))
+    .limit(limit);
 
-  if (
-    !row ||
-    row.runId === null ||
-    row.audioStatus !== "ready" ||
-    !["pending", "processing"].includes(row.transcriptionStatus ?? "")
-  ) {
-    return null;
-  }
-  return {
-    sessionId: row.sessionId,
-    runId: row.runId,
-    segmentId: row.segmentId,
-    audioFile: row.audioFile,
-    timestamp: row.timestamp,
-    userId: row.userId,
-    ...(row.username ? { username: row.username } : {}),
-    sessionDir: row.sessionDir,
-  };
+  return rows
+    .filter((row): row is typeof row & { runId: string } => row.runId !== null)
+    .map((row) => ({
+      sessionId: row.sessionId,
+      runId: row.runId,
+      segmentId: row.segmentId,
+      audioFile: row.audioFile,
+      audioStorage: row.audioStorage as "local" | "s3",
+      ...(row.audioObjectKey ? { audioObjectKey: row.audioObjectKey } : {}),
+      ...(row.audioByteSize !== null ? { audioByteSize: row.audioByteSize } : {}),
+      timestamp: row.timestamp,
+      userId: row.userId,
+      ...(row.username ? { username: row.username } : {}),
+      sessionDir: row.sessionDir,
+    }));
+}
+
+export async function markSegmentAudioDeleted(sessionId: string, segmentId: string): Promise<void> {
+  await db
+    .update(sessionSegments)
+    .set({ audioStatus: "deleted", audioDeletedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(sessionSegments.sessionId, sessionId), eq(sessionSegments.segmentId, segmentId)));
+}
+
+export async function listAudioPendingDeletion(
+  limit = 200,
+): Promise<{ sessionId: string; segmentId: string; objectKey: string }[]> {
+  const rows = await db
+    .select({
+      sessionId: sessionSegments.sessionId,
+      segmentId: sessionSegments.segmentId,
+      objectKey: sessionSegments.audioObjectKey,
+    })
+    .from(sessionSegments)
+    .where(
+      and(
+        eq(sessionSegments.audioStorage, "s3"),
+        eq(sessionSegments.audioStatus, "deletion_pending"),
+      ),
+    )
+    .limit(limit);
+  return rows.filter(
+    (row): row is { sessionId: string; segmentId: string; objectKey: string } =>
+      row.objectKey !== null,
+  );
 }
 
 export async function markTranscriptionProcessing(
@@ -302,12 +367,14 @@ export async function completeSegmentTranscription(
   sessionId: string,
   segmentId: string,
   transcript: TranscriptSegment | null,
+  deleteAudio = false,
 ): Promise<void> {
   await db
     .update(sessionSegments)
     .set({
       transcriptionStatus: "completed",
       transcript,
+      ...(deleteAudio ? { audioStatus: "deletion_pending" } : {}),
       error: null,
       updatedAt: new Date(),
     })
@@ -338,15 +405,6 @@ export async function failSegmentTranscription(
     )
     .returning({ segmentId: sessionSegments.segmentId });
   if (!updated) return;
-
-  const [run] = await db
-    .select({ status: processingRuns.status })
-    .from(processingRuns)
-    .where(eq(processingRuns.id, runId))
-    .limit(1);
-  // A bad activation should not stop an otherwise healthy live recording.
-  // Session shutdown observes the failed row and marks the run failed then.
-  if (run?.status !== "recording") await failProcessingRun(runId, message);
 }
 
 export async function claimAggregationIfReady(runId: string): Promise<boolean> {
@@ -426,6 +484,9 @@ export interface ProcessingRunData {
   title: string | null;
   notificationChannelId: string | null;
   notificationStatus: string | null;
+  lockedBy: string | null;
+  leaseExpiresAt: Date | null;
+  attemptCount: number;
 }
 
 export async function getProcessingRun(runId: string): Promise<ProcessingRunData | null> {
@@ -443,12 +504,104 @@ export async function getProcessingRun(runId: string): Promise<ProcessingRunData
       title: processingRuns.title,
       notificationChannelId: processingRuns.notificationChannelId,
       notificationStatus: processingRuns.notificationStatus,
+      lockedBy: processingRuns.lockedBy,
+      leaseExpiresAt: processingRuns.leaseExpiresAt,
+      attemptCount: processingRuns.attemptCount,
     })
     .from(processingRuns)
     .innerJoin(sessions, eq(processingRuns.sessionId, sessions.id))
     .where(eq(processingRuns.id, runId))
     .limit(1);
   return run ?? null;
+}
+
+const RUNNABLE_STATUSES = [
+  "transcribing",
+  "aggregating",
+  "summarizing",
+  "recapping",
+  "titling",
+  "done",
+] as const;
+
+export async function claimProcessingRuns(
+  workerId: string,
+  limit: number,
+  leaseMilliseconds: number,
+): Promise<string[]> {
+  return db.transaction(async (tx) => {
+    const now = new Date();
+    const candidates = await tx
+      .select({ id: processingRuns.id })
+      .from(processingRuns)
+      .where(
+        and(
+          inArray(processingRuns.status, [...RUNNABLE_STATUSES]),
+          or(
+            notInArray(processingRuns.status, ["done"]),
+            eq(processingRuns.notificationStatus, "pending"),
+          ),
+          lt(processingRuns.availableAt, new Date(now.getTime() + 1)),
+          or(isNull(processingRuns.leaseExpiresAt), lt(processingRuns.leaseExpiresAt, now)),
+        ),
+      )
+      .orderBy(asc(processingRuns.availableAt), asc(processingRuns.createdAt))
+      .limit(limit)
+      .for("update", { skipLocked: true });
+
+    if (candidates.length === 0) return [];
+    const ids = candidates.map((candidate) => candidate.id);
+    await tx
+      .update(processingRuns)
+      .set({
+        lockedBy: workerId,
+        leaseExpiresAt: new Date(now.getTime() + leaseMilliseconds),
+        attemptCount: sql`${processingRuns.attemptCount} + 1`,
+        updatedAt: now,
+      })
+      .where(inArray(processingRuns.id, ids));
+    return ids;
+  });
+}
+
+export async function renewProcessingRunLease(
+  runId: string,
+  workerId: string,
+  leaseMilliseconds: number,
+): Promise<boolean> {
+  const rows = await db
+    .update(processingRuns)
+    .set({
+      leaseExpiresAt: new Date(Date.now() + leaseMilliseconds),
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(processingRuns.id, runId),
+        eq(processingRuns.lockedBy, workerId),
+        notInArray(processingRuns.status, ["done", "failed"]),
+      ),
+    )
+    .returning({ id: processingRuns.id });
+  return rows.length > 0;
+}
+
+export async function releaseProcessingRun(
+  runId: string,
+  workerId: string,
+  retryDelayMilliseconds = 0,
+  error?: string,
+): Promise<void> {
+  await db
+    .update(processingRuns)
+    .set({
+      lockedBy: null,
+      leaseExpiresAt: null,
+      availableAt: new Date(Date.now() + retryDelayMilliseconds),
+      ...(error ? { error } : {}),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(processingRuns.id, runId), eq(processingRuns.lockedBy, workerId)));
 }
 
 export async function storeAggregatedTranscript(
@@ -577,6 +730,9 @@ export async function getAudioSegmentRefs(sessionId: string): Promise<AudioSegme
     .select({
       segmentId: sessionSegments.segmentId,
       audioFile: sessionSegments.audioFile,
+      audioStorage: sessionSegments.audioStorage,
+      audioObjectKey: sessionSegments.audioObjectKey,
+      audioByteSize: sessionSegments.audioByteSize,
       timestamp: sessionSegments.recordedAt,
       userId: sessionSegments.userId,
       username: sessionSegments.username,
@@ -592,6 +748,9 @@ export async function getAudioSegmentRefs(sessionId: string): Promise<AudioSegme
       rows.map((row) => ({
         segmentId: row.segmentId,
         audioFile: row.audioFile,
+        audioStorage: row.audioStorage as "local" | "s3",
+        ...(row.audioObjectKey ? { audioObjectKey: row.audioObjectKey } : {}),
+        ...(row.audioByteSize !== null ? { audioByteSize: row.audioByteSize } : {}),
         timestamp: row.timestamp,
         userId: row.userId,
         ...(row.username ? { username: row.username } : {}),
@@ -610,6 +769,9 @@ export async function getAudioSegmentsForRecovery(sessionId: string): Promise<
     .select({
       segmentId: sessionSegments.segmentId,
       audioFile: sessionSegments.audioFile,
+      audioStorage: sessionSegments.audioStorage,
+      audioObjectKey: sessionSegments.audioObjectKey,
+      audioByteSize: sessionSegments.audioByteSize,
       timestamp: sessionSegments.recordedAt,
       userId: sessionSegments.userId,
       username: sessionSegments.username,
@@ -627,6 +789,9 @@ export async function getAudioSegmentsForRecovery(sessionId: string): Promise<
   return rows.map((row) => ({
     segmentId: row.segmentId,
     audioFile: row.audioFile,
+    audioStorage: row.audioStorage as "local" | "s3",
+    ...(row.audioObjectKey ? { audioObjectKey: row.audioObjectKey } : {}),
+    ...(row.audioByteSize !== null ? { audioByteSize: row.audioByteSize } : {}),
     timestamp: row.timestamp,
     userId: row.userId,
     ...(row.username ? { username: row.username } : {}),
@@ -665,6 +830,9 @@ export async function startTranscriptRegeneration(
           sessionId,
           segmentId: ref.segmentId,
           audioFile: ref.audioFile,
+          audioStorage: ref.audioStorage ?? "local",
+          audioObjectKey: ref.audioObjectKey,
+          audioByteSize: ref.audioByteSize,
           recordedAt: ref.timestamp,
           userId: ref.userId,
           username: ref.username,
@@ -676,6 +844,9 @@ export async function startTranscriptRegeneration(
           target: [sessionSegments.sessionId, sessionSegments.segmentId],
           set: {
             audioFile: ref.audioFile,
+            audioStorage: ref.audioStorage ?? "local",
+            audioObjectKey: ref.audioObjectKey,
+            audioByteSize: ref.audioByteSize,
             recordedAt: ref.timestamp,
             userId: ref.userId,
             username: ref.username,
@@ -695,90 +866,6 @@ export async function startTranscriptRegeneration(
       .where(eq(sessions.id, sessionId));
     return { runId, segmentIds: refs.map((ref) => ref.segmentId) };
   });
-}
-
-export async function listPendingTranscriptions(): Promise<
-  { runId: string; sessionId: string; segmentId: string }[]
-> {
-  const rows = await db
-    .select({
-      runId: sessionSegments.transcriptionRunId,
-      sessionId: sessionSegments.sessionId,
-      segmentId: sessionSegments.segmentId,
-    })
-    .from(sessionSegments)
-    .innerJoin(processingRuns, eq(sessionSegments.transcriptionRunId, processingRuns.id))
-    .where(
-      and(
-        inArray(sessionSegments.transcriptionStatus, ["pending", "processing"]),
-        inArray(processingRuns.status, ["recording", "transcribing"]),
-      ),
-    );
-  return rows.filter(
-    (row): row is { runId: string; sessionId: string; segmentId: string } => row.runId !== null,
-  );
-}
-
-export async function listInterruptedSegments(): Promise<
-  {
-    runId: string;
-    sessionId: string;
-    segmentId: string;
-    sessionDir: string;
-    audioFile: string;
-  }[]
-> {
-  const rows = await db
-    .select({
-      runId: sessionSegments.transcriptionRunId,
-      sessionId: sessionSegments.sessionId,
-      segmentId: sessionSegments.segmentId,
-      sessionDir: sessions.sessionDir,
-      audioFile: sessionSegments.audioFile,
-    })
-    .from(sessionSegments)
-    .innerJoin(sessions, eq(sessionSegments.sessionId, sessions.id))
-    .innerJoin(processingRuns, eq(sessionSegments.transcriptionRunId, processingRuns.id))
-    .where(
-      and(
-        eq(sessions.status, "transcribing"),
-        eq(processingRuns.status, "transcribing"),
-        eq(sessionSegments.audioStatus, "recording"),
-      ),
-    );
-  return rows.filter(
-    (
-      row,
-    ): row is {
-      runId: string;
-      sessionId: string;
-      segmentId: string;
-      sessionDir: string;
-      audioFile: string;
-    } => row.runId !== null,
-  );
-}
-
-export async function listRunsToReconcile(): Promise<
-  { id: string; status: string; notificationStatus: string | null }[]
-> {
-  return db
-    .select({
-      id: processingRuns.id,
-      status: processingRuns.status,
-      notificationStatus: processingRuns.notificationStatus,
-    })
-    .from(processingRuns)
-    .where(
-      inArray(processingRuns.status, [
-        "transcribing",
-        "aggregating",
-        "summarizing",
-        "recapping",
-        "titling",
-        "done",
-      ]),
-    );
 }
 
 export async function markNotificationComplete(runId: string): Promise<void> {

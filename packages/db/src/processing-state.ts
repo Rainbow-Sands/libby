@@ -13,9 +13,10 @@ export function evaluateTranscriptionBarrier(
   if (
     segments.some(
       (segment) =>
-        segment.audioStatus === "ready" &&
-        segment.transcriptionRunId === runId &&
-        segment.transcriptionStatus === "failed",
+        segment.audioStatus === "failed" ||
+        (segment.audioStatus === "ready" &&
+          segment.transcriptionRunId === runId &&
+          segment.transcriptionStatus === "failed"),
     )
   ) {
     return "failed";
@@ -23,7 +24,7 @@ export function evaluateTranscriptionBarrier(
 
   const unfinished = segments.some(
     (segment) =>
-      segment.audioStatus === "recording" ||
+      ["recording", "uploading"].includes(segment.audioStatus) ||
       (segment.audioStatus === "ready" &&
         (segment.transcriptionRunId !== runId || segment.transcriptionStatus !== "completed")),
   );

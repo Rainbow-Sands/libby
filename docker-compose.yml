@@ -17,24 +17,6 @@ services:
       timeout: 5s
       retries: 10
 
-  redis:
-    image: redis:7-alpine
-    command:
-      - redis-server
-      - --appendonly
-      - "yes"
-      - --appendfsync
-      - everysec
-      - --maxmemory-policy
-      - noeviction
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
   # ── One-shot setup ──────────────────────────────────────────────────────────
 
   db-migrate:
@@ -53,14 +35,17 @@ services:
     depends_on:
       db-migrate:
         condition: service_completed_successfully
-      redis:
-        condition: service_healthy
     environment:
       DISCORD_TOKEN: ${DISCORD_TOKEN}
       DISCORD_APPLICATION_ID: ${DISCORD_APPLICATION_ID}
       MEDIA_PATH: /media
-      REDIS_URL: redis://redis:6379
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      AUDIO_S3_ENDPOINT: ${AUDIO_S3_ENDPOINT}
+      AUDIO_S3_REGION: ${AUDIO_S3_REGION}
+      AUDIO_S3_BUCKET: ${AUDIO_S3_BUCKET}
+      AUDIO_S3_ACCESS_KEY_ID: ${AUDIO_S3_ACCESS_KEY_ID}
+      AUDIO_S3_SECRET_ACCESS_KEY: ${AUDIO_S3_SECRET_ACCESS_KEY}
+      AUDIO_S3_FORCE_PATH_STYLE: ${AUDIO_S3_FORCE_PATH_STYLE}
     volumes:
       - media:/media
     restart: unless-stopped
@@ -70,10 +55,7 @@ services:
     depends_on:
       db-migrate:
         condition: service_completed_successfully
-      redis:
-        condition: service_healthy
     environment:
-      REDIS_URL: redis://redis:6379
       TRANSCRIPTION_URL: ${TRANSCRIPTION_URL}
       DISCORD_TOKEN: ${DISCORD_TOKEN}
       WEB_URL: ${ORIGIN}
@@ -85,9 +67,17 @@ services:
       SUMMARIZATION_REASONING_EFFORT: ${SUMMARIZATION_REASONING_EFFORT}
       SUMMARIZATION_THINKING_BUDGET: ${SUMMARIZATION_THINKING_BUDGET}
       TRANSCRIPTION_CONCURRENCY: ${TRANSCRIPTION_CONCURRENCY}
-      SUMMARIZATION_CONCURRENCY: ${SUMMARIZATION_CONCURRENCY}
+      PROCESSING_CONCURRENCY: ${PROCESSING_CONCURRENCY}
+      PROCESSING_MAX_ATTEMPTS: ${PROCESSING_MAX_ATTEMPTS}
+      DELETE_AUDIO_AFTER_TRANSCRIPTION: ${DELETE_AUDIO_AFTER_TRANSCRIPTION}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       MEDIA_PATH: /media
+      AUDIO_S3_ENDPOINT: ${AUDIO_S3_ENDPOINT}
+      AUDIO_S3_REGION: ${AUDIO_S3_REGION}
+      AUDIO_S3_BUCKET: ${AUDIO_S3_BUCKET}
+      AUDIO_S3_ACCESS_KEY_ID: ${AUDIO_S3_ACCESS_KEY_ID}
+      AUDIO_S3_SECRET_ACCESS_KEY: ${AUDIO_S3_SECRET_ACCESS_KEY}
+      AUDIO_S3_FORCE_PATH_STYLE: ${AUDIO_S3_FORCE_PATH_STYLE}
     volumes:
       - media:/media
     restart: unless-stopped
@@ -97,8 +87,6 @@ services:
     depends_on:
       db-migrate:
         condition: service_completed_successfully
-      redis:
-        condition: service_healthy
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       DISCORD_APPLICATION_ID: ${DISCORD_APPLICATION_ID}
@@ -111,8 +99,13 @@ services:
       CHAT_MODEL: ${CHAT_MODEL}
       CHAT_REASONING_EFFORT: ${CHAT_REASONING_EFFORT}
       CHAT_THINKING_BUDGET: ${CHAT_THINKING_BUDGET}
-      REDIS_URL: redis://redis:6379
       MEDIA_PATH: /media
+      AUDIO_S3_ENDPOINT: ${AUDIO_S3_ENDPOINT}
+      AUDIO_S3_REGION: ${AUDIO_S3_REGION}
+      AUDIO_S3_BUCKET: ${AUDIO_S3_BUCKET}
+      AUDIO_S3_ACCESS_KEY_ID: ${AUDIO_S3_ACCESS_KEY_ID}
+      AUDIO_S3_SECRET_ACCESS_KEY: ${AUDIO_S3_SECRET_ACCESS_KEY}
+      AUDIO_S3_FORCE_PATH_STYLE: ${AUDIO_S3_FORCE_PATH_STYLE}
       BODY_SIZE_LIMIT: ${BODY_SIZE_LIMIT:-10G}
     ports:
       - "3000:3000"
@@ -122,5 +115,4 @@ services:
 
 volumes:
   postgres_data:
-  redis_data:
   media:

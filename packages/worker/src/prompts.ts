@@ -1,4 +1,4 @@
-// System prompts shared by BullMQ workers and the standalone test script.
+// System prompts shared by the Postgres worker and the standalone test script.
 
 export const DETAILED_RECORD_SYSTEM = `Create a loss-minimized factual record from this complete tabletop RPG transcript. It will be treated as a canonical source for future inference, so completeness and fidelity matter more than brevity or literary style.
 

@@ -1,14 +1,14 @@
 # @rainbot/worker — AGENTS.md
 
-BullMQ producers and workers for the session pipeline. See the root `AGENTS.md`
-for workspace-wide conventions.
+Postgres-backed session processing and shared audio-storage operations. See the
+root `AGENTS.md` for workspace-wide conventions.
 
 ## Layout
 
-- `worker.ts` — process entrypoint; starts all workers and periodic reconciliation.
-- `workers.ts` — one BullMQ worker per job type.
-- `queues.ts` — queue names, Redis connection, stable job IDs, and producers.
+- `worker.ts` — process entrypoint and graceful shutdown.
+- `session-worker.ts` — claims leased processing runs and advances every stage.
 - `pipeline.ts` — public recording/regeneration transitions used by Discord/web.
+- `storage.ts` — S3-compatible activation upload/download/delete operations.
 - `tasks.ts` — whisper and inference calls.
 - `prompts.ts` / `text.ts` — shared prompts and response cleanup.
 - `summarization-inference.ts` — local/OpenAI/Anthropic provider configuration.
@@ -17,27 +17,19 @@ for workspace-wide conventions.
 
 ## Durable state
 
-Postgres, not Redis, is the source of truth:
+Postgres is both the queue and the source of truth:
 
 - `sessions.active_run_id` identifies the only run allowed to replace a session.
-- `processing_runs` holds intermediate transcript/report/recap/title output.
-- `session_segments` permanently records audio metadata and current
-  transcription state.
-- Aggregation is claimed with a conditional transaction only after recording is
-  closed and every ready segment for the active run is completed.
+- `processing_runs` holds leases and intermediate transcript/report/recap/title output.
+- `session_segments` is the audio manifest and per-activation transcription checkpoint.
+- Workers claim whole sessions, then process activation rows with bounded concurrency.
+- Never hold a database transaction open while calling Whisper or an LLM.
+- A lease may expire and duplicate work may occur. Keep transitions idempotent
+  and reject stale run IDs.
 
-Jobs carry IDs only. Keep large transcript and inference output in Postgres or
-media storage. Every processor must tolerate duplicate execution and must reject
-stale run IDs.
-
-## Queues and recovery
-
-Queues are deliberately separated by job type: transcription, aggregation,
-summarization, recap, title, and notification. A successful worker persists its
-output before enqueueing the next stage. `worker.ts` reconciles DB state back
-into BullMQ at startup and every minute, closing the DB/Redis crash window.
-
-Use stable job IDs. Do not include `:` in BullMQ job IDs.
+New activation audio uses private S3-compatible storage. Existing
+`audio_storage = 'local'` rows remain readable from `MEDIA_PATH` during
+migration. Store object keys in Postgres, never expiring signed URLs.
 
 ## Prompts and inference
 

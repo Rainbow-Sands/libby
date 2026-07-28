@@ -1,5 +1,5 @@
 // Standalone harness to exercise the summarization pipeline against a
-// transcript.txt, independent of Discord/BullMQ. Runs the exact same prompts
+// transcript.txt, independent of Discord/the Postgres worker. Runs the exact same prompts
 // and post-processing as the real workers, so what you see here is what the
 // pipeline would produce.
 //

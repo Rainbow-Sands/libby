@@ -278,7 +278,7 @@ export function attachRecordingSession(
         sessionDir,
         ref,
         connection,
-        () => completeAudioSegment(sessionId, runId, segmentId),
+        () => completeAudioSegment(sessionId, runId, sessionDir, ref),
         (reason) => discardAudioSegment(sessionId, runId, segmentId, reason),
       );
       activeActivations.set(userId, activation);

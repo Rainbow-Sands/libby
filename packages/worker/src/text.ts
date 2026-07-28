@@ -1,4 +1,4 @@
-// Post-processing shared by BullMQ workers and the standalone test script.
+// Post-processing shared by the Postgres worker and the standalone test script.
 
 // Models often wrap a markdown response in a ```markdown … ``` fence despite
 // being asked for raw markdown. Unwrap it, but only when the whole response is a

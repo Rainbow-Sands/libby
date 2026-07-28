@@ -1,6 +1,6 @@
 {
-  "id": "b9d8c154-70ef-4562-af51-b4dd1258c265",
-  "prevId": "9a28f125-31b8-4ef1-a158-c32788809368",
+  "id": "fdb37711-861a-4566-a336-a96f8c77f82e",
+  "prevId": "0c5ea5d9-935f-43fd-8953-b72a66fbd553",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -252,6 +252,32 @@
           "primaryKey": false,
           "notNull": false
         },
+        "available_at": {
+          "name": "available_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "locked_by": {
+          "name": "locked_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_expires_at": {
+          "name": "lease_expires_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "attempt_count": {
+          "name": "attempt_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -274,6 +300,33 @@
         }
       },
       "indexes": {
+        "processing_runs_queue_idx": {
+          "name": "processing_runs_queue_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "available_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lease_expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "processing_runs_status_idx": {
           "name": "processing_runs_status_idx",
           "columns": [
@@ -347,6 +400,31 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "audio_storage": {
+          "name": "audio_storage",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'local'"
+        },
+        "audio_object_key": {
+          "name": "audio_object_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "audio_byte_size": {
+          "name": "audio_byte_size",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "audio_deleted_at": {
+          "name": "audio_deleted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
         },
         "recorded_at": {
           "name": "recorded_at",
@@ -442,6 +520,21 @@
               "asc": true,
               "nulls": "last"
             },
+            {
+              "expression": "audio_status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "session_segments_audio_status_idx": {
+          "name": "session_segments_audio_status_idx",
+          "columns": [
             {
               "expression": "audio_status",
               "isExpression": false,

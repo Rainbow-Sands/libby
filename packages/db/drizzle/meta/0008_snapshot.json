@@ -1,6 +1,6 @@
 {
-  "id": "b9d8c154-70ef-4562-af51-b4dd1258c265",
-  "prevId": "9a28f125-31b8-4ef1-a158-c32788809368",
+  "id": "0c5ea5d9-935f-43fd-8953-b72a66fbd553",
+  "prevId": "b9d8c154-70ef-4562-af51-b4dd1258c265",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -40,12 +40,8 @@
           "name": "campaign_members_campaign_id_campaigns_id_fk",
           "tableFrom": "campaign_members",
           "tableTo": "campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["campaign_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -53,12 +49,8 @@
           "name": "campaign_members_user_id_users_id_fk",
           "tableFrom": "campaign_members",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -66,10 +58,7 @@
       "compositePrimaryKeys": {
         "campaign_members_campaign_id_user_id_pk": {
           "name": "campaign_members_campaign_id_user_id_pk",
-          "columns": [
-            "campaign_id",
-            "user_id"
-          ]
+          "columns": ["campaign_id", "user_id"]
         }
       },
       "uniqueConstraints": {},
@@ -127,12 +116,8 @@
           "name": "campaigns_guild_id_guilds_id_fk",
           "tableFrom": "campaigns",
           "tableTo": "guilds",
-          "columnsFrom": [
-            "guild_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["guild_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -252,6 +237,32 @@
           "primaryKey": false,
           "notNull": false
         },
+        "available_at": {
+          "name": "available_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "locked_by": {
+          "name": "locked_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_expires_at": {
+          "name": "lease_expires_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "attempt_count": {
+          "name": "attempt_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -310,12 +321,8 @@
           "name": "processing_runs_session_id_sessions_id_fk",
           "tableFrom": "processing_runs",
           "tableTo": "sessions",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -347,6 +354,31 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "audio_storage": {
+          "name": "audio_storage",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'local'"
+        },
+        "audio_object_key": {
+          "name": "audio_object_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "audio_byte_size": {
+          "name": "audio_byte_size",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "audio_deleted_at": {
+          "name": "audio_deleted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
         },
         "recorded_at": {
           "name": "recorded_at",
@@ -460,12 +492,8 @@
           "name": "session_segments_session_id_sessions_id_fk",
           "tableFrom": "session_segments",
           "tableTo": "sessions",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -473,12 +501,8 @@
           "name": "session_segments_transcription_run_id_processing_runs_id_fk",
           "tableFrom": "session_segments",
           "tableTo": "processing_runs",
-          "columnsFrom": [
-            "transcription_run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["transcription_run_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -486,10 +510,7 @@
       "compositePrimaryKeys": {
         "session_segments_session_id_segment_id_pk": {
           "name": "session_segments_session_id_segment_id_pk",
-          "columns": [
-            "session_id",
-            "segment_id"
-          ]
+          "columns": ["session_id", "segment_id"]
         }
       },
       "uniqueConstraints": {},
@@ -641,12 +662,8 @@
           "name": "sessions_campaign_id_campaigns_id_fk",
           "tableFrom": "sessions",
           "tableTo": "campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["campaign_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
