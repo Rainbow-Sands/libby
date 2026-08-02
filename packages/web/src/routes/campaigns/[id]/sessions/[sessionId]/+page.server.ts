@@ -7,6 +7,7 @@ import {
   isCampaignMember,
 } from "@rainbot/db";
 import { requestInferenceRegeneration, requestTranscriptRegeneration } from "@rainbot/worker";
+import { loadSessionDetailedRecord, loadSessionTranscript } from "$lib/server/session-artifacts";
 import type { Actions, PageServerLoad } from "./$types";
 
 function recapExcerpt(recap: string | null): string {
@@ -21,7 +22,7 @@ function recapExcerpt(recap: string | null): string {
   return `${plainText.slice(0, 279).trimEnd()}…`;
 }
 
-export const load: PageServerLoad = async ({ params, locals }) => {
+export const load: PageServerLoad = async ({ params, locals, url }) => {
   const session = await getSessionDetail(params.sessionId);
   if (!session || session.campaignId !== params.id) {
     throw error(404, "Session not found.");
@@ -41,10 +42,11 @@ export const load: PageServerLoad = async ({ params, locals }) => {
         status: session.status,
         startedAt: session.startedAt,
         recap: null,
-        summary: null,
+        detailedRecord: null,
         transcript: null,
       },
       transcriptTurns: null,
+      hasTranscript: Boolean(session.transcriptArtifact),
       canViewDetails: false,
       canRegenerate: false,
       preview,
@@ -57,11 +59,21 @@ export const load: PageServerLoad = async ({ params, locals }) => {
   ]);
   if (!admin && !member) throw error(403, "You cannot view this campaign.");
 
-  const transcriptTurns = session.transcript
-    ? formatTranscriptForDisplay(session.transcript, await getCampaignCast(session.campaignId))
+  const tab = url.searchParams.get("tab");
+  const transcript = tab === "transcript" ? await loadSessionTranscript(session) : null;
+  const detailedRecord = tab === "summary" ? await loadSessionDetailedRecord(session) : null;
+  const transcriptTurns = transcript
+    ? formatTranscriptForDisplay(transcript, await getCampaignCast(session.campaignId))
     : null;
 
-  return { session, transcriptTurns, canViewDetails: true, canRegenerate: admin, preview };
+  return {
+    session: { ...session, transcript, detailedRecord },
+    transcriptTurns,
+    hasTranscript: Boolean(session.transcriptArtifact),
+    canViewDetails: true,
+    canRegenerate: admin,
+    preview,
+  };
 };
 
 export const actions: Actions = {
@@ -76,7 +88,7 @@ export const actions: Actions = {
     if (!(await isAdmin(locals.user.id))) {
       throw error(403, "Only administrators can regenerate session inference.");
     }
-    if (!session.transcript) {
+    if (!session.transcriptArtifact) {
       return fail(409, { message: "This session has no transcript to regenerate from." });
     }
     if (["recording", "transcribing", "summarizing"].includes(session.status)) {

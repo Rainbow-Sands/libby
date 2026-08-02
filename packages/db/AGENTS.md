@@ -10,8 +10,9 @@ Drizzle ORM schema, Postgres client, and all shared queries. See the root
 - `campaigns.ts` — campaign/member mutations.
 - `queries.ts` — read queries used by web and workers.
 - `processing.ts` — durable recording/run/segment state transitions and leases.
+- `artifacts.ts` — shared metadata types for durable session objects.
 - `transcript.ts` — the `Transcript`/`TranscriptSegment` JSON shape stored in
-  `sessions.transcript`, plus display and inference formatting transforms.
+  transcript artifacts, plus display and inference formatting transforms.
 - `index.ts` — the package's **public API**. Export anything other packages need
   from here; consumers import from `@rainbot/db`, never deep paths.
 
@@ -42,11 +43,11 @@ pnpm --filter @rainbot/db db:migrate    # applies to the DB in DATABASE_URL
 
 ## Data model notes
 
-- `sessions` holds `transcript`, `summary`, `recap`, and `title` as **nullable
-  columns directly on the row**. A `processing_runs` row builds replacements
-  and publishes them atomically, so failed regeneration leaves old results
-  intact.
-- `sessions.transcript` is `jsonb`, typed as `Transcript` (see `transcript.ts`):
+- `session_artifacts` stores versioned S3 object metadata for transcripts and
+  detailed records. `is_current` is switched atomically when a processing run
+  publishes, so failed regeneration leaves old results intact. Recap/title stay
+  on `sessions` for fast listings and previews.
+- A transcript artifact is JSON typed as `Transcript` (see `transcript.ts`):
   every recorded segment, lossless (timestamp, userId, username, text,
   whisper's own per-segment metadata). LLM-facing formatting (retaining
   utterance timestamps and prepending the cast legend) happens in
@@ -59,9 +60,6 @@ pnpm --filter @rainbot/db db:migrate    # applies to the DB in DATABASE_URL
   (correcting for background noise keeping an activation open long after
   someone stopped talking) and drops individual sub-segments Whisper itself
   flags as noise — the pattern to extend for future formatting improvements.
-  No backwards compatibility with the old plain-text format: the migration
-  that introduced this column type cleared existing rows (`USING NULL`) rather
-  than carrying a legacy-string code path — pre-production, nothing to keep.
 - `campaign_members` has `role` (`dm` | `player`) and `characterName` (null for
   the DM). The cast legend and player management depend on these.
 - `users.is_admin` grants application-wide visibility into every campaign and

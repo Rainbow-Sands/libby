@@ -6,5 +6,5 @@ function get(name: string): string {
 
 export const DISCORD_TOKEN = get("DISCORD_TOKEN");
 export const DISCORD_APPLICATION_ID = get("DISCORD_APPLICATION_ID");
-export const AUDIO_S3_REGION = get("AUDIO_S3_REGION");
-export const AUDIO_S3_BUCKET = get("AUDIO_S3_BUCKET");
+export const S3_BUCKET_AUDIO = get("S3_BUCKET_AUDIO");
+export const S3_REGION = get("S3_REGION");

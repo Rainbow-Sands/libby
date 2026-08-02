@@ -1,6 +1,12 @@
 export { db } from "./client.ts";
 export * from "./schema.ts";
 export {
+  SESSION_ARTIFACT_KINDS,
+  type SessionArtifactKind,
+  type SessionArtifactRef,
+  type SessionArtifactWrite,
+} from "./artifacts.ts";
+export {
   formatTranscriptForDisplay,
   formatTranscriptForInference,
   simplifyTranscript,
@@ -61,8 +67,8 @@ export {
   startInferenceRegeneration,
   startTranscriptRegeneration,
   storeAggregatedTranscript,
+  storeRunDetailedRecord,
   storeRunRecap,
-  storeRunSummary,
   storeRunTitle,
   type AudioSegmentRef,
   type CreateRecordingSessionInput,

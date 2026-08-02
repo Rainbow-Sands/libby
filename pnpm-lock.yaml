@@ -146,6 +146,9 @@ importers:
       ai:
         specifier: ^7.0.34
         version: 7.0.34(zod@4.4.3)
+      postgres:
+        specifier: latest
+        version: 3.4.9
     devDependencies:
       '@types/node':
         specifier: ^25.0.0

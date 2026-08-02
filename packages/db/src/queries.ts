@@ -1,7 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "./client.ts";
-import { campaigns, campaignMembers, sessions, users } from "./schema.ts";
-import type { Transcript } from "./transcript.ts";
+import type { SessionArtifactKind, SessionArtifactRef } from "./artifacts.ts";
+import { campaigns, campaignMembers, sessionArtifacts, sessions, users } from "./schema.ts";
 
 export async function getCampaignsForGuild(guildId: string) {
   return db
@@ -164,24 +164,52 @@ export interface SessionDetail {
   status: string;
   startedAt: Date;
   endedAt: Date | null;
-  transcript: Transcript | null;
-  summary: string | null;
+  transcriptArtifact: SessionArtifactRef | null;
+  detailedRecordArtifact: SessionArtifactRef | null;
   recap: string | null;
 }
 
 export async function getSessionDetail(sessionId: string): Promise<SessionDetail | null> {
-  const [session] = await db.select().from(sessions).where(eq(sessions.id, sessionId)).limit(1);
+  const [session] = await db
+    .select({
+      id: sessions.id,
+      campaignId: sessions.campaignId,
+      title: sessions.title,
+      status: sessions.status,
+      startedAt: sessions.startedAt,
+      endedAt: sessions.endedAt,
+      recap: sessions.recap,
+    })
+    .from(sessions)
+    .where(eq(sessions.id, sessionId))
+    .limit(1);
   if (!session) return null;
 
+  const artifacts = await db
+    .select()
+    .from(sessionArtifacts)
+    .where(and(eq(sessionArtifacts.sessionId, sessionId), eq(sessionArtifacts.isCurrent, true)));
+  const toRef = (kind: SessionArtifactKind): SessionArtifactRef | null => {
+    const artifact = artifacts.find((candidate) => candidate.kind === kind);
+    return artifact
+      ? {
+          id: artifact.id,
+          kind,
+          bucket: artifact.bucket,
+          objectKey: artifact.objectKey,
+          contentType: artifact.contentType,
+          formatVersion: artifact.formatVersion,
+          byteSize: artifact.byteSize,
+          sha256: artifact.sha256,
+        }
+      : null;
+  };
+  const transcriptArtifact = toRef("transcript");
+  const detailedRecordArtifact = toRef("detailed_record");
+
   return {
-    id: session.id,
-    campaignId: session.campaignId,
-    title: session.title,
-    status: session.status,
-    startedAt: session.startedAt,
-    endedAt: session.endedAt,
-    transcript: session.transcript,
-    summary: session.summary,
-    recap: session.recap,
+    ...session,
+    transcriptArtifact,
+    detailedRecordArtifact,
   };
 }

@@ -103,7 +103,7 @@
     {/if}
     {#if data.canRegenerate}
       <div class="regeneration-actions">
-        {#if data.session.transcript}
+        {#if data.hasTranscript}
           <form method="POST" action="?/regenerate" onsubmit={confirmRegeneration}>
             <button
               class="btn regenerate"
@@ -167,8 +167,8 @@
     </div>
 
     <div role="tabpanel" hidden={activeTab !== "summary"}>
-      {#if data.session.summary}
-        <div class="prose">{@html renderMarkdown(data.session.summary)}</div>
+      {#if data.session.detailedRecord}
+        <div class="prose">{@html renderMarkdown(data.session.detailedRecord)}</div>
       {:else}
         <p class="empty">Not yet available.</p>
       {/if}

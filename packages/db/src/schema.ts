@@ -13,7 +13,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import type { Transcript, TranscriptSegment } from "./transcript.ts";
+import type { TranscriptSegment } from "./transcript.ts";
 
 export const guilds = pgTable("guilds", {
   id: varchar("id", { length: 20 }).primaryKey(),
@@ -58,13 +58,6 @@ export const campaignMembers = pgTable(
 );
 
 // status: 'recording' | 'closing' | 'transcribing' | 'summarizing' | 'done' | 'failed'
-//
-// transcript, summary, recap, and title are each 1:1 with a session. A
-// processing run builds replacements separately, then publishes all of them to
-// this row atomically (Postgres TOASTs large values out-of-line automatically).
-//
-// transcript stores the full per-segment recording (see transcript.ts) as
-// jsonb, so it can be re-simplified for the LLM later without re-transcribing.
 export const sessions = pgTable(
   "sessions",
   {
@@ -78,8 +71,6 @@ export const sessions = pgTable(
     sessionDir: text("session_dir").notNull(),
     activeRunId: uuid("active_run_id"),
     status: varchar("status", { length: 20 }).notNull().default("recording"),
-    transcript: jsonb("transcript").$type<Transcript>(),
-    summary: text("summary"),
     recap: text("recap"),
     startedAt: timestamp("started_at").defaultNow().notNull(),
     endedAt: timestamp("ended_at"),
@@ -105,8 +96,8 @@ export const processingRuns = pgTable(
       .notNull(),
     kind: varchar("kind", { length: 20 }).notNull(),
     status: varchar("status", { length: 20 }).notNull(),
-    transcript: jsonb("transcript").$type<Transcript>(),
-    summary: text("summary"),
+    transcriptArtifactId: uuid("transcript_artifact_id"),
+    detailedRecordArtifactId: uuid("detailed_record_artifact_id"),
     recap: text("recap"),
     title: text("title"),
     notificationChannelId: varchar("notification_channel_id", { length: 20 }),
@@ -124,6 +115,41 @@ export const processingRuns = pgTable(
     index("processing_runs_queue_idx").on(t.status, t.availableAt, t.leaseExpiresAt),
     index("processing_runs_status_idx").on(t.status),
     index("processing_runs_session_idx").on(t.sessionId),
+  ],
+);
+
+// kind: 'transcript' | 'detailed_record'
+//
+// The object body lives in private S3-compatible storage. Rows retain immutable
+// provenance and integrity metadata; isCurrent identifies the version published
+// for a session. This is also the seam where detailed-record chunks/embeddings
+// can be attached in a future migration without indexing raw transcripts.
+export const sessionArtifacts = pgTable(
+  "session_artifacts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: varchar("session_id", { length: 30 })
+      .references(() => sessions.id, { onDelete: "cascade" })
+      .notNull(),
+    generatedByRunId: uuid("generated_by_run_id").references(() => processingRuns.id, {
+      onDelete: "set null",
+    }),
+    kind: varchar("kind", { length: 30 }).notNull(),
+    bucket: text("bucket").notNull(),
+    objectKey: text("object_key").notNull(),
+    contentType: varchar("content_type", { length: 100 }).notNull(),
+    formatVersion: integer("format_version").default(1).notNull(),
+    byteSize: bigint("byte_size", { mode: "number" }).notNull(),
+    sha256: varchar("sha256", { length: 64 }).notNull(),
+    isCurrent: boolean("is_current").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("session_artifacts_run_kind_unique").on(t.generatedByRunId, t.kind),
+    uniqueIndex("session_artifacts_current_kind_unique")
+      .on(t.sessionId, t.kind)
+      .where(sql`${t.isCurrent} = true`),
+    index("session_artifacts_session_idx").on(t.sessionId),
   ],
 );
 

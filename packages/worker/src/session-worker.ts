@@ -20,8 +20,8 @@ import {
   releaseProcessingRun,
   renewProcessingRunLease,
   storeAggregatedTranscript,
+  storeRunDetailedRecord,
   storeRunRecap,
-  storeRunSummary,
   storeRunTitle,
   type ProcessingRunData,
   type SegmentForTranscription,
@@ -30,7 +30,12 @@ import {
 import { postSessionLink } from "./notify.ts";
 import { UnrecoverableTaskError } from "./errors.ts";
 import { generateTitle, recap, summarize, transcribeSegment } from "./tasks.ts";
-import { getAudioStorage } from "./storage.ts";
+import {
+  artifactContentHash,
+  artifactObjectKey,
+  getArtifactStorage,
+  getAudioStorage,
+} from "./storage.ts";
 
 const WORKER_ID = `${hostname()}:${process.pid}:${randomUUID()}`;
 const LEASE_MILLISECONDS = 5 * 60_000;
@@ -64,6 +69,21 @@ function wait(milliseconds: number): Promise<void> {
 }
 
 async function noCleanup(): Promise<void> {}
+
+async function uploadSessionArtifact(
+  campaignId: string,
+  sessionId: string,
+  runId: string,
+  kind: "transcript" | "detailed_record",
+  body: string,
+  contentType: string,
+) {
+  return getArtifactStorage().uploadArtifact(
+    artifactObjectKey(campaignId, sessionId, runId, kind, artifactContentHash(body)),
+    body,
+    contentType,
+  );
+}
 
 async function mapConcurrent<T>(
   values: T[],
@@ -161,8 +181,54 @@ async function aggregateRun(run: ProcessingRunData): Promise<void> {
     version: 1,
     segments: await getTranscriptSegments(run.id),
   };
-  if (!(await storeAggregatedTranscript(run.id, transcript))) return;
+  const artifact = await uploadSessionArtifact(
+    run.campaignId,
+    run.sessionId,
+    run.id,
+    "transcript",
+    JSON.stringify(transcript),
+    "application/json",
+  );
+  if (!(await storeAggregatedTranscript(run.id, artifact))) return;
   if (transcript.segments.length === 0) await completeProcessingRun(run.id);
+}
+
+async function readTranscript(run: ProcessingRunData): Promise<Transcript> {
+  if (!run.transcriptArtifact) {
+    throw new UnrecoverableTaskError(`Run ${run.id} has no transcript artifact`);
+  }
+  const body = await getArtifactStorage().downloadText(
+    run.transcriptArtifact.objectKey,
+    run.transcriptArtifact.bucket,
+  );
+  if (artifactContentHash(body) !== run.transcriptArtifact.sha256) {
+    throw new UnrecoverableTaskError(`Run ${run.id} has a corrupt transcript artifact`);
+  }
+  const value: unknown = JSON.parse(body);
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !("version" in value) ||
+    !("segments" in value) ||
+    !Array.isArray(value.segments)
+  ) {
+    throw new UnrecoverableTaskError(`Run ${run.id} has an invalid transcript artifact`);
+  }
+  return value as Transcript;
+}
+
+async function readDetailedRecord(run: ProcessingRunData): Promise<string> {
+  if (!run.detailedRecordArtifact) {
+    throw new UnrecoverableTaskError(`Run ${run.id} has no detailed record artifact`);
+  }
+  const body = await getArtifactStorage().downloadText(
+    run.detailedRecordArtifact.objectKey,
+    run.detailedRecordArtifact.bucket,
+  );
+  if (artifactContentHash(body) !== run.detailedRecordArtifact.sha256) {
+    throw new UnrecoverableTaskError(`Run ${run.id} has a corrupt detailed record artifact`);
+  }
+  return body;
 }
 
 async function processCurrentStage(run: ProcessingRunData): Promise<void> {
@@ -174,15 +240,20 @@ async function processCurrentStage(run: ProcessingRunData): Promise<void> {
       await aggregateRun(run);
       return;
     case "summarizing": {
-      if (!run.transcript) throw new UnrecoverableTaskError(`Run ${run.id} has no transcript`);
-      await storeRunSummary(run.id, await summarize(run.transcript, run.campaignId));
+      const detailedRecord = await summarize(await readTranscript(run), run.campaignId);
+      const artifact = await uploadSessionArtifact(
+        run.campaignId,
+        run.sessionId,
+        run.id,
+        "detailed_record",
+        detailedRecord,
+        "text/markdown; charset=utf-8",
+      );
+      await storeRunDetailedRecord(run.id, artifact);
       return;
     }
     case "recapping":
-      if (!run.summary) {
-        throw new UnrecoverableTaskError(`Run ${run.id} has no detailed record`);
-      }
-      await storeRunRecap(run.id, await recap(run.summary));
+      await storeRunRecap(run.id, await recap(await readDetailedRecord(run)));
       return;
     case "titling":
       if (!run.recap) throw new UnrecoverableTaskError(`Run ${run.id} has no recap`);

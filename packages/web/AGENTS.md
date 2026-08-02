@@ -1,7 +1,9 @@
 # @rainbot/web — AGENTS.md
 
-SvelteKit frontend (adapter-node) with Discord OAuth. Read-only over the shared
-database. See the root `AGENTS.md` for workspace-wide conventions.
+SvelteKit frontend (adapter-node) with Discord OAuth. Reads session metadata
+from Postgres and private transcript/detailed-record objects from S3-compatible
+storage; manual ingestion also writes activation audio. See the root `AGENTS.md`
+for workspace-wide conventions.
 
 ## Layout
 
@@ -45,6 +47,9 @@ summarization. Local chat requires `CHAT_BASE_URL` and defaults to model
 `qwen3.6-35b-a3b` with a `2048`-token llama.cpp thinking budget. Cloud chat
 requires `CHAT_API_KEY` and `CHAT_MODEL`; it does not require any local inference
 or transcription URL.
+
+The web service needs `S3_BUCKET_AUDIO` for manual ingestion and
+`S3_BUCKET_ARTIFACT` to read transcript/detailed-record tabs and chat context.
 
 ## Notes
 

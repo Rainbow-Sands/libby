@@ -18,14 +18,16 @@ Discord voice ──/start──▶ Postgres session + processing run
    │  ogg/opus clip ───────────────▶ private S3-compatible object storage
    │                                    ▼
    └──/stop or empty channel──▶ aggregate ▶ detailed record ▶ recap ▶ title
-                                            ▼
-                                   persist to Postgres ──▶ SvelteKit web app
+                                  │              │            ▼
+                                  └──── private artifact S3 + Postgres metadata
+                                                        └──▶ SvelteKit web app
 ```
 
 - The **discord** bot records audio; every activation is registered in Postgres
   before recording and uploaded after its file closes.
 - The **worker** package claims session processing runs from Postgres with
-  leases and processes their activation manifests with bounded concurrency.
+  leases, processes activation manifests with bounded concurrency, and stores
+  transcripts/detailed records in artifact object storage.
 - The **db** package is the single source of truth for the schema and all queries.
 - The **web** app is read-only over the same database.
 

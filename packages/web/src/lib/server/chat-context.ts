@@ -2,6 +2,7 @@ import {
   formatTranscriptForInference,
   type CampaignCastMember,
   type SessionDetail,
+  type Transcript,
 } from "@rainbot/db";
 
 /**
@@ -26,7 +27,15 @@ Rules:
  * future replaces this with a `buildCampaignContext` + a `searchSessions` tool,
  * without touching the endpoint or UI.
  */
-export function buildSessionContext(session: SessionDetail, cast: CampaignCastMember[]): string {
+type SessionChatMaterial = SessionDetail & {
+  detailedRecord: string | null;
+  transcript: Transcript | null;
+};
+
+export function buildSessionContext(
+  session: SessionChatMaterial,
+  cast: CampaignCastMember[],
+): string {
   const parts: string[] = [SESSION_CHAT_SYSTEM, "", "--- SESSION MATERIAL ---"];
 
   if (session.title) {
@@ -35,8 +44,8 @@ export function buildSessionContext(session: SessionDetail, cast: CampaignCastMe
   if (session.recap) {
     parts.push("", "Recap:", session.recap);
   }
-  if (session.summary) {
-    parts.push("", "Detailed record:", session.summary);
+  if (session.detailedRecord) {
+    parts.push("", "Detailed record:", session.detailedRecord);
   } else if (session.transcript) {
     parts.push(
       "",

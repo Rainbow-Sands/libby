@@ -10,6 +10,7 @@ import {
 import { createChatInference } from "$lib/server/chat-inference";
 import { CHAT_INFERENCE_CONFIG } from "$lib/server/env";
 import { buildSessionContext } from "$lib/server/chat-context";
+import { loadSessionDetailedRecord, loadSessionTranscript } from "$lib/server/session-artifacts";
 import type { RequestHandler } from "./$types";
 
 const chatInference = createChatInference(CHAT_INFERENCE_CONFIG);
@@ -28,7 +29,7 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
   ]);
   if (!admin && !member) throw error(403, "You cannot view this campaign.");
 
-  if (!session.summary && !session.transcript) {
+  if (!session.detailedRecordArtifact && !session.transcriptArtifact) {
     throw error(409, "This session has no detailed record or transcript to chat about yet.");
   }
 
@@ -38,10 +39,12 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
   }
 
   const cast = await getCampaignCast(session.campaignId);
+  const detailedRecord = await loadSessionDetailedRecord(session);
+  const transcript = detailedRecord ? null : await loadSessionTranscript(session);
 
   const result = streamText({
     model: chatInference.model,
-    system: buildSessionContext(session, cast),
+    system: buildSessionContext({ ...session, detailedRecord, transcript }, cast),
     messages: await convertToModelMessages(messages),
     providerOptions: chatInference.providerOptions,
   });

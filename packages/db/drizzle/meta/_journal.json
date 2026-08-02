@@ -71,6 +71,20 @@
       "when": 1785267747087,
       "tag": "0009_lumpy_omega_red",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785462926689,
+      "tag": "0010_early_catseye",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785464005901,
+      "tag": "0011_milky_rhino",
+      "breakpoints": true
     }
   ]
 }

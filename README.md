@@ -69,12 +69,13 @@ Service names below match `docker-compose.yml`; `db-migrate` is the
 
 | Variable                           | Used by              | Description                                                                        |
 | ---------------------------------- | -------------------- | ---------------------------------------------------------------------------------- |
-| `AUDIO_S3_ENDPOINT`                | discord, worker, web | Optional S3-compatible endpoint; omit for AWS S3                                   |
-| `AUDIO_S3_REGION`                  | discord, worker, web | Object-storage region                                                              |
-| `AUDIO_S3_BUCKET`                  | discord, worker, web | Private activation-audio bucket                                                    |
-| `AUDIO_S3_ACCESS_KEY_ID`           | discord, worker, web | Optional static access key; omit both credentials to use the AWS provider chain    |
-| `AUDIO_S3_SECRET_ACCESS_KEY`       | discord, worker, web | Optional static secret; must be set with the access key                            |
-| `AUDIO_S3_FORCE_PATH_STYLE`        | discord, worker, web | Set to `true` when the storage provider requires path-style requests               |
+| `S3_ACCESS_KEY_ID`                 | discord, worker, web | Optional static access key; omit both credentials to use the AWS provider chain    |
+| `S3_BUCKET_ARTIFACT`               | worker, web          | Private bucket for durable transcripts and detailed records                        |
+| `S3_BUCKET_AUDIO`                  | discord, worker, web | Private, short-lived activation-audio bucket; web uses it for manual uploads       |
+| `S3_ENDPOINT`                      | discord, worker, web | Optional shared S3-compatible endpoint; omit for AWS S3                            |
+| `S3_FORCE_PATH_STYLE`              | discord, worker, web | Set to `true` when the storage provider requires path-style requests               |
+| `S3_REGION`                        | discord, worker, web | Object-storage region                                                              |
+| `S3_SECRET_ACCESS_KEY`             | discord, worker, web | Optional static secret; must be set with the access key                            |
 | `TRANSCRIPTION_URL`                | worker               | Complete transcription endpoint, such as `http://whisper-server:8080/inference`    |
 | `TRANSCRIPTION_MODEL`              | worker               | Transcription model ID (default: `whisper-large-v3-turbo`)                         |
 | `TRANSCRIPTION_CONCURRENCY`        | worker               | Simultaneous activation transcriptions (default: `4`)                              |
@@ -100,13 +101,30 @@ Service names below match `docker-compose.yml`; `db-migrate` is the
 | `CHAT_REASONING_EFFORT`          | web     | Optional cloud effort: `none`, `low`, `medium`, `high`, `xhigh`, or `max`; `minimal` is OpenAI-only |
 | `CHAT_THINKING_BUDGET`           | web     | Local llama.cpp reasoning budget (default: `2048`)                                                  |
 
-Keep the audio bucket private. `DELETE_AUDIO_AFTER_TRANSCRIPTION=true` deletes
-each activation after its transcript has been committed to Postgres. Configure
-a bucket lifecycle expiration as a second, provider-enforced retention boundary;
+Keep both buckets private. Transcript and detailed-record objects share the
+artifact bucket under separate session/run prefixes; recap and title stay in
+Postgres for fast page listings and URL previews. `DELETE_AUDIO_AFTER_TRANSCRIPTION=true`
+deletes each activation after its transcript checkpoint has been committed to
+Postgres; those checkpoints are cleared once the aggregate transcript artifact
+is durable. Configure an audio-bucket lifecycle expiration as a second,
+provider-enforced retention boundary;
 the application stores stable object keys and does not depend on signed URLs.
 Leave application deletion disabled while transcript regeneration is needed.
 Recorder and manual-upload scratch files use each service's local temporary
 directory and are removed after upload; no shared filesystem is required.
+
+Before the first artifact-storage deployment:
+
+1. Create `S3_BUCKET_ARTIFACT` and configure the database/S3 variables locally.
+2. Stop the production Discord and worker services so no processing run is active.
+3. Run `pnpm --filter @rainbot/worker migrate:session-artifacts`.
+4. Deploy normally. The database migration publishes the staged object metadata
+   and then removes the old transcript/summary columns.
+
+The script is resumable and does not delete or modify existing session payloads.
+The schema migration refuses to remove them if any artifact is unstaged or a
+processing run is active. The web service needs artifact read access; the worker
+needs read/write access.
 
 Summarization and chat use independent provider profiles. Local thinking budgets
 accept `0` to disable thinking, a positive token limit, or `-1` for unlimited.

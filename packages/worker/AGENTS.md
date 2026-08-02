@@ -8,26 +8,29 @@ root `AGENTS.md` for workspace-wide conventions.
 - `worker.ts` — process entrypoint and graceful shutdown.
 - `session-worker.ts` — claims leased processing runs and advances every stage.
 - `pipeline.ts` — public recording/regeneration transitions used by Discord/web.
-- `storage.ts` — S3-compatible activation upload/download/delete operations.
+- `storage.ts` — S3-compatible audio and durable artifact operations.
 - `tasks.ts` — whisper and inference calls.
 - `prompts.ts` / `text.ts` — shared prompts and response cleanup.
 - `summarization-inference.ts` — local/OpenAI/Anthropic provider configuration.
 - `scripts/test-summarize.ts` — standalone detailed-record pipeline harness.
+- `scripts/migrate-session-artifacts.ts` — resumable one-off legacy payload upload.
 
 ## Durable state
 
 Postgres is both the queue and the source of truth:
 
 - `sessions.active_run_id` identifies the only run allowed to replace a session.
-- `processing_runs` holds leases and intermediate transcript/report/recap/title output.
+- `processing_runs` holds leases, artifact references, and small recap/title output.
+- `session_artifacts` holds immutable transcript/detailed-record object metadata.
 - `session_segments` is the audio manifest and per-activation transcription checkpoint.
 - Workers claim whole sessions, then process activation rows with bounded concurrency.
 - Never hold a database transaction open while calling Whisper or an LLM.
 - A lease may expire and duplicate work may occur. Keep transitions idempotent
   and reject stale run IDs.
 
-Activation audio uses private S3-compatible storage. Workers never depend on a
-shared filesystem. Store object keys in Postgres, never expiring signed URLs.
+Activation audio and durable session artifacts use separate private buckets on
+S3-compatible storage. Workers never depend on a shared filesystem. Store stable
+object keys in Postgres, never expiring signed URLs.
 
 ## Prompts and inference
 
