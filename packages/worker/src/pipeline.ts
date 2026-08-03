@@ -11,10 +11,10 @@ import {
   registerRecordingSegment,
   startInferenceRegeneration,
   startTranscriptRegeneration,
-  type AudioSegmentRef,
   type CreateRecordingSessionInput,
 } from "@rainbot/db";
 import { audioObjectKey, getAudioStorage } from "./storage.ts";
+import type { SegmentRef } from "./types.ts";
 
 function audioMimeType(filename: string): string {
   switch (path.extname(filename).toLowerCase()) {
@@ -34,23 +34,16 @@ function audioMimeType(filename: string): string {
   }
 }
 
-function s3Ref(sessionId: string, ref: AudioSegmentRef): AudioSegmentRef {
-  return {
-    ...ref,
-    audioStorage: "s3",
-    audioObjectKey: ref.audioObjectKey ?? audioObjectKey(sessionId, ref.segmentId, ref.audioFile),
-  };
-}
-
 async function uploadWithRetry(
   objectKey: string,
   localPath: string,
   contentType: string,
-): Promise<{ objectKey: string; byteSize: number }> {
+): Promise<void> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      return await getAudioStorage().uploadFile(objectKey, localPath, contentType);
+      await getAudioStorage().uploadFile(objectKey, localPath, contentType);
+      return;
     } catch (error) {
       lastError = error;
       if (attempt < 3) {
@@ -68,31 +61,28 @@ export async function startRecordingSession(input: CreateRecordingSessionInput):
 export async function registerAudioSegment(
   sessionId: string,
   runId: string,
-  ref: AudioSegmentRef,
+  ref: SegmentRef,
 ): Promise<void> {
-  await registerRecordingSegment(sessionId, runId, s3Ref(sessionId, ref));
+  await registerRecordingSegment(sessionId, runId, {
+    segmentId: ref.segmentId,
+    audioObjectKey: audioObjectKey(sessionId, ref.segmentId, ref.audioFile),
+    timestamp: ref.timestamp,
+    userId: ref.userId,
+    username: ref.username,
+  });
 }
 
 export async function completeAudioSegment(
   sessionId: string,
   runId: string,
   localPath: string,
-  ref: AudioSegmentRef,
+  ref: SegmentRef,
 ): Promise<void> {
-  const stored = s3Ref(sessionId, ref);
-  if (!stored.audioObjectKey) throw new Error(`No object key for segment ${ref.segmentId}`);
+  const objectKey = audioObjectKey(sessionId, ref.segmentId, ref.audioFile);
 
   try {
-    const uploaded = await uploadWithRetry(
-      stored.audioObjectKey,
-      localPath,
-      audioMimeType(ref.audioFile),
-    );
-    await markSegmentReady(sessionId, runId, ref.segmentId, {
-      storage: "s3",
-      objectKey: uploaded.objectKey,
-      byteSize: uploaded.byteSize,
-    });
+    await uploadWithRetry(objectKey, localPath, audioMimeType(ref.audioFile));
+    await markSegmentReady(sessionId, runId, ref.segmentId);
     await unlink(localPath).catch(() => undefined);
   } catch (error) {
     const message = error instanceof Error ? error.stack || error.message : String(error);

@@ -8,10 +8,7 @@ import type { TranscriptSegment } from "./transcript.ts";
 
 export interface AudioSegmentRef {
   segmentId: string;
-  audioFile: string;
-  audioStorage?: "local" | "s3";
-  audioObjectKey?: string;
-  audioByteSize?: number;
+  audioObjectKey: string;
   timestamp: string;
   userId: string;
   username?: string;
@@ -108,10 +105,7 @@ export async function registerRecordingSegment(
       .values({
         sessionId,
         segmentId: ref.segmentId,
-        audioFile: ref.audioFile,
-        audioStorage: ref.audioStorage ?? "local",
         audioObjectKey: ref.audioObjectKey,
-        audioByteSize: ref.audioByteSize,
         recordedAt: ref.timestamp,
         userId: ref.userId,
         username: ref.username,
@@ -126,19 +120,11 @@ export async function markSegmentReady(
   sessionId: string,
   runId: string,
   segmentId: string,
-  audio?: { storage: "local" | "s3"; objectKey?: string; byteSize?: number },
 ): Promise<void> {
   await db
     .update(sessionSegments)
     .set({
       audioStatus: "ready",
-      ...(audio
-        ? {
-            audioStorage: audio.storage,
-            audioObjectKey: audio.objectKey,
-            audioByteSize: audio.byteSize,
-          }
-        : {}),
       transcriptionStatus: "pending",
       transcript: null,
       error: null,
@@ -274,10 +260,7 @@ export async function listSegmentsForTranscription(
       sessionId: sessionSegments.sessionId,
       runId: sessionSegments.transcriptionRunId,
       segmentId: sessionSegments.segmentId,
-      audioFile: sessionSegments.audioFile,
-      audioStorage: sessionSegments.audioStorage,
       audioObjectKey: sessionSegments.audioObjectKey,
-      audioByteSize: sessionSegments.audioByteSize,
       timestamp: sessionSegments.recordedAt,
       userId: sessionSegments.userId,
       username: sessionSegments.username,
@@ -299,10 +282,7 @@ export async function listSegmentsForTranscription(
       sessionId: row.sessionId,
       runId: row.runId,
       segmentId: row.segmentId,
-      audioFile: row.audioFile,
-      audioStorage: row.audioStorage as "local" | "s3",
-      ...(row.audioObjectKey ? { audioObjectKey: row.audioObjectKey } : {}),
-      ...(row.audioByteSize !== null ? { audioByteSize: row.audioByteSize } : {}),
+      audioObjectKey: row.audioObjectKey,
       timestamp: row.timestamp,
       userId: row.userId,
       ...(row.username ? { username: row.username } : {}),
@@ -312,31 +292,22 @@ export async function listSegmentsForTranscription(
 export async function markSegmentAudioDeleted(sessionId: string, segmentId: string): Promise<void> {
   await db
     .update(sessionSegments)
-    .set({ audioStatus: "deleted", audioDeletedAt: new Date(), updatedAt: new Date() })
+    .set({ audioStatus: "deleted", updatedAt: new Date() })
     .where(and(eq(sessionSegments.sessionId, sessionId), eq(sessionSegments.segmentId, segmentId)));
 }
 
 export async function listAudioPendingDeletion(
   limit = 200,
 ): Promise<{ sessionId: string; segmentId: string; objectKey: string }[]> {
-  const rows = await db
+  return db
     .select({
       sessionId: sessionSegments.sessionId,
       segmentId: sessionSegments.segmentId,
       objectKey: sessionSegments.audioObjectKey,
     })
     .from(sessionSegments)
-    .where(
-      and(
-        eq(sessionSegments.audioStorage, "s3"),
-        eq(sessionSegments.audioStatus, "deletion_pending"),
-      ),
-    )
+    .where(eq(sessionSegments.audioStatus, "deletion_pending"))
     .limit(limit);
-  return rows.filter(
-    (row): row is { sessionId: string; segmentId: string; objectKey: string } =>
-      row.objectKey !== null,
-  );
 }
 
 export async function markTranscriptionProcessing(
@@ -883,29 +854,17 @@ export async function getAudioSegmentRefs(sessionId: string): Promise<AudioSegme
   return db
     .select({
       segmentId: sessionSegments.segmentId,
-      audioFile: sessionSegments.audioFile,
-      audioStorage: sessionSegments.audioStorage,
       audioObjectKey: sessionSegments.audioObjectKey,
-      audioByteSize: sessionSegments.audioByteSize,
       timestamp: sessionSegments.recordedAt,
       userId: sessionSegments.userId,
       username: sessionSegments.username,
     })
     .from(sessionSegments)
-    .where(
-      and(
-        eq(sessionSegments.sessionId, sessionId),
-        eq(sessionSegments.audioStorage, "s3"),
-        eq(sessionSegments.audioStatus, "ready"),
-      ),
-    )
+    .where(and(eq(sessionSegments.sessionId, sessionId), eq(sessionSegments.audioStatus, "ready")))
     .then((rows) =>
       rows.map((row) => ({
         segmentId: row.segmentId,
-        audioFile: row.audioFile,
-        audioStorage: row.audioStorage as "local" | "s3",
-        ...(row.audioObjectKey ? { audioObjectKey: row.audioObjectKey } : {}),
-        ...(row.audioByteSize !== null ? { audioByteSize: row.audioByteSize } : {}),
+        audioObjectKey: row.audioObjectKey,
         timestamp: row.timestamp,
         userId: row.userId,
         ...(row.username ? { username: row.username } : {}),
@@ -923,10 +882,7 @@ export async function getAudioSegmentsForRecovery(sessionId: string): Promise<
   const rows = await db
     .select({
       segmentId: sessionSegments.segmentId,
-      audioFile: sessionSegments.audioFile,
-      audioStorage: sessionSegments.audioStorage,
       audioObjectKey: sessionSegments.audioObjectKey,
-      audioByteSize: sessionSegments.audioByteSize,
       timestamp: sessionSegments.recordedAt,
       userId: sessionSegments.userId,
       username: sessionSegments.username,
@@ -943,10 +899,7 @@ export async function getAudioSegmentsForRecovery(sessionId: string): Promise<
     );
   return rows.map((row) => ({
     segmentId: row.segmentId,
-    audioFile: row.audioFile,
-    audioStorage: row.audioStorage as "local" | "s3",
-    ...(row.audioObjectKey ? { audioObjectKey: row.audioObjectKey } : {}),
-    ...(row.audioByteSize !== null ? { audioByteSize: row.audioByteSize } : {}),
+    audioObjectKey: row.audioObjectKey,
     timestamp: row.timestamp,
     userId: row.userId,
     ...(row.username ? { username: row.username } : {}),
@@ -984,10 +937,7 @@ export async function startTranscriptRegeneration(
         .values({
           sessionId,
           segmentId: ref.segmentId,
-          audioFile: ref.audioFile,
-          audioStorage: ref.audioStorage ?? "local",
           audioObjectKey: ref.audioObjectKey,
-          audioByteSize: ref.audioByteSize,
           recordedAt: ref.timestamp,
           userId: ref.userId,
           username: ref.username,
@@ -998,10 +948,7 @@ export async function startTranscriptRegeneration(
         .onConflictDoUpdate({
           target: [sessionSegments.sessionId, sessionSegments.segmentId],
           set: {
-            audioFile: ref.audioFile,
-            audioStorage: ref.audioStorage ?? "local",
             audioObjectKey: ref.audioObjectKey,
-            audioByteSize: ref.audioByteSize,
             recordedAt: ref.timestamp,
             userId: ref.userId,
             username: ref.username,

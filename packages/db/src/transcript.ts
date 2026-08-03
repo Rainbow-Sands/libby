@@ -4,7 +4,6 @@
 // same recordings without re-transcribing.
 export interface TranscriptSegment {
   segmentId: string;
-  audioFile: string;
   timestamp: string; // ISO, when the speaker started talking
   userId: string;
   username?: string;

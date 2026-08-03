@@ -17,13 +17,10 @@ export interface AudioStorageConfig {
   forcePathStyle: boolean;
 }
 
-export interface UploadedAudioObject {
+export interface UploadedArtifactObject {
+  bucket: string;
   objectKey: string;
   byteSize: number;
-}
-
-export interface UploadedArtifactObject extends UploadedAudioObject {
-  bucket: string;
   contentType: string;
   formatVersion: number;
   sha256: string;
@@ -122,11 +119,7 @@ export class AudioStorage {
     return this.#bucket;
   }
 
-  async uploadFile(
-    objectKey: string,
-    filePath: string,
-    contentType: string,
-  ): Promise<UploadedAudioObject> {
+  async uploadFile(objectKey: string, filePath: string, contentType: string): Promise<void> {
     const file = await stat(filePath);
     const upload = new Upload({
       client: this.#client,
@@ -139,7 +132,6 @@ export class AudioStorage {
       },
     });
     await upload.done();
-    return { objectKey, byteSize: file.size };
   }
 
   async downloadFile(objectKey: string, destination: string): Promise<void> {

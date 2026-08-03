@@ -22,9 +22,11 @@ async function recoverSegments(
       continue;
     }
 
-    const audioPath = path.join(sessionDir, segment.audioFile);
+    const extension = path.extname(segment.audioObjectKey) || ".ogg";
+    const audioFile = `clips/${segment.segmentId}${extension}`;
+    const audioPath = path.join(sessionDir, audioFile);
     if (hasMeaningfulAudio(audioPath)) {
-      await completeAudioSegment(sessionId, runId, audioPath, segment);
+      await completeAudioSegment(sessionId, runId, audioPath, { ...segment, audioFile });
     } else {
       await discardAudioSegment(
         sessionId,

@@ -1,7 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { APICallError } from "ai";
-import type { SegmentRef } from "./types.ts";
 import { UnrecoverableTaskError } from "./errors.ts";
 import { SUMMARIZATION_CONFIG, TRANSCRIPTION_MODEL, TRANSCRIPTION_URL } from "./env.ts";
 import { TITLE_SYSTEM } from "./prompts.ts";
@@ -11,6 +10,7 @@ import { createSummarizationInference } from "./summarization-inference.ts";
 import {
   formatTranscriptForInference,
   getCampaignCast,
+  type AudioSegmentRef,
   type Transcript,
   type TranscriptSegment,
 } from "@rainbot/db";
@@ -45,10 +45,10 @@ function audioMimeType(audioPath: string): string {
 
 export async function transcribeSegment(
   audioPath: string,
-  ref: SegmentRef,
+  ref: AudioSegmentRef,
 ): Promise<TranscriptSegment | null> {
   if (!existsSync(audioPath)) {
-    throw new UnrecoverableTaskError(`Audio file not found: ${ref.audioFile}`);
+    throw new UnrecoverableTaskError(`Audio file not found for segment ${ref.segmentId}`);
   }
   const form = new FormData();
   form.append(
@@ -81,7 +81,7 @@ export async function transcribeSegment(
 
   if (noSpeechProb > NO_SPEECH_THRESHOLD) {
     console.log(
-      `[transcribe] skipping ${ref.audioFile} (no_speech_prob=${noSpeechProb.toFixed(2)})`,
+      `[transcribe] skipping segment ${ref.segmentId} (no_speech_prob=${noSpeechProb.toFixed(2)})`,
     );
     return null;
   }
@@ -91,7 +91,6 @@ export async function transcribeSegment(
 
   const segment: TranscriptSegment = {
     segmentId: ref.segmentId,
-    audioFile: ref.audioFile,
     timestamp: ref.timestamp,
     userId: ref.userId,
     username: ref.username,

@@ -9,7 +9,6 @@ import {
 function makeSegment(overrides: Partial<TranscriptSegment>): TranscriptSegment {
   return {
     segmentId: "0000",
-    audioFile: "clips/0000.ogg",
     timestamp: "2026-01-01T00:00:00.000Z",
     userId: "user-1",
     username: "Alice",

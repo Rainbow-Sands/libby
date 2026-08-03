@@ -153,9 +153,8 @@ export const sessionArtifacts = pgTable(
   ],
 );
 
-// Audio metadata is the durable manifest for a session. Cross-service audio is
-// stored exclusively in S3-compatible object storage; audioFile only preserves
-// the activation's original filename for transcript metadata and local recovery.
+// Audio metadata is the durable manifest for a session. Every registered clip
+// has a stable key in private S3-compatible object storage.
 export const sessionSegments = pgTable(
   "session_segments",
   {
@@ -163,11 +162,7 @@ export const sessionSegments = pgTable(
       .references(() => sessions.id, { onDelete: "cascade" })
       .notNull(),
     segmentId: varchar("segment_id", { length: 100 }).notNull(),
-    audioFile: text("audio_file").notNull(),
-    audioStorage: varchar("audio_storage", { length: 20 }).default("local").notNull(),
-    audioObjectKey: text("audio_object_key"),
-    audioByteSize: bigint("audio_byte_size", { mode: "number" }),
-    audioDeletedAt: timestamp("audio_deleted_at"),
+    audioObjectKey: text("audio_object_key").notNull(),
     recordedAt: text("recorded_at").notNull(),
     userId: varchar("user_id", { length: 20 }).notNull(),
     username: text("username"),

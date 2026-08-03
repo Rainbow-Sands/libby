@@ -104,17 +104,8 @@ async function mapConcurrent<T>(
 async function materializeAudio(
   segment: SegmentForTranscription,
 ): Promise<{ audioPath: string; cleanup: () => Promise<void> }> {
-  if (segment.audioStorage !== "s3") {
-    throw new UnrecoverableTaskError(
-      `Segment ${segment.segmentId} is not stored in S3-compatible object storage`,
-    );
-  }
-
-  if (!segment.audioObjectKey) {
-    throw new UnrecoverableTaskError(`Segment ${segment.segmentId} has no audio object key`);
-  }
   const directory = await mkdtemp(path.join(tmpdir(), "rainbot-audio-"));
-  const extension = path.extname(segment.audioFile) || ".ogg";
+  const extension = path.extname(segment.audioObjectKey) || ".ogg";
   const audioPath = path.join(directory, `${segment.segmentId}${extension}`);
   try {
     await getAudioStorage().downloadFile(segment.audioObjectKey, audioPath);
@@ -145,7 +136,7 @@ async function transcribeOne(segment: SegmentForTranscription): Promise<void> {
         segment.sessionId,
         segment.segmentId,
         transcript,
-        DELETE_AUDIO_AFTER_TRANSCRIPTION && segment.audioStorage === "s3",
+        DELETE_AUDIO_AFTER_TRANSCRIPTION,
       );
       return;
     } catch (error) {
