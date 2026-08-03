@@ -1,5 +1,6 @@
 import { error, redirect } from "@sveltejs/kit";
 import { getCampaignAccess, getCampaignDetail } from "@rainbot/db";
+import { RAG_CONFIG } from "$lib/server/env";
 import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params, locals }) => {
@@ -11,5 +12,9 @@ export const load: PageServerLoad = async ({ params, locals }) => {
   const campaign = await getCampaignDetail(params.id);
   if (!campaign) throw error(404, "Campaign not found.");
 
-  return { campaign, canIngest: access.isMember };
+  return {
+    campaign,
+    canIngest: access.isMember,
+    campaignChatEnabled: RAG_CONFIG.provider !== "none",
+  };
 };

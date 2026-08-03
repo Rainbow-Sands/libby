@@ -8,13 +8,14 @@ session artifacts.
 
 ## Packages
 
-| Package            | Description                                                           |
-| ------------------ | --------------------------------------------------------------------- |
-| `@rainbot/discord` | Discord bot — joins voice channels and records audio                  |
-| `@rainbot/storage` | S3-compatible object access and artifact validation                   |
-| `@rainbot/worker`  | Postgres worker — transcription, aggregation, inference, notification |
-| `@rainbot/db`      | Drizzle schema, PostgreSQL client, and durable processing state       |
-| `@rainbot/web`     | SvelteKit frontend                                                    |
+| Package              | Description                                                           |
+| -------------------- | --------------------------------------------------------------------- |
+| `@rainbot/discord`   | Discord bot — joins voice channels and records audio                  |
+| `@rainbot/knowledge` | DigitalOcean Knowledge Base retrieval and indexing                    |
+| `@rainbot/storage`   | S3-compatible object access and artifact validation                   |
+| `@rainbot/worker`    | Postgres worker — transcription, aggregation, inference, notification |
+| `@rainbot/db`        | Drizzle schema, PostgreSQL client, and durable processing state       |
+| `@rainbot/web`       | SvelteKit frontend                                                    |
 
 ## Requirements
 
@@ -103,6 +104,17 @@ Service names below match `docker-compose.yml`; `db-migrate` is the
 | `CHAT_REASONING_EFFORT`          | web     | Optional cloud effort: `none`, `low`, `medium`, `high`, `xhigh`, or `max`; `minimal` is OpenAI-only |
 | `CHAT_THINKING_BUDGET`           | web     | Local llama.cpp reasoning budget (default: `2048`)                                                  |
 
+### Campaign knowledge retrieval
+
+| Variable                | Used by     | Description                                                                           |
+| ----------------------- | ----------- | ------------------------------------------------------------------------------------- |
+| `RAG_PROVIDER`          | worker, web | Campaign retrieval provider: `none` (default) or `digitalocean`                       |
+| `RAG_API_KEY`           | worker, web | DigitalOcean token used to create indexing jobs and retrieve Knowledge Base results   |
+| `RAG_KNOWLEDGE_BASE_ID` | worker, web | DigitalOcean Knowledge Base UUID                                                      |
+| `RAG_OBJECT_PREFIX`     | worker, web | Artifact-bucket folder selected as the Knowledge Base data source (default: `rag`)    |
+| `RAG_RETRIEVAL_ALPHA`   | web         | Hybrid retrieval balance from keyword `0` to semantic `1` (default: `0.6`)            |
+| `RAG_RETRIEVAL_RESULTS` | web         | Maximum retrieved chunks supplied to campaign chat, from `1` to `100` (default: `12`) |
+
 Keep both buckets private. Transcript and detailed-record objects share the
 artifact bucket under separate session/run prefixes; recap and title stay in
 Postgres for fast page listings and URL previews. `DELETE_AUDIO_AFTER_TRANSCRIPTION=true`
@@ -119,3 +131,26 @@ The web service needs artifact read access; the worker needs read/write access.
 Summarization and chat use independent provider profiles. Local thinking budgets
 accept `0` to disable thinking, a positive token limit, or `-1` for unlimited.
 Cloud providers use their corresponding reasoning-effort setting.
+
+When `RAG_PROVIDER=digitalocean`, configure the Knowledge Base to ingest the
+`RAG_OBJECT_PREFIX` folder in `S3_BUCKET_ARTIFACT`. The worker writes one stable
+Markdown projection per session beneath that folder and requests re-indexing
+after a newly generated detailed record becomes current. Retrieval is always
+filtered to the authorized campaign's object-key prefix. Canonical transcript
+and detailed-record artifacts remain unchanged, so the managed index can be
+rebuilt or replaced.
+
+For a new Knowledge Base, first set `RAG_OBJECT_PREFIX` and run the sync command
+with `RAG_PROVIDER` unset. This populates the folder so it can be selected as a
+Spaces data source. After creating the Knowledge Base, configure the remaining
+RAG variables and run the command again to request indexing:
+
+```sh
+pnpm --filter @rainbot/worker sync:knowledge
+```
+
+In Docker Compose, run the same one-off task from the worker image:
+
+```sh
+docker compose run --rm --entrypoint node worker packages/worker/src/scripts/sync-knowledge.ts
+```

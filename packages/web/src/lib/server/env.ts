@@ -1,6 +1,7 @@
 import { building } from "$app/environment";
 import { env } from "$env/dynamic/private";
 import { loadChatInferenceConfig } from "$lib/server/chat-inference";
+import { loadRagConfig } from "@rainbot/knowledge";
 
 function get(name: string, fallback?: string): string {
   const value = env[name];
@@ -18,3 +19,4 @@ export const S3_BUCKET_ARTIFACT = get("S3_BUCKET_ARTIFACT");
 export const S3_BUCKET_AUDIO = get("S3_BUCKET_AUDIO");
 export const S3_REGION = get("S3_REGION");
 export const CHAT_INFERENCE_CONFIG = loadChatInferenceConfig(env, !building);
+export const RAG_CONFIG = loadRagConfig(env);

@@ -3,7 +3,7 @@
   import type { ActionData, PageData } from "./$types";
   import { page } from "$app/state";
   import TaperedRule from "$lib/components/TaperedRule.svelte";
-  import SessionChat from "$lib/components/SessionChat.svelte";
+  import LibbyChat from "$lib/components/LibbyChat.svelte";
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
 
@@ -127,7 +127,7 @@
     {/if}
 
     {#if data.session.status === "done"}
-      <SessionChat
+      <LibbyChat
         sessionId={data.session.id}
         campaignId={data.session.campaignId}
       />

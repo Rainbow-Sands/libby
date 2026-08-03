@@ -2,7 +2,12 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
 import type { SessionArtifactRef, SessionArtifactWrite } from "./artifacts.ts";
 import { db } from "./client.ts";
-import type { NotificationStatus, ProcessingRunKind, ProcessingRunStatus } from "./domain.ts";
+import type {
+  KnowledgeSyncStatus,
+  NotificationStatus,
+  ProcessingRunKind,
+  ProcessingRunStatus,
+} from "./domain.ts";
 import { processingRuns, sessionArtifacts, sessionSegments, sessions } from "./schema.ts";
 
 function toArtifactRef(
@@ -34,6 +39,9 @@ export interface ProcessingRunData {
   title: string | null;
   notificationChannelId: string | null;
   notificationStatus: NotificationStatus | null;
+  knowledgeSyncStatus: KnowledgeSyncStatus | null;
+  knowledgeSyncError: string | null;
+  startedAt: Date;
   attemptCount: number;
 }
 
@@ -50,6 +58,9 @@ export async function getProcessingRun(runId: string): Promise<ProcessingRunData
       title: processingRuns.title,
       notificationChannelId: processingRuns.notificationChannelId,
       notificationStatus: processingRuns.notificationStatus,
+      knowledgeSyncStatus: processingRuns.knowledgeSyncStatus,
+      knowledgeSyncError: processingRuns.knowledgeSyncError,
+      startedAt: sessions.startedAt,
       attemptCount: processingRuns.attemptCount,
     })
     .from(processingRuns)
@@ -89,6 +100,9 @@ export async function getProcessingRun(runId: string): Promise<ProcessingRunData
     title: run.title,
     notificationChannelId: run.notificationChannelId,
     notificationStatus: run.notificationStatus,
+    knowledgeSyncStatus: run.knowledgeSyncStatus,
+    knowledgeSyncError: run.knowledgeSyncError,
+    startedAt: run.startedAt,
     attemptCount: run.attemptCount,
   };
 }
@@ -118,6 +132,7 @@ export async function claimProcessingRuns(
           or(
             notInArray(processingRuns.status, ["done"]),
             eq(processingRuns.notificationStatus, "pending"),
+            eq(processingRuns.knowledgeSyncStatus, "pending"),
           ),
           lt(processingRuns.availableAt, new Date(now.getTime() + 1)),
           or(isNull(processingRuns.leaseExpiresAt), lt(processingRuns.leaseExpiresAt, now)),
@@ -283,7 +298,10 @@ export async function storeRunTitle(runId: string, title: string): Promise<boole
   return rows.length > 0;
 }
 
-export async function completeProcessingRun(runId: string): Promise<boolean> {
+export async function completeProcessingRun(
+  runId: string,
+  queueKnowledgeSync = false,
+): Promise<boolean> {
   return db.transaction(async (tx) => {
     const [run] = await tx
       .select({
@@ -347,12 +365,31 @@ export async function completeProcessingRun(runId: string): Promise<boolean> {
       .update(processingRuns)
       .set({
         status: "done",
+        knowledgeSyncStatus:
+          queueKnowledgeSync && generatedArtifacts.some(({ kind }) => kind === "detailed_record")
+            ? "pending"
+            : null,
+        knowledgeSyncError: null,
         updatedAt: new Date(),
         finishedAt: new Date(),
       })
       .where(eq(processingRuns.id, runId));
     return true;
   });
+}
+
+export async function markKnowledgeSyncComplete(runId: string): Promise<void> {
+  await db
+    .update(processingRuns)
+    .set({ knowledgeSyncStatus: "completed", knowledgeSyncError: null, updatedAt: new Date() })
+    .where(and(eq(processingRuns.id, runId), eq(processingRuns.knowledgeSyncStatus, "pending")));
+}
+
+export async function markKnowledgeSyncFailed(runId: string, error: string): Promise<void> {
+  await db
+    .update(processingRuns)
+    .set({ knowledgeSyncStatus: "failed", knowledgeSyncError: error, updatedAt: new Date() })
+    .where(and(eq(processingRuns.id, runId), eq(processingRuns.knowledgeSyncStatus, "pending")));
 }
 
 export async function failProcessingRun(runId: string, message: string): Promise<void> {

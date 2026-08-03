@@ -4,19 +4,24 @@
   import { Chat } from "@ai-sdk/svelte";
   import { DefaultChatTransport, type UIMessage } from "ai";
 
-  let { sessionId, campaignId }: { sessionId: string; campaignId: string } =
-    $props();
+  let {
+    sessionId,
+    campaignId,
+    campaignWide = false,
+  }: { sessionId?: string; campaignId: string; campaignWide?: boolean } = $props();
 
   // Route params are fixed for this component's lifetime (a route change
   // remounts it), so capturing them once at construction is intentional.
-  const chat = untrack(
-    () =>
-      new Chat({
+  const chat = untrack(() => {
+    const api = campaignWide
+      ? `/campaigns/${campaignId}/chat`
+      : `/campaigns/${campaignId}/sessions/${sessionId}/chat`;
+    return new Chat({
         transport: new DefaultChatTransport({
-          api: `/campaigns/${campaignId}/sessions/${sessionId}/chat`,
+          api,
         }),
-      })
-  );
+      });
+  });
 
   let input = $state("");
 
@@ -68,11 +73,15 @@
   }
 </script>
 
-<section class="chat" aria-label="Ask about this session">
+<section class="chat" aria-label={campaignWide ? "Ask about this campaign" : "Ask about this session"}>
   <h2>Ask Libby</h2>
   <p class="muted hint">
-    Ask questions about what happened this session. Answers come only from the
-    recording.
+    {#if campaignWide}
+      Ask questions across the campaign's recorded history. Libby searches the detailed records
+      for relevant memories.
+    {:else}
+      Ask questions about what happened this session. Answers come only from the recording.
+    {/if}
   </p>
 
   <div class="log" role="log" aria-live="polite">
@@ -113,7 +122,7 @@
     <input
       type="text"
       bind:value={input}
-      placeholder="What did the party decide to do?"
+      placeholder={campaignWide ? "Where did the party first meet Strahd?" : "What did the party decide to do?"}
       autocomplete="off"
       disabled={busy}
     />
@@ -229,3 +238,4 @@
     cursor: not-allowed;
   }
 </style>
+

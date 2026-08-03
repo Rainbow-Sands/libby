@@ -18,6 +18,7 @@ import { SESSION_ARTIFACT_KINDS, type SessionArtifactKind } from "./artifacts.ts
 import {
   AUDIO_STATUSES,
   CAMPAIGN_MEMBER_ROLES,
+  KNOWLEDGE_SYNC_STATUSES,
   NOTIFICATION_STATUSES,
   PROCESSING_RUN_KINDS,
   PROCESSING_RUN_STATUSES,
@@ -25,6 +26,7 @@ import {
   TRANSCRIPTION_STATUSES,
   type AudioStatus,
   type CampaignMemberRole,
+  type KnowledgeSyncStatus,
   type NotificationStatus,
   type ProcessingRunKind,
   type ProcessingRunStatus,
@@ -126,6 +128,10 @@ export const processingRuns = pgTable(
     title: text("title"),
     notificationChannelId: varchar("notification_channel_id", { length: 20 }),
     notificationStatus: varchar("notification_status", { length: 20 }).$type<NotificationStatus>(),
+    knowledgeSyncStatus: varchar("knowledge_sync_status", {
+      length: 20,
+    }).$type<KnowledgeSyncStatus>(),
+    knowledgeSyncError: text("knowledge_sync_error"),
     error: text("error"),
     availableAt: timestamp("available_at").defaultNow().notNull(),
     lockedBy: text("locked_by"),
@@ -144,6 +150,10 @@ export const processingRuns = pgTable(
     check(
       "processing_runs_notification_status_check",
       oneOf(t.notificationStatus, NOTIFICATION_STATUSES),
+    ),
+    check(
+      "processing_runs_knowledge_sync_status_check",
+      oneOf(t.knowledgeSyncStatus, KNOWLEDGE_SYNC_STATUSES),
     ),
     check(
       "processing_runs_source_transcript_kind_check",

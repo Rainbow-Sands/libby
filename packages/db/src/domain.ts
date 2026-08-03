@@ -38,6 +38,9 @@ export type ProcessingRunStatus = ValueOf<typeof PROCESSING_RUN_STATUSES>;
 export const NOTIFICATION_STATUSES = ["pending", "completed", "failed"] as const;
 export type NotificationStatus = ValueOf<typeof NOTIFICATION_STATUSES>;
 
+export const KNOWLEDGE_SYNC_STATUSES = ["pending", "completed", "failed"] as const;
+export type KnowledgeSyncStatus = ValueOf<typeof KNOWLEDGE_SYNC_STATUSES>;
+
 export const AUDIO_STATUSES = [
   "recording",
   "uploading",

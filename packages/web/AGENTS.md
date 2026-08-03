@@ -50,6 +50,8 @@ or transcription URL.
 
 The web service needs `S3_BUCKET_AUDIO` for manual ingestion and
 `S3_BUCKET_ARTIFACT` to read transcript/detailed-record tabs and chat context.
+With `RAG_PROVIDER=digitalocean`, the campaign page also provides Knowledge
+Base-backed chat filtered to the campaign's artifact object-key prefix.
 
 ## Notes
 

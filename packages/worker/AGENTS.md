@@ -22,6 +22,9 @@ Postgres is both the queue and the source of truth:
   and small recap/title output. Generated artifacts identify their run through
   `session_artifacts.generated_by_run_id`.
 - `session_artifacts` holds immutable transcript/detailed-record object metadata.
+- Completed detailed records are projected to a stable RAG object and tracked
+  independently through `processing_runs.knowledge_sync_status`; a Knowledge
+  Base outage must not fail an otherwise completed session.
 - `session_segments` is the audio manifest and per-activation transcription checkpoint.
 - Workers claim whole sessions, then process activation rows with bounded concurrency.
 - Never hold a database transaction open while calling Whisper or an LLM.
@@ -45,3 +48,5 @@ pnpm --filter @rainbot/worker eval:inference <transcript.txt>
 `SUMMARIZATION_PROVIDER` selects `local`, `openai`, or `anthropic`; cloud
 providers require `SUMMARIZATION_API_KEY` and `SUMMARIZATION_MODEL`. Local
 summarization requires `SUMMARIZATION_BASE_URL`.
+`RAG_PROVIDER=digitalocean` publishes campaign knowledge and requires
+`RAG_API_KEY` plus `RAG_KNOWLEDGE_BASE_ID`.

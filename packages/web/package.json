@@ -15,6 +15,7 @@
     "@ai-sdk/provider": "^4.0.3",
     "@ai-sdk/svelte": "latest",
     "@rainbot/db": "workspace:*",
+    "@rainbot/knowledge": "workspace:*",
     "@rainbot/storage": "workspace:*",
     "@rainbot/worker": "workspace:*",
     "@sveltejs/kit": "latest",
