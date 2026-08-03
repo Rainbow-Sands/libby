@@ -1,5 +1,3 @@
-export { db } from "./client.ts";
-export * from "./schema.ts";
 export {
   SESSION_ARTIFACT_KINDS,
   type SessionArtifactKind,

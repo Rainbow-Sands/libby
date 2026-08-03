@@ -49,7 +49,6 @@ export async function createRecordingSession(input: CreateRecordingSessionInput)
 
 export interface RecoverableSession {
   id: string;
-  guildId: string;
   channelId: string;
   sessionDir: string;
   runId: string;
@@ -62,7 +61,6 @@ export async function getRecoverableSessionsForGuild(
   const rows = await db
     .select({
       id: sessions.id,
-      guildId: sessions.guildId,
       channelId: sessions.channelId,
       sessionDir: sessions.sessionDir,
       runId: sessions.activeRunId,
@@ -71,9 +69,7 @@ export async function getRecoverableSessionsForGuild(
     .from(sessions)
     .where(and(eq(sessions.guildId, guildId), inArray(sessions.status, ["recording", "closing"])));
 
-  return rows.filter(
-    (row): row is RecoverableSession => row.guildId !== null && row.runId !== null,
-  );
+  return rows.filter((row): row is RecoverableSession => row.runId !== null);
 }
 
 export async function hasOpenRecordingForGuild(guildId: string): Promise<boolean> {
@@ -443,7 +439,6 @@ export interface ProcessingRunData {
   id: string;
   sessionId: string;
   campaignId: string;
-  kind: string;
   status: string;
   transcriptArtifact: SessionArtifactRef | null;
   detailedRecordArtifact: SessionArtifactRef | null;
@@ -451,8 +446,6 @@ export interface ProcessingRunData {
   title: string | null;
   notificationChannelId: string | null;
   notificationStatus: string | null;
-  lockedBy: string | null;
-  leaseExpiresAt: Date | null;
   attemptCount: number;
 }
 
@@ -462,7 +455,6 @@ export async function getProcessingRun(runId: string): Promise<ProcessingRunData
       id: processingRuns.id,
       sessionId: processingRuns.sessionId,
       campaignId: sessions.campaignId,
-      kind: processingRuns.kind,
       status: processingRuns.status,
       transcriptArtifactId: processingRuns.transcriptArtifactId,
       detailedRecordArtifactId: processingRuns.detailedRecordArtifactId,
@@ -470,8 +462,6 @@ export async function getProcessingRun(runId: string): Promise<ProcessingRunData
       title: processingRuns.title,
       notificationChannelId: processingRuns.notificationChannelId,
       notificationStatus: processingRuns.notificationStatus,
-      lockedBy: processingRuns.lockedBy,
-      leaseExpiresAt: processingRuns.leaseExpiresAt,
       attemptCount: processingRuns.attemptCount,
     })
     .from(processingRuns)
@@ -507,7 +497,6 @@ export async function getProcessingRun(runId: string): Promise<ProcessingRunData
     id: run.id,
     sessionId: run.sessionId,
     campaignId: run.campaignId,
-    kind: run.kind,
     status: run.status,
     transcriptArtifact: toRef(run.transcriptArtifactId),
     detailedRecordArtifact: toRef(run.detailedRecordArtifactId),
@@ -515,8 +504,6 @@ export async function getProcessingRun(runId: string): Promise<ProcessingRunData
     title: run.title,
     notificationChannelId: run.notificationChannelId,
     notificationStatus: run.notificationStatus,
-    lockedBy: run.lockedBy,
-    leaseExpiresAt: run.leaseExpiresAt,
     attemptCount: run.attemptCount,
   };
 }
@@ -876,7 +863,6 @@ export async function getAudioSegmentsForRecovery(sessionId: string): Promise<
   (AudioSegmentRef & {
     audioStatus: string;
     runId: string | null;
-    transcriptionStatus: string | null;
   })[]
 > {
   const rows = await db
@@ -888,7 +874,6 @@ export async function getAudioSegmentsForRecovery(sessionId: string): Promise<
       username: sessionSegments.username,
       audioStatus: sessionSegments.audioStatus,
       runId: sessionSegments.transcriptionRunId,
-      transcriptionStatus: sessionSegments.transcriptionStatus,
     })
     .from(sessionSegments)
     .where(
@@ -905,14 +890,13 @@ export async function getAudioSegmentsForRecovery(sessionId: string): Promise<
     ...(row.username ? { username: row.username } : {}),
     audioStatus: row.audioStatus,
     runId: row.runId,
-    transcriptionStatus: row.transcriptionStatus,
   }));
 }
 
 export async function startTranscriptRegeneration(
   sessionId: string,
   refs: AudioSegmentRef[],
-): Promise<{ runId: string; segmentIds: string[] }> {
+): Promise<string> {
   const runId = randomUUID();
   return db.transaction(async (tx) => {
     const [session] = await tx
@@ -966,7 +950,7 @@ export async function startTranscriptRegeneration(
       .update(sessions)
       .set({ activeRunId: runId, status: "transcribing" })
       .where(eq(sessions.id, sessionId));
-    return { runId, segmentIds: refs.map((ref) => ref.segmentId) };
+    return runId;
   });
 }
 

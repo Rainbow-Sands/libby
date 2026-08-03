@@ -1,10 +1,9 @@
-// Standalone harness to exercise the summarization pipeline against a
-// transcript.txt, independent of Discord/the Postgres worker. Runs the exact same prompts
-// and post-processing as the real workers, so what you see here is what the
-// pipeline would produce.
+// Standalone harness to exercise the inference pipeline against a transcript,
+// independent of Discord and the Postgres worker. It runs the same prompts and
+// post-processing as the worker.
 //
 // Usage:
-//   pnpm test:summarize <transcript.txt>          # loads provider settings from root .env
+//   pnpm --filter @rainbot/worker eval:inference <transcript.txt>
 //
 // Writes <transcript>.record.md / .recap.md / .title.txt next to the input so
 // outputs persist for comparing prompts or models across runs.
@@ -24,7 +23,7 @@ const providerComplete = createSummarizationInference(config);
 
 const transcriptPath = process.argv[2];
 if (!transcriptPath) {
-  console.error("Usage: node src/scripts/test-summarize.ts <transcript.txt>");
+  console.error("Usage: pnpm --filter @rainbot/worker eval:inference <transcript.txt>");
   process.exit(1);
 }
 

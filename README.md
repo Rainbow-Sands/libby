@@ -112,19 +112,7 @@ the application stores stable object keys and does not depend on signed URLs.
 Leave application deletion disabled while transcript regeneration is needed.
 Recorder and manual-upload scratch files use each service's local temporary
 directory and are removed after upload; no shared filesystem is required.
-
-Before the first artifact-storage deployment:
-
-1. Create `S3_BUCKET_ARTIFACT` and configure the database/S3 variables locally.
-2. Stop the production Discord and worker services so no processing run is active.
-3. Run `pnpm --filter @rainbot/worker migrate:session-artifacts`.
-4. Deploy normally. The database migration publishes the staged object metadata
-   and then removes the old transcript/summary columns.
-
-The script is resumable and does not delete or modify existing session payloads.
-The schema migration refuses to remove them if any artifact is unstaged or a
-processing run is active. The web service needs artifact read access; the worker
-needs read/write access.
+The web service needs artifact read access; the worker needs read/write access.
 
 Summarization and chat use independent provider profiles. Local thinking budgets
 accept `0` to disable thinking, a positive token limit, or `-1` for unlimited.

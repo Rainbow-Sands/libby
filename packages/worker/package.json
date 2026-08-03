@@ -7,10 +7,9 @@
   },
   "scripts": {
     "dev": "node --env-file=../../.env --watch src/worker.ts",
-    "migrate:session-artifacts": "node --env-file-if-exists=../../.env src/scripts/migrate-session-artifacts.ts",
+    "eval:inference": "node --env-file=../../.env src/scripts/evaluate-inference.ts",
     "start": "node src/worker.ts",
-    "test": "vitest run",
-    "test:summarize": "node --env-file=../../.env src/scripts/test-summarize.ts"
+    "test": "vitest run"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.18",
@@ -20,8 +19,7 @@
     "@aws-sdk/client-s3": "^3.883.0",
     "@aws-sdk/lib-storage": "^3.883.0",
     "@rainbot/db": "workspace:*",
-    "ai": "^7.0.34",
-    "postgres": "latest"
+    "ai": "^7.0.34"
   },
   "devDependencies": {
     "@types/node": "^25.0.0",

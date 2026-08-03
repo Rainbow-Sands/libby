@@ -114,6 +114,5 @@ export async function requestInferenceRegeneration(sessionId: string): Promise<s
 
 export async function requestTranscriptRegeneration(sessionId: string): Promise<string> {
   const refs = await getAudioSegmentRefs(sessionId);
-  const { runId } = await startTranscriptRegeneration(sessionId, refs);
-  return runId;
+  return startTranscriptRegeneration(sessionId, refs);
 }

@@ -12,8 +12,7 @@ root `AGENTS.md` for workspace-wide conventions.
 - `tasks.ts` — whisper and inference calls.
 - `prompts.ts` / `text.ts` — shared prompts and response cleanup.
 - `summarization-inference.ts` — local/OpenAI/Anthropic provider configuration.
-- `scripts/test-summarize.ts` — standalone detailed-record pipeline harness.
-- `scripts/migrate-session-artifacts.ts` — resumable one-off legacy payload upload.
+- `scripts/evaluate-inference.ts` — standalone detailed-record pipeline harness.
 
 ## Durable state
 
@@ -38,7 +37,7 @@ object keys in Postgres, never expiring signed URLs.
 the standalone test harness:
 
 ```sh
-pnpm --filter @rainbot/worker test:summarize <transcript.txt>
+pnpm --filter @rainbot/worker eval:inference <transcript.txt>
 ```
 
 `TRANSCRIPTION_URL` is the complete whisper request URL.
