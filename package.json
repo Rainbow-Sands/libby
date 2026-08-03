@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "dev": "pnpm --parallel --recursive dev",
+    "test": "pnpm --recursive test",
     "format": "oxfmt",
     "format:fix": "oxfmt --write",
     "lint": "oxlint",
