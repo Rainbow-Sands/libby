@@ -2,16 +2,34 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
 import type { SessionArtifactRef, SessionArtifactWrite } from "./artifacts.ts";
 import { db } from "./client.ts";
-import type { NotificationStatus, ProcessingRunStatus } from "./domain.ts";
+import type { NotificationStatus, ProcessingRunKind, ProcessingRunStatus } from "./domain.ts";
 import { processingRuns, sessionArtifacts, sessionSegments, sessions } from "./schema.ts";
+
+function toArtifactRef(
+  artifact: typeof sessionArtifacts.$inferSelect | undefined,
+): SessionArtifactRef | null {
+  if (!artifact) return null;
+  return {
+    id: artifact.id,
+    kind: artifact.kind,
+    bucket: artifact.bucket,
+    objectKey: artifact.objectKey,
+    contentType: artifact.contentType,
+    formatVersion: artifact.formatVersion,
+    byteSize: artifact.byteSize,
+    sha256: artifact.sha256,
+  };
+}
 
 export interface ProcessingRunData {
   id: string;
   sessionId: string;
   campaignId: string;
+  kind: ProcessingRunKind;
   status: ProcessingRunStatus;
-  transcriptArtifact: SessionArtifactRef | null;
-  detailedRecordArtifact: SessionArtifactRef | null;
+  sourceTranscriptArtifact: SessionArtifactRef | null;
+  generatedTranscriptArtifact: SessionArtifactRef | null;
+  generatedDetailedRecordArtifact: SessionArtifactRef | null;
   recap: string | null;
   title: string | null;
   notificationChannelId: string | null;
@@ -25,9 +43,9 @@ export async function getProcessingRun(runId: string): Promise<ProcessingRunData
       id: processingRuns.id,
       sessionId: processingRuns.sessionId,
       campaignId: sessions.campaignId,
+      kind: processingRuns.kind,
       status: processingRuns.status,
-      transcriptArtifactId: processingRuns.transcriptArtifactId,
-      detailedRecordArtifactId: processingRuns.detailedRecordArtifactId,
+      sourceTranscriptArtifactId: processingRuns.sourceTranscriptArtifactId,
       recap: processingRuns.recap,
       title: processingRuns.title,
       notificationChannelId: processingRuns.notificationChannelId,
@@ -40,36 +58,33 @@ export async function getProcessingRun(runId: string): Promise<ProcessingRunData
     .limit(1);
   if (!run) return null;
 
-  const artifactIds = [run.transcriptArtifactId, run.detailedRecordArtifactId].filter(
-    (id): id is string => id !== null,
-  );
-  const artifacts =
-    artifactIds.length > 0
-      ? await db.select().from(sessionArtifacts).where(inArray(sessionArtifacts.id, artifactIds))
-      : [];
-  const byId = new Map(artifacts.map((artifact) => [artifact.id, artifact]));
-  const toRef = (id: string | null): SessionArtifactRef | null => {
-    const artifact = id ? byId.get(id) : undefined;
-    if (!artifact) return null;
-    return {
-      id: artifact.id,
-      kind: artifact.kind,
-      bucket: artifact.bucket,
-      objectKey: artifact.objectKey,
-      contentType: artifact.contentType,
-      formatVersion: artifact.formatVersion,
-      byteSize: artifact.byteSize,
-      sha256: artifact.sha256,
-    };
-  };
+  const artifactPredicate = run.sourceTranscriptArtifactId
+    ? or(
+        eq(sessionArtifacts.generatedByRunId, run.id),
+        eq(sessionArtifacts.id, run.sourceTranscriptArtifactId),
+      )
+    : eq(sessionArtifacts.generatedByRunId, run.id);
+  const artifacts = await db.select().from(sessionArtifacts).where(artifactPredicate);
 
   return {
     id: run.id,
     sessionId: run.sessionId,
     campaignId: run.campaignId,
+    kind: run.kind,
     status: run.status,
-    transcriptArtifact: toRef(run.transcriptArtifactId),
-    detailedRecordArtifact: toRef(run.detailedRecordArtifactId),
+    sourceTranscriptArtifact: toArtifactRef(
+      artifacts.find((artifact) => artifact.id === run.sourceTranscriptArtifactId),
+    ),
+    generatedTranscriptArtifact: toArtifactRef(
+      artifacts.find(
+        (artifact) => artifact.generatedByRunId === run.id && artifact.kind === "transcript",
+      ),
+    ),
+    generatedDetailedRecordArtifact: toArtifactRef(
+      artifacts.find(
+        (artifact) => artifact.generatedByRunId === run.id && artifact.kind === "detailed_record",
+      ),
+    ),
     recap: run.recap,
     title: run.title,
     notificationChannelId: run.notificationChannelId,
@@ -179,7 +194,7 @@ export async function storeAggregatedTranscript(
       .for("update");
     if (!run || run.status !== "aggregating") return false;
 
-    const [stored] = await tx
+    await tx
       .insert(sessionArtifacts)
       .values({
         sessionId: run.sessionId,
@@ -190,14 +205,11 @@ export async function storeAggregatedTranscript(
       .onConflictDoUpdate({
         target: [sessionArtifacts.generatedByRunId, sessionArtifacts.kind],
         set: artifact,
-      })
-      .returning({ id: sessionArtifacts.id });
-    if (!stored) return false;
+      });
 
     const updated = await tx
       .update(processingRuns)
       .set({
-        transcriptArtifactId: stored.id,
         status: "summarizing",
         updatedAt: new Date(),
       })
@@ -228,7 +240,7 @@ export async function storeRunDetailedRecord(
       .for("update");
     if (!run || run.status !== "summarizing") return false;
 
-    const [stored] = await tx
+    await tx
       .insert(sessionArtifacts)
       .values({
         sessionId: run.sessionId,
@@ -239,14 +251,11 @@ export async function storeRunDetailedRecord(
       .onConflictDoUpdate({
         target: [sessionArtifacts.generatedByRunId, sessionArtifacts.kind],
         set: artifact,
-      })
-      .returning({ id: sessionArtifacts.id });
-    if (!stored) return false;
+      });
 
     const rows = await tx
       .update(processingRuns)
       .set({
-        detailedRecordArtifactId: stored.id,
         status: "recapping",
         updatedAt: new Date(),
       })
@@ -280,8 +289,6 @@ export async function completeProcessingRun(runId: string): Promise<boolean> {
       .select({
         sessionId: processingRuns.sessionId,
         status: processingRuns.status,
-        transcriptArtifactId: processingRuns.transcriptArtifactId,
-        detailedRecordArtifactId: processingRuns.detailedRecordArtifactId,
         recap: processingRuns.recap,
         title: processingRuns.title,
       })
@@ -289,6 +296,16 @@ export async function completeProcessingRun(runId: string): Promise<boolean> {
       .where(eq(processingRuns.id, runId))
       .for("update");
     if (!run || !["aggregating", "summarizing", "titling"].includes(run.status)) return false;
+
+    const generatedArtifacts = await tx
+      .select({ kind: sessionArtifacts.kind })
+      .from(sessionArtifacts)
+      .where(
+        and(
+          eq(sessionArtifacts.generatedByRunId, runId),
+          eq(sessionArtifacts.sessionId, run.sessionId),
+        ),
+      );
 
     const updated = await tx
       .update(sessions)
@@ -302,42 +319,28 @@ export async function completeProcessingRun(runId: string): Promise<boolean> {
       .returning({ id: sessions.id });
     if (!updated[0]) return false;
 
-    const currentArtifactIds = [run.transcriptArtifactId, run.detailedRecordArtifactId].filter(
-      (id): id is string => id !== null,
-    );
-    if (currentArtifactIds.length > 0) {
-      const kinds = await tx
-        .select({ kind: sessionArtifacts.kind })
-        .from(sessionArtifacts)
+    if (generatedArtifacts.length > 0) {
+      await tx
+        .update(sessionArtifacts)
+        .set({ isCurrent: false })
         .where(
           and(
-            inArray(sessionArtifacts.id, currentArtifactIds),
+            eq(sessionArtifacts.sessionId, run.sessionId),
+            inArray(
+              sessionArtifacts.kind,
+              generatedArtifacts.map(({ kind }) => kind),
+            ),
+          ),
+        );
+      await tx
+        .update(sessionArtifacts)
+        .set({ isCurrent: true })
+        .where(
+          and(
+            eq(sessionArtifacts.generatedByRunId, runId),
             eq(sessionArtifacts.sessionId, run.sessionId),
           ),
         );
-      if (kinds.length > 0) {
-        await tx
-          .update(sessionArtifacts)
-          .set({ isCurrent: false })
-          .where(
-            and(
-              eq(sessionArtifacts.sessionId, run.sessionId),
-              inArray(
-                sessionArtifacts.kind,
-                kinds.map(({ kind }) => kind),
-              ),
-            ),
-          );
-        await tx
-          .update(sessionArtifacts)
-          .set({ isCurrent: true })
-          .where(
-            and(
-              inArray(sessionArtifacts.id, currentArtifactIds),
-              eq(sessionArtifacts.sessionId, run.sessionId),
-            ),
-          );
-      }
     }
 
     await tx
@@ -397,7 +400,7 @@ export async function startInferenceRegeneration(sessionId: string): Promise<str
       sessionId,
       kind: "inference",
       status: "summarizing",
-      transcriptArtifactId: transcriptArtifact.id,
+      sourceTranscriptArtifactId: transcriptArtifact.id,
     });
     await tx
       .update(sessions)

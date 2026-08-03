@@ -5,9 +5,9 @@ import {
   audioObjectKey,
   loadArtifactStorageConfig,
   loadAudioStorageConfig,
-} from "./storage.ts";
+} from "./object-storage.ts";
 
-describe("audio object storage", () => {
+describe("object storage", () => {
   it("builds opaque, session-scoped activation keys", () => {
     expect(audioObjectKey("session/one", "segment two", "clips/input.OGG")).toBe(
       "sessions/session%2Fone/activations/segment%20two.ogg",

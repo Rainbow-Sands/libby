@@ -16,9 +16,8 @@
     "@ai-sdk/openai": "^4.0.17",
     "@ai-sdk/openai-compatible": "^3.0.14",
     "@ai-sdk/provider": "^4.0.3",
-    "@aws-sdk/client-s3": "^3.883.0",
-    "@aws-sdk/lib-storage": "^3.883.0",
     "@rainbot/db": "workspace:*",
+    "@rainbot/storage": "workspace:*",
     "ai": "^7.0.34"
   },
   "devDependencies": {

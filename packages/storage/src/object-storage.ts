@@ -2,12 +2,12 @@ import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, stat } from "node:fs/promises";
 import path from "node:path";
+import { pipeline } from "node:stream/promises";
 import { DeleteObjectCommand, GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import type { SessionArtifactKind } from "@rainbot/db";
-import { pipeline } from "node:stream/promises";
 
-export interface AudioStorageConfig {
+export interface ObjectStorageConfig {
   endpoint?: string;
   region: string;
   bucket: string;
@@ -27,8 +27,8 @@ export interface UploadedArtifactObject {
   sha256: string;
 }
 
-let audioStorage: AudioStorage | null = null;
-let artifactStorage: AudioStorage | null = null;
+let audioStorage: ObjectStorage | null = null;
+let artifactStorage: ObjectStorage | null = null;
 
 function required(source: NodeJS.ProcessEnv, name: string): string {
   const value = source[name];
@@ -36,7 +36,7 @@ function required(source: NodeJS.ProcessEnv, name: string): string {
   return value;
 }
 
-function loadStorageConfig(source: NodeJS.ProcessEnv, bucketVariable: string): AudioStorageConfig {
+function loadStorageConfig(source: NodeJS.ProcessEnv, bucketVariable: string): ObjectStorageConfig {
   const endpoint = source.S3_ENDPOINT?.trim();
   const accessKeyId = source.S3_ACCESS_KEY_ID?.trim();
   const secretAccessKey = source.S3_SECRET_ACCESS_KEY?.trim();
@@ -54,21 +54,21 @@ function loadStorageConfig(source: NodeJS.ProcessEnv, bucketVariable: string): A
   };
 }
 
-export function loadAudioStorageConfig(source: NodeJS.ProcessEnv): AudioStorageConfig {
+export function loadAudioStorageConfig(source: NodeJS.ProcessEnv): ObjectStorageConfig {
   return loadStorageConfig(source, "S3_BUCKET_AUDIO");
 }
 
-export function loadArtifactStorageConfig(source: NodeJS.ProcessEnv): AudioStorageConfig {
+export function loadArtifactStorageConfig(source: NodeJS.ProcessEnv): ObjectStorageConfig {
   return loadStorageConfig(source, "S3_BUCKET_ARTIFACT");
 }
 
-export function getAudioStorage(): AudioStorage {
-  audioStorage ??= new AudioStorage(loadAudioStorageConfig(process.env));
+export function getAudioStorage(): ObjectStorage {
+  audioStorage ??= new ObjectStorage(loadAudioStorageConfig(process.env));
   return audioStorage;
 }
 
-export function getArtifactStorage(): AudioStorage {
-  artifactStorage ??= new AudioStorage(loadArtifactStorageConfig(process.env));
+export function getArtifactStorage(): ObjectStorage {
+  artifactStorage ??= new ObjectStorage(loadArtifactStorageConfig(process.env));
   return artifactStorage;
 }
 
@@ -102,11 +102,11 @@ export function artifactContentHash(body: string): string {
   return createHash("sha256").update(body, "utf8").digest("hex");
 }
 
-export class AudioStorage {
+export class ObjectStorage {
   readonly #bucket: string;
   readonly #client: S3Client;
 
-  constructor(config: AudioStorageConfig) {
+  constructor(config: ObjectStorageConfig) {
     this.#bucket = config.bucket;
     this.#client = new S3Client({
       region: config.region,
@@ -139,7 +139,7 @@ export class AudioStorage {
     const response = await this.#client.send(
       new GetObjectCommand({ Bucket: this.#bucket, Key: objectKey }),
     );
-    if (!response.Body) throw new Error(`Audio object has no body: ${objectKey}`);
+    if (!response.Body) throw new Error(`Object has no body: ${objectKey}`);
     await mkdir(path.dirname(destination), { recursive: true });
     await pipeline(response.Body as NodeJS.ReadableStream, createWriteStream(destination));
   }
@@ -176,7 +176,7 @@ export class AudioStorage {
     const response = await this.#client.send(
       new GetObjectCommand({ Bucket: bucket, Key: objectKey }),
     );
-    if (!response.Body) throw new Error(`Artifact object has no body: ${objectKey}`);
+    if (!response.Body) throw new Error(`Object has no body: ${objectKey}`);
     return response.Body.transformToString("utf-8");
   }
 

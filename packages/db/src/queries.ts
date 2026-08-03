@@ -45,13 +45,32 @@ export async function isAdmin(userId: string): Promise<boolean> {
   return user?.isAdmin ?? false;
 }
 
-export async function isCampaignMember(campaignId: string, userId: string): Promise<boolean> {
-  const rows = await db
-    .select({ userId: campaignMembers.userId })
-    .from(campaignMembers)
-    .where(and(eq(campaignMembers.campaignId, campaignId), eq(campaignMembers.userId, userId)))
-    .limit(1);
-  return rows.length > 0;
+export interface CampaignAccess {
+  isAdmin: boolean;
+  isMember: boolean;
+  canAccess: boolean;
+}
+
+export async function getCampaignAccess(
+  campaignId: string,
+  userId: string,
+): Promise<CampaignAccess> {
+  const [access] = await db
+    .select({
+      isAdmin: sql<boolean>`exists (
+        select 1 from ${users}
+        where ${users.id} = ${userId} and ${users.isAdmin} = true
+      )`,
+      isMember: sql<boolean>`exists (
+        select 1 from ${campaignMembers}
+        where ${campaignMembers.campaignId} = ${campaignId}
+          and ${campaignMembers.userId} = ${userId}
+      )`,
+    })
+    .from(sql`(select 1) as access_source`);
+  const admin = access?.isAdmin ?? false;
+  const member = access?.isMember ?? false;
+  return { isAdmin: admin, isMember: member, canAccess: admin || member };
 }
 
 export interface CampaignMember {

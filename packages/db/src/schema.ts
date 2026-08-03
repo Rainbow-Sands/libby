@@ -119,8 +119,9 @@ export const processingRuns = pgTable(
       .notNull(),
     kind: varchar("kind", { length: 20 }).$type<ProcessingRunKind>().notNull(),
     status: varchar("status", { length: 20 }).$type<ProcessingRunStatus>().notNull(),
-    transcriptArtifactId: uuid("transcript_artifact_id"),
-    detailedRecordArtifactId: uuid("detailed_record_artifact_id"),
+    // Only inference regeneration consumes an artifact created by another run.
+    // A run's own outputs are resolved through sessionArtifacts.generatedByRunId.
+    sourceTranscriptArtifactId: uuid("source_transcript_artifact_id"),
     recap: text("recap"),
     title: text("title"),
     notificationChannelId: varchar("notification_channel_id", { length: 20 }),
@@ -143,6 +144,10 @@ export const processingRuns = pgTable(
     check(
       "processing_runs_notification_status_check",
       oneOf(t.notificationStatus, NOTIFICATION_STATUSES),
+    ),
+    check(
+      "processing_runs_source_transcript_kind_check",
+      sql`${t.sourceTranscriptArtifactId} is null or ${t.kind} = 'inference'`,
     ),
   ],
 );

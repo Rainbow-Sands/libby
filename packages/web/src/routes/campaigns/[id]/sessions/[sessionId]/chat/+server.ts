@@ -1,5 +1,6 @@
 import { error, json } from "@sveltejs/kit";
-import { getCampaignCast, getSessionDetail, isAdmin, isCampaignMember } from "@rainbot/db";
+import { getCampaignAccess, getCampaignCast, getSessionDetail } from "@rainbot/db";
+import { loadDetailedRecordArtifact, loadTranscriptArtifact } from "@rainbot/storage";
 import {
   convertToModelMessages,
   createUIMessageStreamResponse,
@@ -10,7 +11,6 @@ import {
 import { createChatInference } from "$lib/server/chat-inference";
 import { CHAT_INFERENCE_CONFIG } from "$lib/server/env";
 import { buildSessionContext } from "$lib/server/chat-context";
-import { loadSessionDetailedRecord, loadSessionTranscript } from "$lib/server/session-artifacts";
 import type { RequestHandler } from "./$types";
 
 const chatInference = createChatInference(CHAT_INFERENCE_CONFIG);
@@ -23,11 +23,8 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
     throw error(404, "Session not found.");
   }
 
-  const [admin, member] = await Promise.all([
-    isAdmin(locals.user.id),
-    isCampaignMember(session.campaignId, locals.user.id),
-  ]);
-  if (!admin && !member) throw error(403, "You cannot view this campaign.");
+  const access = await getCampaignAccess(session.campaignId, locals.user.id);
+  if (!access.canAccess) throw error(403, "You cannot view this campaign.");
 
   if (!session.detailedRecordArtifact && !session.transcriptArtifact) {
     throw error(409, "This session has no detailed record or transcript to chat about yet.");
@@ -39,8 +36,13 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
   }
 
   const cast = await getCampaignCast(session.campaignId);
-  const detailedRecord = await loadSessionDetailedRecord(session);
-  const transcript = detailedRecord ? null : await loadSessionTranscript(session);
+  const detailedRecord = session.detailedRecordArtifact
+    ? await loadDetailedRecordArtifact(session.detailedRecordArtifact)
+    : null;
+  const transcript =
+    detailedRecord || !session.transcriptArtifact
+      ? null
+      : await loadTranscriptArtifact(session.transcriptArtifact);
 
   const result = streamText({
     model: chatInference.model,

@@ -26,6 +26,7 @@ export {
 export {
   formatTranscriptForDisplay,
   formatTranscriptForInference,
+  parseTranscript,
   simplifyTranscript,
   type Transcript,
   type TranscriptSegment,
@@ -41,13 +42,14 @@ export {
 export {
   getCampaignsForGuild,
   getCampaignsForUser,
+  getCampaignAccess,
   isAdmin,
-  isCampaignMember,
   getCampaignMeta,
   getCampaignCast,
   getCampaignDetail,
   getSessionDetail,
   type CampaignMember,
+  type CampaignAccess,
   type CampaignCastMember,
   type CampaignSessionSummary,
   type CampaignDetail,

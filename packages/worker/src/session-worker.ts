@@ -28,15 +28,18 @@ import {
   type SegmentForTranscription,
   type Transcript,
 } from "@rainbot/db";
-import { postSessionLink } from "./notify.ts";
-import { UnrecoverableTaskError } from "./errors.ts";
-import { generateTitle, recap, summarize, transcribeSegment } from "./tasks.ts";
 import {
+  ArtifactIntegrityError,
   artifactContentHash,
   artifactObjectKey,
   getArtifactStorage,
   getAudioStorage,
-} from "./storage.ts";
+  loadDetailedRecordArtifact,
+  loadTranscriptArtifact,
+} from "@rainbot/storage";
+import { postSessionLink } from "./notify.ts";
+import { UnrecoverableTaskError } from "./errors.ts";
+import { generateTitle, recap, summarize, transcribeSegment } from "./tasks.ts";
 
 const WORKER_ID = `${hostname()}:${process.pid}:${randomUUID()}`;
 const LEASE_MILLISECONDS = 5 * 60_000;
@@ -186,41 +189,19 @@ async function aggregateRun(run: ProcessingRunData): Promise<void> {
 }
 
 async function readTranscript(run: ProcessingRunData): Promise<Transcript> {
-  if (!run.transcriptArtifact) {
+  const artifact =
+    run.kind === "inference" ? run.sourceTranscriptArtifact : run.generatedTranscriptArtifact;
+  if (!artifact) {
     throw new UnrecoverableTaskError(`Run ${run.id} has no transcript artifact`);
   }
-  const body = await getArtifactStorage().downloadText(
-    run.transcriptArtifact.objectKey,
-    run.transcriptArtifact.bucket,
-  );
-  if (artifactContentHash(body) !== run.transcriptArtifact.sha256) {
-    throw new UnrecoverableTaskError(`Run ${run.id} has a corrupt transcript artifact`);
-  }
-  const value: unknown = JSON.parse(body);
-  if (
-    !value ||
-    typeof value !== "object" ||
-    !("version" in value) ||
-    !("segments" in value) ||
-    !Array.isArray(value.segments)
-  ) {
-    throw new UnrecoverableTaskError(`Run ${run.id} has an invalid transcript artifact`);
-  }
-  return value as Transcript;
+  return loadTranscriptArtifact(artifact);
 }
 
 async function readDetailedRecord(run: ProcessingRunData): Promise<string> {
-  if (!run.detailedRecordArtifact) {
+  if (!run.generatedDetailedRecordArtifact) {
     throw new UnrecoverableTaskError(`Run ${run.id} has no detailed record artifact`);
   }
-  const body = await getArtifactStorage().downloadText(
-    run.detailedRecordArtifact.objectKey,
-    run.detailedRecordArtifact.bucket,
-  );
-  if (artifactContentHash(body) !== run.detailedRecordArtifact.sha256) {
-    throw new UnrecoverableTaskError(`Run ${run.id} has a corrupt detailed record artifact`);
-  }
-  return body;
+  return loadDetailedRecordArtifact(run.generatedDetailedRecordArtifact);
 }
 
 async function processCurrentStage(run: ProcessingRunData): Promise<void> {
@@ -288,7 +269,11 @@ async function processRun(runId: string): Promise<void> {
   } catch (error) {
     const failure = asError(error);
     const run = await getProcessingRun(runId);
-    if (failure instanceof UnrecoverableTaskError || (run?.attemptCount ?? 0) >= MAX_ATTEMPTS) {
+    if (
+      failure instanceof UnrecoverableTaskError ||
+      failure instanceof ArtifactIntegrityError ||
+      (run?.attemptCount ?? 0) >= MAX_ATTEMPTS
+    ) {
       await failProcessingRun(runId, errorMessage(failure));
     } else {
       await releaseProcessingRun(runId, WORKER_ID, 5_000, errorMessage(failure));

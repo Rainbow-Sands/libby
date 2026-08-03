@@ -17,6 +17,36 @@ export interface Transcript {
   segments: TranscriptSegment[];
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isTranscriptSegment(value: unknown): value is TranscriptSegment {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.segmentId === "string" &&
+    typeof value.timestamp === "string" &&
+    !Number.isNaN(Date.parse(value.timestamp)) &&
+    typeof value.userId === "string" &&
+    (value.username === undefined || typeof value.username === "string") &&
+    typeof value.text === "string" &&
+    typeof value.noSpeechProb === "number" &&
+    Number.isFinite(value.noSpeechProb) &&
+    "whisper" in value
+  );
+}
+
+export function parseTranscript(value: unknown): Transcript {
+  if (!isRecord(value) || value.version !== 1 || !Array.isArray(value.segments)) {
+    throw new TypeError("Invalid transcript");
+  }
+  const segments = value.segments.map((segment) => {
+    if (!isTranscriptSegment(segment)) throw new TypeError("Invalid transcript");
+    return segment;
+  });
+  return { version: 1, segments };
+}
+
 interface CastMember {
   userId: string;
   username: string;

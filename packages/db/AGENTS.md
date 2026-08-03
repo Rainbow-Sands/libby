@@ -10,6 +10,7 @@ Drizzle ORM schema, Postgres client, and all shared queries. See the root
 - `domain.ts` — shared literal values and types for persisted roles and states.
 - `campaigns.ts` — campaign/member mutations.
 - `queries.ts` — read queries used by web and workers.
+  `getCampaignAccess` resolves admin/member access in one database query.
 - `recording.ts` — recording lifecycle, clip registration, and crash recovery.
 - `transcription.ts` — segment transcription checkpoints and aggregation barrier.
 - `processing-runs.ts` — processing queue leases, inference state, and publication.

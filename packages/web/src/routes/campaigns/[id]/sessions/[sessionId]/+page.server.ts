@@ -1,13 +1,13 @@
 import { error, fail, redirect } from "@sveltejs/kit";
 import {
   formatTranscriptForDisplay,
+  getCampaignAccess,
   getCampaignCast,
   getSessionDetail,
   isAdmin,
-  isCampaignMember,
 } from "@rainbot/db";
+import { loadDetailedRecordArtifact, loadTranscriptArtifact } from "@rainbot/storage";
 import { requestInferenceRegeneration, requestTranscriptRegeneration } from "@rainbot/worker";
-import { loadSessionDetailedRecord, loadSessionTranscript } from "$lib/server/session-artifacts";
 import type { Actions, PageServerLoad } from "./$types";
 
 function recapExcerpt(recap: string | null): string {
@@ -53,15 +53,18 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
     };
   }
 
-  const [admin, member] = await Promise.all([
-    isAdmin(locals.user.id),
-    isCampaignMember(session.campaignId, locals.user.id),
-  ]);
-  if (!admin && !member) throw error(403, "You cannot view this campaign.");
+  const access = await getCampaignAccess(session.campaignId, locals.user.id);
+  if (!access.canAccess) throw error(403, "You cannot view this campaign.");
 
   const tab = url.searchParams.get("tab");
-  const transcript = tab === "transcript" ? await loadSessionTranscript(session) : null;
-  const detailedRecord = tab === "summary" ? await loadSessionDetailedRecord(session) : null;
+  const transcript =
+    tab === "transcript" && session.transcriptArtifact
+      ? await loadTranscriptArtifact(session.transcriptArtifact)
+      : null;
+  const detailedRecord =
+    tab === "summary" && session.detailedRecordArtifact
+      ? await loadDetailedRecordArtifact(session.detailedRecordArtifact)
+      : null;
   const transcriptTurns = transcript
     ? formatTranscriptForDisplay(transcript, await getCampaignCast(session.campaignId))
     : null;
@@ -71,7 +74,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
     transcriptTurns,
     hasTranscript: Boolean(session.transcriptArtifact),
     canViewDetails: true,
-    canRegenerate: admin,
+    canRegenerate: access.isAdmin,
     preview,
   };
 };

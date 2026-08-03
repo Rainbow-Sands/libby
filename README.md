@@ -3,13 +3,15 @@
 Discord bot that records tabletop RPG sessions, transcribes them with
 whisper.cpp, and generates detailed records and recaps with local or cloud
 language models. PostgreSQL owns the durable processing queue and pipeline
-state, while S3-compatible object storage holds activation audio.
+state, while S3-compatible object storage holds activation audio and generated
+session artifacts.
 
 ## Packages
 
 | Package            | Description                                                           |
 | ------------------ | --------------------------------------------------------------------- |
 | `@rainbot/discord` | Discord bot — joins voice channels and records audio                  |
+| `@rainbot/storage` | S3-compatible object access and artifact validation                   |
 | `@rainbot/worker`  | Postgres worker — transcription, aggregation, inference, notification |
 | `@rainbot/db`      | Drizzle schema, PostgreSQL client, and durable processing state       |
 | `@rainbot/web`     | SvelteKit frontend                                                    |

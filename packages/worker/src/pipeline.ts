@@ -13,7 +13,7 @@ import {
   startTranscriptRegeneration,
   type CreateRecordingSessionInput,
 } from "@rainbot/db";
-import { audioObjectKey, getAudioStorage } from "./storage.ts";
+import { audioObjectKey, getAudioStorage } from "@rainbot/storage";
 import type { SegmentRef } from "./types.ts";
 
 function audioMimeType(filename: string): string {

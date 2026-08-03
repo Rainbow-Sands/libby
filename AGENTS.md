@@ -39,13 +39,14 @@ pnpm workspace; packages depend on each other via `workspace:*`.
 | ------------------ | ----------------------------------------------------------------- |
 | `@rainbot/db`      | Drizzle schema + Postgres client + queries                        |
 | `@rainbot/discord` | Discord bot, voice recording, session recovery                    |
+| `@rainbot/storage` | S3-compatible object access and artifact validation               |
 | `@rainbot/worker`  | Postgres session worker: transcribe, aggregate, inference, notify |
 | `@rainbot/web`     | SvelteKit frontend (Discord OAuth)                                |
 
 ## Runtime & tooling — read before writing code
 
 - **Node.js 24 runs TypeScript natively.** There is **no build step** for `db`,
-  `discord`, and `worker` — `node` executes `.ts` files directly. Do not add
+  `discord`, `storage`, and `worker` — `node` executes `.ts` files directly. Do not add
   tsx/ts-node/esbuild for these.
 - **Imports must use explicit `.ts` extensions** (`./env.ts`, `../types.ts`).
   This is required by the bundler-style resolution; omitting it breaks at runtime.
