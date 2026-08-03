@@ -9,7 +9,9 @@ Drizzle ORM schema, Postgres client, and all shared queries. See the root
 - `client.ts` — the `db` instance.
 - `campaigns.ts` — campaign/member mutations.
 - `queries.ts` — read queries used by web and workers.
-- `processing.ts` — durable recording/run/segment state transitions and leases.
+- `recording.ts` — recording lifecycle, clip registration, and crash recovery.
+- `transcription.ts` — segment transcription checkpoints and aggregation barrier.
+- `processing-runs.ts` — processing queue leases, inference state, and publication.
 - `artifacts.ts` — shared metadata types for durable session objects.
 - `transcript.ts` — the `Transcript`/`TranscriptSegment` JSON shape stored in
   transcript artifacts, plus display and inference formatting transforms.
