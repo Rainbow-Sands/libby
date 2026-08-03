@@ -1,6 +1,7 @@
 import {
   bigint,
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -12,8 +13,30 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
+import { sql, type SQLWrapper } from "drizzle-orm";
+import { SESSION_ARTIFACT_KINDS, type SessionArtifactKind } from "./artifacts.ts";
+import {
+  AUDIO_STATUSES,
+  CAMPAIGN_MEMBER_ROLES,
+  NOTIFICATION_STATUSES,
+  PROCESSING_RUN_KINDS,
+  PROCESSING_RUN_STATUSES,
+  SESSION_STATUSES,
+  TRANSCRIPTION_STATUSES,
+  type AudioStatus,
+  type CampaignMemberRole,
+  type NotificationStatus,
+  type ProcessingRunKind,
+  type ProcessingRunStatus,
+  type SessionStatus,
+  type TranscriptionStatus,
+} from "./domain.ts";
 import type { TranscriptSegment } from "./transcript.ts";
+
+function oneOf(column: SQLWrapper, values: readonly string[]) {
+  const literals = values.map((value) => `'${value.replaceAll("'", "''")}'`).join(", ");
+  return sql`${column} in (${sql.raw(literals)})`;
+}
 
 export const guilds = pgTable("guilds", {
   id: varchar("id", { length: 20 }).primaryKey(),
@@ -41,7 +64,7 @@ export const campaigns = pgTable("campaigns", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-// role: 'dm' | 'player'. characterName is the player's character (null for the DM).
+// characterName is the player's character (null for the DM).
 export const campaignMembers = pgTable(
   "campaign_members",
   {
@@ -51,13 +74,15 @@ export const campaignMembers = pgTable(
     userId: varchar("user_id", { length: 20 })
       .references(() => users.id)
       .notNull(),
-    role: varchar("role", { length: 10 }).notNull().default("player"),
+    role: varchar("role", { length: 10 }).$type<CampaignMemberRole>().notNull().default("player"),
     characterName: text("character_name"),
   },
-  (t) => [primaryKey({ columns: [t.campaignId, t.userId] })],
+  (t) => [
+    primaryKey({ columns: [t.campaignId, t.userId] }),
+    check("campaign_members_role_check", oneOf(t.role, CAMPAIGN_MEMBER_ROLES)),
+  ],
 );
 
-// status: 'recording' | 'closing' | 'transcribing' | 'summarizing' | 'done' | 'failed'
 export const sessions = pgTable(
   "sessions",
   {
@@ -70,7 +95,7 @@ export const sessions = pgTable(
     channelId: varchar("channel_id", { length: 20 }).notNull(),
     sessionDir: text("session_dir").notNull(),
     activeRunId: uuid("active_run_id"),
-    status: varchar("status", { length: 20 }).notNull().default("recording"),
+    status: varchar("status", { length: 20 }).$type<SessionStatus>().notNull().default("recording"),
     recap: text("recap"),
     startedAt: timestamp("started_at").defaultNow().notNull(),
     endedAt: timestamp("ended_at"),
@@ -81,12 +106,10 @@ export const sessions = pgTable(
     uniqueIndex("sessions_open_guild_unique")
       .on(t.guildId)
       .where(sql`${t.guildId} is not null and ${t.status} in ('recording', 'closing')`),
+    check("sessions_status_check", oneOf(t.status, SESSION_STATUSES)),
   ],
 );
 
-// kind: 'recording' | 'inference' | 'retranscription'
-// status: 'recording' | 'transcribing' | 'aggregating' | 'summarizing' |
-//         'recapping' | 'titling' | 'done' | 'failed'
 export const processingRuns = pgTable(
   "processing_runs",
   {
@@ -94,14 +117,14 @@ export const processingRuns = pgTable(
     sessionId: varchar("session_id", { length: 30 })
       .references(() => sessions.id, { onDelete: "cascade" })
       .notNull(),
-    kind: varchar("kind", { length: 20 }).notNull(),
-    status: varchar("status", { length: 20 }).notNull(),
+    kind: varchar("kind", { length: 20 }).$type<ProcessingRunKind>().notNull(),
+    status: varchar("status", { length: 20 }).$type<ProcessingRunStatus>().notNull(),
     transcriptArtifactId: uuid("transcript_artifact_id"),
     detailedRecordArtifactId: uuid("detailed_record_artifact_id"),
     recap: text("recap"),
     title: text("title"),
     notificationChannelId: varchar("notification_channel_id", { length: 20 }),
-    notificationStatus: varchar("notification_status", { length: 20 }),
+    notificationStatus: varchar("notification_status", { length: 20 }).$type<NotificationStatus>(),
     error: text("error"),
     availableAt: timestamp("available_at").defaultNow().notNull(),
     lockedBy: text("locked_by"),
@@ -115,11 +138,15 @@ export const processingRuns = pgTable(
     index("processing_runs_queue_idx").on(t.status, t.availableAt, t.leaseExpiresAt),
     index("processing_runs_status_idx").on(t.status),
     index("processing_runs_session_idx").on(t.sessionId),
+    check("processing_runs_kind_check", oneOf(t.kind, PROCESSING_RUN_KINDS)),
+    check("processing_runs_status_check", oneOf(t.status, PROCESSING_RUN_STATUSES)),
+    check(
+      "processing_runs_notification_status_check",
+      oneOf(t.notificationStatus, NOTIFICATION_STATUSES),
+    ),
   ],
 );
 
-// kind: 'transcript' | 'detailed_record'
-//
 // The object body lives in private S3-compatible storage. Rows retain immutable
 // provenance and integrity metadata; isCurrent identifies the version published
 // for a session. This is also the seam where detailed-record chunks/embeddings
@@ -134,7 +161,7 @@ export const sessionArtifacts = pgTable(
     generatedByRunId: uuid("generated_by_run_id").references(() => processingRuns.id, {
       onDelete: "set null",
     }),
-    kind: varchar("kind", { length: 30 }).notNull(),
+    kind: varchar("kind", { length: 30 }).$type<SessionArtifactKind>().notNull(),
     bucket: text("bucket").notNull(),
     objectKey: text("object_key").notNull(),
     contentType: varchar("content_type", { length: 100 }).notNull(),
@@ -150,6 +177,7 @@ export const sessionArtifacts = pgTable(
       .on(t.sessionId, t.kind)
       .where(sql`${t.isCurrent} = true`),
     index("session_artifacts_session_idx").on(t.sessionId),
+    check("session_artifacts_kind_check", oneOf(t.kind, SESSION_ARTIFACT_KINDS)),
   ],
 );
 
@@ -166,11 +194,13 @@ export const sessionSegments = pgTable(
     recordedAt: text("recorded_at").notNull(),
     userId: varchar("user_id", { length: 20 }).notNull(),
     username: text("username"),
-    audioStatus: varchar("audio_status", { length: 20 }).notNull(),
+    audioStatus: varchar("audio_status", { length: 20 }).$type<AudioStatus>().notNull(),
     transcriptionRunId: uuid("transcription_run_id").references(() => processingRuns.id, {
       onDelete: "set null",
     }),
-    transcriptionStatus: varchar("transcription_status", { length: 20 }),
+    transcriptionStatus: varchar("transcription_status", {
+      length: 20,
+    }).$type<TranscriptionStatus>(),
     transcript: jsonb("transcript").$type<TranscriptSegment>(),
     error: text("error"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -181,5 +211,10 @@ export const sessionSegments = pgTable(
     index("session_segments_run_status_idx").on(t.transcriptionRunId, t.transcriptionStatus),
     index("session_segments_session_audio_idx").on(t.sessionId, t.audioStatus),
     index("session_segments_audio_status_idx").on(t.audioStatus),
+    check("session_segments_audio_status_check", oneOf(t.audioStatus, AUDIO_STATUSES)),
+    check(
+      "session_segments_transcription_status_check",
+      oneOf(t.transcriptionStatus, TRANSCRIPTION_STATUSES),
+    ),
   ],
 );

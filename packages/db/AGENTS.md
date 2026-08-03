@@ -7,6 +7,7 @@ Drizzle ORM schema, Postgres client, and all shared queries. See the root
 
 - `schema.ts` — table definitions; the single source of truth for the data model.
 - `client.ts` — the `db` instance.
+- `domain.ts` — shared literal values and types for persisted roles and states.
 - `campaigns.ts` — campaign/member mutations.
 - `queries.ts` — read queries used by web and workers.
 - `recording.ts` — recording lifecycle, clip registration, and crash recovery.

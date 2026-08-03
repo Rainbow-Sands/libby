@@ -1,0 +1,8 @@
+ALTER TABLE "campaign_members" ADD CONSTRAINT "campaign_members_role_check" CHECK ("campaign_members"."role" in ('dm', 'player'));--> statement-breakpoint
+ALTER TABLE "processing_runs" ADD CONSTRAINT "processing_runs_kind_check" CHECK ("processing_runs"."kind" in ('recording', 'inference', 'retranscription'));--> statement-breakpoint
+ALTER TABLE "processing_runs" ADD CONSTRAINT "processing_runs_status_check" CHECK ("processing_runs"."status" in ('recording', 'transcribing', 'aggregating', 'summarizing', 'recapping', 'titling', 'done', 'failed'));--> statement-breakpoint
+ALTER TABLE "processing_runs" ADD CONSTRAINT "processing_runs_notification_status_check" CHECK ("processing_runs"."notification_status" in ('pending', 'completed', 'failed'));--> statement-breakpoint
+ALTER TABLE "session_artifacts" ADD CONSTRAINT "session_artifacts_kind_check" CHECK ("session_artifacts"."kind" in ('transcript', 'detailed_record'));--> statement-breakpoint
+ALTER TABLE "session_segments" ADD CONSTRAINT "session_segments_audio_status_check" CHECK ("session_segments"."audio_status" in ('recording', 'uploading', 'ready', 'failed', 'discarded', 'deletion_pending', 'deleted'));--> statement-breakpoint
+ALTER TABLE "session_segments" ADD CONSTRAINT "session_segments_transcription_status_check" CHECK ("session_segments"."transcription_status" in ('pending', 'processing', 'completed', 'failed'));--> statement-breakpoint
+ALTER TABLE "sessions" ADD CONSTRAINT "sessions_status_check" CHECK ("sessions"."status" in ('recording', 'closing', 'transcribing', 'summarizing', 'done', 'failed'));

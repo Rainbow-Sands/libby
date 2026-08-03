@@ -1,5 +1,9 @@
 import type { Client, VoiceBasedChannel } from "discord.js";
-import { getAudioSegmentsForRecovery, getRecoverableSessionsForGuild } from "@rainbot/db";
+import {
+  getAudioSegmentsForRecovery,
+  getRecoverableSessionsForGuild,
+  type RecoverableSessionStatus,
+} from "@rainbot/db";
 import {
   beginSessionShutdown,
   completeAudioSegment,
@@ -42,7 +46,7 @@ async function recoverSegments(
 async function closeRecoveredSession(
   sessionId: string,
   runId: string,
-  status: string,
+  status: RecoverableSessionStatus,
   sessionDir: string,
 ): Promise<void> {
   if (status === "recording") await beginSessionShutdown(sessionId, runId);

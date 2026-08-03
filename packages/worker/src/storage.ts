@@ -4,6 +4,7 @@ import { mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { DeleteObjectCommand, GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
+import type { SessionArtifactKind } from "@rainbot/db";
 import { pipeline } from "node:stream/promises";
 
 export interface AudioStorageConfig {
@@ -80,7 +81,7 @@ export function artifactObjectKey(
   campaignId: string,
   sessionId: string,
   runId: string,
-  kind: "transcript" | "detailed_record",
+  kind: SessionArtifactKind,
   contentHash: string,
 ): string {
   const directory = kind === "transcript" ? "transcript" : "detailed-record";

@@ -1,20 +1,21 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
-import type { SessionArtifactKind, SessionArtifactRef, SessionArtifactWrite } from "./artifacts.ts";
+import type { SessionArtifactRef, SessionArtifactWrite } from "./artifacts.ts";
 import { db } from "./client.ts";
+import type { NotificationStatus, ProcessingRunStatus } from "./domain.ts";
 import { processingRuns, sessionArtifacts, sessionSegments, sessions } from "./schema.ts";
 
 export interface ProcessingRunData {
   id: string;
   sessionId: string;
   campaignId: string;
-  status: string;
+  status: ProcessingRunStatus;
   transcriptArtifact: SessionArtifactRef | null;
   detailedRecordArtifact: SessionArtifactRef | null;
   recap: string | null;
   title: string | null;
   notificationChannelId: string | null;
-  notificationStatus: string | null;
+  notificationStatus: NotificationStatus | null;
   attemptCount: number;
 }
 
@@ -52,7 +53,7 @@ export async function getProcessingRun(runId: string): Promise<ProcessingRunData
     if (!artifact) return null;
     return {
       id: artifact.id,
-      kind: artifact.kind as SessionArtifactKind,
+      kind: artifact.kind,
       bucket: artifact.bucket,
       objectKey: artifact.objectKey,
       contentType: artifact.contentType,
@@ -84,7 +85,7 @@ const RUNNABLE_STATUSES = [
   "recapping",
   "titling",
   "done",
-] as const;
+] as const satisfies readonly ProcessingRunStatus[];
 
 export async function claimProcessingRuns(
   workerId: string,

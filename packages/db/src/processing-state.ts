@@ -1,7 +1,9 @@
+import type { AudioStatus, TranscriptionStatus } from "./domain.ts";
+
 export interface SegmentProcessingState {
-  audioStatus: string;
+  audioStatus: AudioStatus;
   transcriptionRunId: string | null;
-  transcriptionStatus: string | null;
+  transcriptionStatus: TranscriptionStatus | null;
 }
 
 export type TranscriptionBarrier = "ready" | "waiting" | "failed";
@@ -24,7 +26,8 @@ export function evaluateTranscriptionBarrier(
 
   const unfinished = segments.some(
     (segment) =>
-      ["recording", "uploading"].includes(segment.audioStatus) ||
+      segment.audioStatus === "recording" ||
+      segment.audioStatus === "uploading" ||
       (segment.audioStatus === "ready" &&
         (segment.transcriptionRunId !== runId || segment.transcriptionStatus !== "completed")),
   );

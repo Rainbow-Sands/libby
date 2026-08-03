@@ -24,6 +24,7 @@ import {
   storeRunRecap,
   storeRunTitle,
   type ProcessingRunData,
+  type SessionArtifactKind,
   type SegmentForTranscription,
   type Transcript,
 } from "@rainbot/db";
@@ -74,7 +75,7 @@ async function uploadSessionArtifact(
   campaignId: string,
   sessionId: string,
   runId: string,
-  kind: "transcript" | "detailed_record",
+  kind: SessionArtifactKind,
   body: string,
   contentType: string,
 ) {
@@ -279,7 +280,7 @@ async function processRun(runId: string): Promise<void> {
   try {
     while (true) {
       const run = await getProcessingRun(runId);
-      if (!run || ["failed"].includes(run.status)) break;
+      if (!run || run.status === "failed") break;
       await processCurrentStage(run);
       if (run.status === "done") break;
     }

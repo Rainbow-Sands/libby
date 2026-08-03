@@ -1,6 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "./client.ts";
 import type { SessionArtifactKind, SessionArtifactRef } from "./artifacts.ts";
+import type { CampaignAccessRole, CampaignMemberRole, SessionStatus } from "./domain.ts";
 import { campaigns, campaignMembers, sessionArtifacts, sessions, users } from "./schema.ts";
 
 export async function getCampaignsForGuild(guildId: string) {
@@ -17,7 +18,7 @@ export async function getCampaignsForUser(userId: string) {
       .select({
         id: campaigns.id,
         name: campaigns.name,
-        role: sql<string>`'admin'`,
+        role: sql<CampaignAccessRole>`'admin'`,
       })
       .from(campaigns)
       .orderBy(campaigns.name);
@@ -56,7 +57,7 @@ export async function isCampaignMember(campaignId: string, userId: string): Prom
 export interface CampaignMember {
   id: string;
   username: string;
-  role: string;
+  role: CampaignMemberRole;
   characterName: string | null;
 }
 
@@ -108,7 +109,7 @@ export async function getCampaignCast(campaignId: string): Promise<CampaignCastM
 export interface CampaignSessionSummary {
   id: string;
   title: string | null;
-  status: string;
+  status: SessionStatus;
   startedAt: Date;
   endedAt: Date | null;
 }
@@ -161,7 +162,7 @@ export interface SessionDetail {
   id: string;
   campaignId: string;
   title: string | null;
-  status: string;
+  status: SessionStatus;
   startedAt: Date;
   endedAt: Date | null;
   transcriptArtifact: SessionArtifactRef | null;

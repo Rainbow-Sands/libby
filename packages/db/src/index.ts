@@ -5,6 +5,25 @@ export {
   type SessionArtifactWrite,
 } from "./artifacts.ts";
 export {
+  AUDIO_STATUSES,
+  CAMPAIGN_MEMBER_ROLES,
+  NOTIFICATION_STATUSES,
+  PROCESSING_RUN_KINDS,
+  PROCESSING_RUN_STATUSES,
+  RECOVERABLE_SESSION_STATUSES,
+  SESSION_STATUSES,
+  TRANSCRIPTION_STATUSES,
+  type AudioStatus,
+  type CampaignAccessRole,
+  type CampaignMemberRole,
+  type NotificationStatus,
+  type ProcessingRunKind,
+  type ProcessingRunStatus,
+  type RecoverableSessionStatus,
+  type SessionStatus,
+  type TranscriptionStatus,
+} from "./domain.ts";
+export {
   formatTranscriptForDisplay,
   formatTranscriptForInference,
   simplifyTranscript,

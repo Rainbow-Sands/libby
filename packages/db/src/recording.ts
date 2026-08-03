@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "./client.ts";
+import {
+  RECOVERABLE_SESSION_STATUSES,
+  type AudioStatus,
+  type RecoverableSessionStatus,
+} from "./domain.ts";
 import { processingRuns, sessionSegments, sessions } from "./schema.ts";
 
 export interface AudioSegmentRef {
@@ -49,7 +54,7 @@ export interface RecoverableSession {
   channelId: string;
   sessionDir: string;
   runId: string;
-  status: string;
+  status: RecoverableSessionStatus;
 }
 
 export async function getRecoverableSessionsForGuild(
@@ -64,16 +69,31 @@ export async function getRecoverableSessionsForGuild(
       status: sessions.status,
     })
     .from(sessions)
-    .where(and(eq(sessions.guildId, guildId), inArray(sessions.status, ["recording", "closing"])));
+    .where(
+      and(
+        eq(sessions.guildId, guildId),
+        inArray(sessions.status, [...RECOVERABLE_SESSION_STATUSES]),
+      ),
+    );
 
-  return rows.filter((row): row is RecoverableSession => row.runId !== null);
+  return rows.flatMap((row) => {
+    if (row.runId === null || (row.status !== "recording" && row.status !== "closing")) {
+      return [];
+    }
+    return [{ ...row, runId: row.runId, status: row.status }];
+  });
 }
 
 export async function hasOpenRecordingForGuild(guildId: string): Promise<boolean> {
   const [row] = await db
     .select({ id: sessions.id })
     .from(sessions)
-    .where(and(eq(sessions.guildId, guildId), inArray(sessions.status, ["recording", "closing"])))
+    .where(
+      and(
+        eq(sessions.guildId, guildId),
+        inArray(sessions.status, [...RECOVERABLE_SESSION_STATUSES]),
+      ),
+    )
     .limit(1);
   return row !== undefined;
 }
@@ -240,7 +260,7 @@ export async function finishClosingSession(sessionId: string, runId: string): Pr
 }
 export async function getAudioSegmentsForRecovery(sessionId: string): Promise<
   (AudioSegmentRef & {
-    audioStatus: string;
+    audioStatus: AudioStatus;
     runId: string | null;
   })[]
 > {
