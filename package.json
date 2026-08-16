@@ -9,6 +9,13 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix"
   },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.0.0-rc.6",
+      "onFail": "download"
+    }
+  },
   "devDependencies": {
     "oxfmt": "^0.55.0",
     "oxlint": "^1.70.0"
