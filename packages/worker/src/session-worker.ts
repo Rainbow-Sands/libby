@@ -148,6 +148,10 @@ async function transcribeOne(segment: SegmentForTranscription): Promise<void> {
       return;
     } catch (error) {
       lastError = asError(error);
+      console.error(
+        `[transcribe] segment ${segment.segmentId} failed on attempt ${attempt}/${MAX_ATTEMPTS}:`,
+        lastError,
+      );
       if (lastError instanceof UnrecoverableTaskError || attempt === MAX_ATTEMPTS) break;
       await wait(2_000 * 2 ** (attempt - 1));
     } finally {
@@ -275,6 +279,7 @@ async function processRun(runId: string): Promise<void> {
     await releaseProcessingRun(runId, WORKER_ID);
   } catch (error) {
     const failure = asError(error);
+    console.error(`[worker] processing run ${runId} failed:`, failure);
     const run = await getProcessingRun(runId);
     if (run?.status === "done" && run.knowledgeSyncStatus === "pending") {
       if (run.attemptCount >= MAX_ATTEMPTS || failure instanceof UnrecoverableTaskError) {

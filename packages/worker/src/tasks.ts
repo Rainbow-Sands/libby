@@ -51,6 +51,9 @@ export async function transcribeSegment(
     throw new UnrecoverableTaskError(`Audio file not found for segment ${ref.segmentId}`);
   }
   const form = new FormData();
+  // Put the routing field first so OpenAI-compatible proxies can select a
+  // backend before consuming the potentially large file part.
+  form.append("model", TRANSCRIPTION_MODEL);
   form.append(
     "file",
     new Blob([new Uint8Array(readFileSync(audioPath))], {
@@ -58,18 +61,25 @@ export async function transcribeSegment(
     }),
     path.basename(audioPath),
   );
+  form.append("temperature", "0.0");
+  form.append("temperature_inc", "0.2");
+  form.append("no_speech_thold", String(NO_SPEECH_THRESHOLD));
   form.append("response_format", "verbose_json");
-  form.append("model", TRANSCRIPTION_MODEL);
 
   const res = await fetch(TRANSCRIPTION_URL, {
     method: "POST",
     body: form,
   });
 
-  if (res.status >= 400 && res.status < 500) {
-    throw new UnrecoverableTaskError(`Whisper rejected the request: ${res.status}`);
+  if (!res.ok) {
+    const responseBody = (await res.text()).trim();
+    const detail = responseBody ? `: ${responseBody}` : "";
+    const message = `Transcription server returned ${res.status} ${res.statusText} for model ${TRANSCRIPTION_MODEL}${detail}`;
+    if (res.status >= 400 && res.status < 500) {
+      throw new UnrecoverableTaskError(message);
+    }
+    throw new Error(message);
   }
-  if (!res.ok) throw new Error(`Whisper server returned ${res.status}`);
 
   const result = (await res.json()) as WhisperResponse;
 
