@@ -68,6 +68,7 @@ interface WhisperSubSegment {
   start: number; // seconds, relative to the clip
   text: string;
   no_speech_prob: number;
+  avg_logprob?: number;
 }
 
 interface WhisperVerboseJson {
@@ -77,6 +78,7 @@ interface WhisperVerboseJson {
 // Duplicated from packages/worker/src/tasks.ts so @rainbot/db does not depend
 // on worker internals.
 const NO_SPEECH_THRESHOLD = 0.6;
+const LOGPROB_THRESHOLD = -1;
 
 // A single spoken utterance with its own timestamp, finer-grained than a
 // TranscriptSegment (one per Discord voice activation, which can span many
@@ -94,7 +96,8 @@ function isWhisperSubSegment(value: unknown): value is WhisperSubSegment {
   return (
     typeof v.start === "number" &&
     typeof v.text === "string" &&
-    typeof v.no_speech_prob === "number"
+    typeof v.no_speech_prob === "number" &&
+    (v.avg_logprob === undefined || typeof v.avg_logprob === "number")
   );
 }
 
@@ -114,8 +117,10 @@ function extractWhisperSubSegments(whisper: unknown): WhisperSubSegment[] | null
 // one timestamp can put it out of order relative to other speakers. Whisper
 // already segments a clip into individual utterances with their own in-clip
 // offsets — explode each TranscriptSegment into one Utterance per Whisper
-// sub-segment (dropping any whose own no_speech_prob says it's noise), so
-// sorting reflects when things were actually said, not when the mic opened.
+// sub-segment. Whisper treats a sub-segment as silence only when no-speech
+// probability is high and decoded-token confidence is low; using no_speech_prob
+// alone can discard confidently decoded speech. Sorting then reflects when
+// things were actually said, not when the mic opened.
 function explodeSegment(segment: TranscriptSegment): Utterance[] {
   const subSegments = extractWhisperSubSegments(segment.whisper);
   if (subSegments === null) {
@@ -133,7 +138,11 @@ function explodeSegment(segment: TranscriptSegment): Utterance[] {
   const baseValid = !Number.isNaN(baseMs);
 
   return subSegments
-    .filter((s) => s.no_speech_prob <= NO_SPEECH_THRESHOLD)
+    .filter(
+      (s) =>
+        s.no_speech_prob <= NO_SPEECH_THRESHOLD ||
+        (s.avg_logprob !== undefined && s.avg_logprob >= LOGPROB_THRESHOLD),
+    )
     .map((s) => ({
       timestamp: baseValid ? new Date(baseMs + s.start * 1000).toISOString() : segment.timestamp,
       userId: segment.userId,

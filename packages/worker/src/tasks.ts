@@ -17,10 +17,11 @@ import {
 
 interface WhisperResponse {
   text: string;
-  segments: { no_speech_prob: number }[];
+  segments: { no_speech_prob: number; avg_logprob?: number }[];
 }
 
 const NO_SPEECH_THRESHOLD = 0.6;
+const LOGPROB_THRESHOLD = -1;
 const completeSummarization = createSummarizationInference(SUMMARIZATION_CONFIG);
 
 function audioMimeType(audioPath: string): string {
@@ -83,13 +84,19 @@ export async function transcribeSegment(
 
   const result = (await res.json()) as WhisperResponse;
 
-  // A long imported track contains intentionally silent intervals. It is
-  // usable when any Whisper sub-segment contains speech; the individual
-  // silent sub-segments are filtered later by simplifyTranscript.
+  // A long imported track contains intentionally silent intervals. Whisper
+  // considers a sub-segment silent only when no-speech probability is high and
+  // decoded-token confidence is low. no_speech_prob alone can be high for
+  // confidently decoded speech.
   const noSpeechProb =
     result.segments.length > 0 ? Math.min(...result.segments.map((s) => s.no_speech_prob)) : 1;
+  const hasSpeech = result.segments.some(
+    (segment) =>
+      segment.no_speech_prob <= NO_SPEECH_THRESHOLD ||
+      (segment.avg_logprob !== undefined && segment.avg_logprob >= LOGPROB_THRESHOLD),
+  );
 
-  if (noSpeechProb > NO_SPEECH_THRESHOLD) {
+  if (!hasSpeech) {
     console.log(
       `[transcribe] skipping segment ${ref.segmentId} (no_speech_prob=${noSpeechProb.toFixed(2)})`,
     );
