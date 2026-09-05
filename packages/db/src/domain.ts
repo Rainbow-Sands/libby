@@ -38,13 +38,7 @@ export type ProcessingRunStatus = ValueOf<typeof PROCESSING_RUN_STATUSES>;
 export const NOTIFICATION_STATUSES = ["pending", "completed", "failed"] as const;
 export type NotificationStatus = ValueOf<typeof NOTIFICATION_STATUSES>;
 
-export const AUDIO_STATUSES = [
-  "recording",
-  "uploading",
-  "ready",
-  "failed",
-  "discarded",
-] as const;
+export const AUDIO_STATUSES = ["recording", "ready", "failed", "discarded"] as const;
 export type AudioStatus = ValueOf<typeof AUDIO_STATUSES>;
 
 export const TRANSCRIPTION_STATUSES = ["pending", "processing", "completed", "failed"] as const;

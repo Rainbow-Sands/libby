@@ -27,7 +27,6 @@ export function evaluateTranscriptionBarrier(
   const unfinished = segments.some(
     (segment) =>
       segment.audioStatus === "recording" ||
-      segment.audioStatus === "uploading" ||
       (segment.audioStatus === "ready" &&
         (segment.transcriptionRunId !== runId || segment.transcriptionStatus !== "completed")),
   );

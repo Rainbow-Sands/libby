@@ -98,7 +98,7 @@ export async function failSegmentTranscription(
   segmentId: string,
   message: string,
 ): Promise<void> {
-  const [updated] = await db
+  await db
     .update(sessionSegments)
     .set({ transcriptionStatus: "failed", error: message, updatedAt: new Date() })
     .where(
@@ -107,9 +107,7 @@ export async function failSegmentTranscription(
         eq(sessionSegments.segmentId, segmentId),
         eq(sessionSegments.transcriptionRunId, runId),
       ),
-    )
-    .returning({ segmentId: sessionSegments.segmentId });
-  if (!updated) return;
+    );
 }
 
 export async function claimAggregationIfReady(runId: string): Promise<boolean> {

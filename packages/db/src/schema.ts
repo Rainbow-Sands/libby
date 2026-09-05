@@ -214,7 +214,6 @@ export const sessionSegments = pgTable(
     primaryKey({ columns: [t.sessionId, t.segmentId] }),
     index("session_segments_run_status_idx").on(t.transcriptionRunId, t.transcriptionStatus),
     index("session_segments_session_audio_idx").on(t.sessionId, t.audioStatus),
-    index("session_segments_audio_status_idx").on(t.audioStatus),
     check("session_segments_audio_status_check", oneOf(t.audioStatus, AUDIO_STATUSES)),
     check(
       "session_segments_transcription_status_check",

@@ -11,7 +11,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import { TITLE_SYSTEM } from "../prompts.ts";
-import { stripCodeFence, stripLeadingTitle, normalizeTitle } from "../text.ts";
+import { normalizeTitle, stripCodeFence } from "../text.ts";
 import { createDetailedRecord, createRecap } from "../record-pipeline.ts";
 import {
   createSummarizationInference,
@@ -92,7 +92,7 @@ try {
     record,
     async (prompt, system) => (await stage("Recap", system, prompt)).content,
   );
-  writeFileSync(`${base}.recap.md`, stripLeadingTitle(recap), "utf8");
+  writeFileSync(`${base}.recap.md`, recap, "utf8");
 
   const titleResult = await stage("Title", TITLE_SYSTEM, recap);
   const title = normalizeTitle(titleResult.content);

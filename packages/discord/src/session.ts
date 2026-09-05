@@ -247,12 +247,6 @@ export function attachRecordingSession(
   client.on(Events.VoiceStateUpdate, voiceStateHandler);
 
   setActiveSession(guildId, {
-    connection,
-    guildId,
-    channelId,
-    sessionId,
-    runId,
-    sessionDir,
     segmentCount: initialSegmentCount,
     end: endSession,
   });

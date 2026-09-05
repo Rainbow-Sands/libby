@@ -3,7 +3,7 @@ import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
-import { DeleteObjectCommand, GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import type { SessionArtifactKind } from "@rainbot/db";
 
@@ -178,9 +178,5 @@ export class ObjectStorage {
     );
     if (!response.Body) throw new Error(`Object has no body: ${objectKey}`);
     return response.Body.transformToString("utf-8");
-  }
-
-  async delete(objectKey: string): Promise<void> {
-    await this.#client.send(new DeleteObjectCommand({ Bucket: this.#bucket, Key: objectKey }));
   }
 }

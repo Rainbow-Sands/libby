@@ -104,14 +104,11 @@ Service names below match `docker-compose.yml`; `db-migrate` is the
 
 Keep both buckets private. Transcript and detailed-record objects share the
 artifact bucket under separate session/run prefixes; recap and title stay in
-Postgres for fast page listings and URL previews. `DELETE_AUDIO_AFTER_TRANSCRIPTION=true`
-deletes each activation after its transcript checkpoint has been committed to
-Postgres; those checkpoints are cleared once the aggregate transcript artifact
-is durable. Configure an audio-bucket lifecycle expiration as a second,
-provider-enforced retention boundary;
-the application stores stable object keys and does not depend on signed URLs.
-Leave application deletion disabled while transcript regeneration is needed.
-Recorder and manual-upload scratch files use each service's local temporary
+Postgres for fast page listings and URL previews. Configure an audio-bucket
+lifecycle expiration as the provider-enforced retention boundary. Retain audio
+for as long as transcript regeneration should remain available; the application
+stores stable object keys and does not depend on signed URLs. Recorder and
+manual-upload scratch files use each service's local temporary
 directory and are removed after upload; no shared filesystem is required.
 The web service needs artifact read access; the worker needs read/write access.
 

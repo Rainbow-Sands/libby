@@ -1,12 +1,4 @@
-import type { VoiceConnection } from "@discordjs/voice";
-
-export interface RecordingSession {
-  connection: VoiceConnection;
-  guildId: string;
-  channelId: string;
-  sessionId: string;
-  runId: string;
-  sessionDir: string;
+interface RecordingSession {
   segmentCount: number;
   end: () => Promise<void>;
 }
@@ -24,8 +16,4 @@ export function setActiveSession(guildId: string, session: RecordingSession | nu
   } else {
     activeSessions.set(guildId, session);
   }
-}
-
-export function getAllActiveSessions(): Map<string, RecordingSession> {
-  return activeSessions;
 }
