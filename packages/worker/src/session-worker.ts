@@ -11,11 +11,9 @@ import {
   failSegmentTranscription,
   getProcessingRun,
   getTranscriptSegments,
-  listAudioPendingDeletion,
   listSegmentsForTranscription,
   markNotificationComplete,
   markNotificationFailed,
-  markSegmentAudioDeleted,
   markTranscriptionProcessing,
   releaseProcessingRun,
   renewProcessingRunLease,
@@ -48,7 +46,6 @@ const POLL_MILLISECONDS = positiveInteger("PROCESSING_POLL_MILLISECONDS", 2_000)
 const PROCESSING_CONCURRENCY = positiveInteger("PROCESSING_CONCURRENCY", 2);
 const TRANSCRIPTION_CONCURRENCY = positiveInteger("TRANSCRIPTION_CONCURRENCY", 4);
 const MAX_ATTEMPTS = positiveInteger("PROCESSING_MAX_ATTEMPTS", 3);
-const DELETE_AUDIO_AFTER_TRANSCRIPTION = process.env.DELETE_AUDIO_AFTER_TRANSCRIPTION === "true";
 
 function positiveInteger(name: string, fallback: number): number {
   const value = process.env[name];
@@ -140,7 +137,6 @@ async function transcribeOne(segment: SegmentForTranscription): Promise<void> {
         segment.sessionId,
         segment.segmentId,
         transcript,
-        DELETE_AUDIO_AFTER_TRANSCRIPTION,
       );
       return;
     } catch (error) {
@@ -288,24 +284,11 @@ async function processRun(runId: string): Promise<void> {
   }
 }
 
-export async function deletePendingAudio(): Promise<void> {
-  if (!DELETE_AUDIO_AFTER_TRANSCRIPTION) return;
-  for (const audio of await listAudioPendingDeletion()) {
-    try {
-      await getAudioStorage().delete(audio.objectKey);
-      await markSegmentAudioDeleted(audio.sessionId, audio.segmentId);
-    } catch (error) {
-      console.error(`[audio] could not delete ${audio.objectKey}:`, error);
-    }
-  }
-}
-
 export async function runSessionWorker(signal: AbortSignal): Promise<void> {
   console.log(`[worker] Postgres session worker ${WORKER_ID} started`);
   const active = new Set<Promise<void>>();
 
   while (!signal.aborted) {
-    await deletePendingAudio();
     const capacity = PROCESSING_CONCURRENCY - active.size;
     if (capacity > 0) {
       const runIds = await claimProcessingRuns(WORKER_ID, capacity, LEASE_MILLISECONDS);

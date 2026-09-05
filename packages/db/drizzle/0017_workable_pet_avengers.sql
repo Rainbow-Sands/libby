@@ -1,0 +1,2 @@
+ALTER TABLE "session_segments" DROP CONSTRAINT "session_segments_audio_status_check";--> statement-breakpoint
+ALTER TABLE "session_segments" ADD CONSTRAINT "session_segments_audio_status_check" CHECK ("session_segments"."audio_status" in ('recording', 'uploading', 'ready', 'failed', 'discarded'));

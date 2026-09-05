@@ -49,27 +49,6 @@ export async function listSegmentsForTranscription(
     }));
 }
 
-export async function markSegmentAudioDeleted(sessionId: string, segmentId: string): Promise<void> {
-  await db
-    .update(sessionSegments)
-    .set({ audioStatus: "deleted", updatedAt: new Date() })
-    .where(and(eq(sessionSegments.sessionId, sessionId), eq(sessionSegments.segmentId, segmentId)));
-}
-
-export async function listAudioPendingDeletion(
-  limit = 200,
-): Promise<{ sessionId: string; segmentId: string; objectKey: string }[]> {
-  return db
-    .select({
-      sessionId: sessionSegments.sessionId,
-      segmentId: sessionSegments.segmentId,
-      objectKey: sessionSegments.audioObjectKey,
-    })
-    .from(sessionSegments)
-    .where(eq(sessionSegments.audioStatus, "deletion_pending"))
-    .limit(limit);
-}
-
 export async function markTranscriptionProcessing(
   runId: string,
   sessionId: string,
@@ -95,14 +74,12 @@ export async function completeSegmentTranscription(
   sessionId: string,
   segmentId: string,
   transcript: TranscriptSegment | null,
-  deleteAudio = false,
 ): Promise<void> {
   await db
     .update(sessionSegments)
     .set({
       transcriptionStatus: "completed",
       transcript,
-      ...(deleteAudio ? { audioStatus: "deletion_pending" } : {}),
       error: null,
       updatedAt: new Date(),
     })

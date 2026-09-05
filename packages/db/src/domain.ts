@@ -44,8 +44,6 @@ export const AUDIO_STATUSES = [
   "ready",
   "failed",
   "discarded",
-  "deletion_pending",
-  "deleted",
 ] as const;
 export type AudioStatus = ValueOf<typeof AUDIO_STATUSES>;
 

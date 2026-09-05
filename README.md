@@ -84,7 +84,6 @@ Service names below match `docker-compose.yml`; `db-migrate` is the
 | `PROCESSING_CONCURRENCY`           | worker               | Sessions processed concurrently by one worker (default: `2`)                       |
 | `PROCESSING_POLL_MILLISECONDS`     | worker               | Delay between Postgres queue polls (default: `2000`)                               |
 | `PROCESSING_MAX_ATTEMPTS`          | worker               | Maximum attempts for a session or activation before failure (default: `3`)         |
-| `DELETE_AUDIO_AFTER_TRANSCRIPTION` | worker               | Set to `true` to delete audio after its transcript is committed (default: `false`) |
 
 ### Language-model inference
 
