@@ -15,8 +15,6 @@ import {
   listSegmentsForTranscription,
   markNotificationComplete,
   markNotificationFailed,
-  markKnowledgeSyncComplete,
-  markKnowledgeSyncFailed,
   markSegmentAudioDeleted,
   markTranscriptionProcessing,
   releaseProcessingRun,
@@ -41,7 +39,6 @@ import {
 } from "@rainbot/storage";
 import { postSessionLink } from "./notify.ts";
 import { UnrecoverableTaskError } from "./errors.ts";
-import { isKnowledgeSyncEnabled, syncProcessingRunKnowledge } from "./knowledge-sync.ts";
 import { generateTitle, recap, summarize, transcribeSegment } from "./tasks.ts";
 
 const WORKER_ID = `${hostname()}:${process.pid}:${randomUUID()}`;
@@ -238,14 +235,10 @@ async function processCurrentStage(run: ProcessingRunData): Promise<void> {
     case "titling":
       if (!run.recap) throw new UnrecoverableTaskError(`Run ${run.id} has no recap`);
       if (await storeRunTitle(run.id, await generateTitle(run.recap))) {
-        await completeProcessingRun(run.id, isKnowledgeSyncEnabled());
+        await completeProcessingRun(run.id);
       }
       return;
     case "done":
-      if (run.knowledgeSyncStatus === "pending") {
-        await syncProcessingRunKnowledge(run);
-        await markKnowledgeSyncComplete(run.id);
-      }
       if (run.notificationStatus === "pending" && run.notificationChannelId) {
         try {
           await postSessionLink({
@@ -281,15 +274,6 @@ async function processRun(runId: string): Promise<void> {
     const failure = asError(error);
     console.error(`[worker] processing run ${runId} failed:`, failure);
     const run = await getProcessingRun(runId);
-    if (run?.status === "done" && run.knowledgeSyncStatus === "pending") {
-      if (run.attemptCount >= MAX_ATTEMPTS || failure instanceof UnrecoverableTaskError) {
-        await markKnowledgeSyncFailed(runId, errorMessage(failure));
-        await releaseProcessingRun(runId, WORKER_ID);
-      } else {
-        await releaseProcessingRun(runId, WORKER_ID, 5_000, errorMessage(failure));
-      }
-      return;
-    }
     if (
       failure instanceof UnrecoverableTaskError ||
       failure instanceof ArtifactIntegrityError ||

@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { PageData } from "./$types";
   import TaperedRule from "$lib/components/TaperedRule.svelte";
-  import LibbyChat from "$lib/components/LibbyChat.svelte";
 
   let { data }: { data: PageData } = $props();
 
@@ -63,10 +62,6 @@
         </li>
       {/each}
     </ul>
-  {/if}
-
-  {#if data.campaignChatEnabled}
-    <LibbyChat campaignId={data.campaign.id} campaignWide />
   {/if}
 </div>
 

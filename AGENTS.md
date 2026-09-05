@@ -27,8 +27,7 @@ Discord voice ──/start──▶ Postgres session + processing run
   before recording and uploaded after its file closes.
 - The **worker** package claims session processing runs from Postgres with
   leases, processes activation manifests with bounded concurrency, and stores
-  transcripts/detailed records in artifact object storage. It publishes stable
-  detailed-record projections for managed campaign retrieval when configured.
+  transcripts/detailed records in artifact object storage.
 - The **db** package is the single source of truth for the schema and all queries.
 - The **web** app is read-only over the same database.
 
@@ -36,19 +35,18 @@ Discord voice ──/start──▶ Postgres session + processing run
 
 pnpm workspace; packages depend on each other via `workspace:*`.
 
-| Package              | Role                                                              |
-| -------------------- | ----------------------------------------------------------------- |
-| `@rainbot/db`        | Drizzle schema + Postgres client + queries                        |
-| `@rainbot/knowledge` | Managed campaign knowledge retrieval and indexing                 |
-| `@rainbot/discord`   | Discord bot, voice recording, session recovery                    |
-| `@rainbot/storage`   | S3-compatible object access and artifact validation               |
-| `@rainbot/worker`    | Postgres session worker: transcribe, aggregate, inference, notify |
-| `@rainbot/web`       | SvelteKit frontend (Discord OAuth)                                |
+| Package            | Role                                                              |
+| ------------------ | ----------------------------------------------------------------- |
+| `@rainbot/db`      | Drizzle schema + Postgres client + queries                        |
+| `@rainbot/discord` | Discord bot, voice recording, session recovery                    |
+| `@rainbot/storage` | S3-compatible object access and artifact validation               |
+| `@rainbot/worker`  | Postgres session worker: transcribe, aggregate, inference, notify |
+| `@rainbot/web`     | SvelteKit frontend (Discord OAuth)                                |
 
 ## Runtime & tooling — read before writing code
 
 - **Node.js 24 runs TypeScript natively.** There is **no build step** for `db`,
-  `discord`, `knowledge`, `storage`, and `worker` — `node` executes `.ts` files directly. Do not add
+  `discord`, `storage`, and `worker` — `node` executes `.ts` files directly. Do not add
   tsx/ts-node/esbuild for these.
 - **Imports must use explicit `.ts` extensions** (`./env.ts`, `../types.ts`).
   This is required by the bundler-style resolution; omitting it breaks at runtime.

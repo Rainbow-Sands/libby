@@ -18,7 +18,6 @@ import { SESSION_ARTIFACT_KINDS, type SessionArtifactKind } from "./artifacts.ts
 import {
   AUDIO_STATUSES,
   CAMPAIGN_MEMBER_ROLES,
-  KNOWLEDGE_SYNC_STATUSES,
   NOTIFICATION_STATUSES,
   PROCESSING_RUN_KINDS,
   PROCESSING_RUN_STATUSES,
@@ -26,7 +25,6 @@ import {
   TRANSCRIPTION_STATUSES,
   type AudioStatus,
   type CampaignMemberRole,
-  type KnowledgeSyncStatus,
   type NotificationStatus,
   type ProcessingRunKind,
   type ProcessingRunStatus,
@@ -128,10 +126,6 @@ export const processingRuns = pgTable(
     title: text("title"),
     notificationChannelId: varchar("notification_channel_id", { length: 20 }),
     notificationStatus: varchar("notification_status", { length: 20 }).$type<NotificationStatus>(),
-    knowledgeSyncStatus: varchar("knowledge_sync_status", {
-      length: 20,
-    }).$type<KnowledgeSyncStatus>(),
-    knowledgeSyncError: text("knowledge_sync_error"),
     error: text("error"),
     availableAt: timestamp("available_at").defaultNow().notNull(),
     lockedBy: text("locked_by"),
@@ -152,10 +146,6 @@ export const processingRuns = pgTable(
       oneOf(t.notificationStatus, NOTIFICATION_STATUSES),
     ),
     check(
-      "processing_runs_knowledge_sync_status_check",
-      oneOf(t.knowledgeSyncStatus, KNOWLEDGE_SYNC_STATUSES),
-    ),
-    check(
       "processing_runs_source_transcript_kind_check",
       sql`${t.sourceTranscriptArtifactId} is null or ${t.kind} = 'inference'`,
     ),
@@ -164,8 +154,7 @@ export const processingRuns = pgTable(
 
 // The object body lives in private S3-compatible storage. Rows retain immutable
 // provenance and integrity metadata; isCurrent identifies the version published
-// for a session. This is also the seam where detailed-record chunks/embeddings
-// can be attached in a future migration without indexing raw transcripts.
+// for a session.
 export const sessionArtifacts = pgTable(
   "session_artifacts",
   {

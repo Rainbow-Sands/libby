@@ -188,18 +188,6 @@ importers:
         specifier: latest
         version: 4.1.10(@types/node@25.9.3)(vite@8.1.5(@types/node@25.9.3)(esbuild@0.28.1)(terser@5.48.0)(tsx@4.22.4))
 
-  packages/knowledge:
-    devDependencies:
-      '@types/node':
-        specifier: ^25.0.0
-        version: 25.9.3
-      typescript:
-        specifier: ^6.0.0
-        version: 6.0.3
-      vitest:
-        specifier: latest
-        version: 4.1.10(@types/node@25.9.3)(vite@8.1.5(@types/node@25.9.3)(esbuild@0.28.1)(terser@5.48.0)(tsx@4.22.4))
-
   packages/storage:
     dependencies:
       '@aws-sdk/client-s3':
@@ -242,9 +230,6 @@ importers:
       '@rainbot/db':
         specifier: workspace:*
         version: link:../db
-      '@rainbot/knowledge':
-        specifier: workspace:*
-        version: link:../knowledge
       '@rainbot/storage':
         specifier: workspace:*
         version: link:../storage
@@ -297,9 +282,6 @@ importers:
       '@rainbot/db':
         specifier: workspace:*
         version: link:../db
-      '@rainbot/knowledge':
-        specifier: workspace:*
-        version: link:../knowledge
       '@rainbot/storage':
         specifier: workspace:*
         version: link:../storage

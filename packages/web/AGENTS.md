@@ -49,9 +49,7 @@ requires `CHAT_API_KEY` and `CHAT_MODEL`; it does not require any local inferenc
 or transcription URL.
 
 The web service needs `S3_BUCKET_AUDIO` for manual ingestion and
-`S3_BUCKET_ARTIFACT` to read transcript/detailed-record tabs and chat context.
-With `RAG_PROVIDER=digitalocean`, the campaign page also provides Knowledge
-Base-backed chat filtered to the campaign's artifact object-key prefix.
+`S3_BUCKET_ARTIFACT` to read transcript/detailed-record tabs and session chat context.
 
 ## Notes
 
