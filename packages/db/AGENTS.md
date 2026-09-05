@@ -53,16 +53,16 @@ pnpm --filter @rainbot/db db:migrate    # applies to the DB in DATABASE_URL
   on `sessions` for fast listings and previews.
 - A transcript artifact is JSON typed as `Transcript` (see `transcript.ts`):
   every recorded segment, lossless (timestamp, userId, username, text,
-  whisper's own per-segment metadata). LLM-facing formatting (retaining
-  utterance timestamps and prepending the cast legend) happens in
+  whisper's own per-segment metadata). LLM-facing formatting prepends the cast
+  legend but omits timestamp strings to reduce context usage. It happens in
   `formatTranscriptForInference`, not at write time — so improving that
   formatting later can be re-run over already-recorded sessions without
   re-transcribing. Both it and the display-oriented
   `formatTranscriptForDisplay` use Whisper's own `segments[]` (verbatim under
-  `TranscriptSegment.whisper`) to explode each
-  Discord voice activation into finer-grained per-utterance timestamps
-  (correcting for background noise keeping an activation open long after
-  someone stopped talking) and drops individual sub-segments Whisper itself
+  `TranscriptSegment.whisper`) to explode each Discord voice activation into
+  finer-grained per-utterance timestamps, which preserve chronological ordering
+  despite background noise keeping an activation open long after someone
+  stopped talking. Both formats drop individual sub-segments Whisper itself
   flags as noise — the pattern to extend for future formatting improvements.
 - `campaign_members` has `role` (`dm` | `player`) and `characterName` (null for
   the DM). The cast legend and player management depend on these.

@@ -27,7 +27,6 @@ export {
   formatTranscriptForDisplay,
   formatTranscriptForInference,
   parseTranscript,
-  simplifyTranscript,
   type Transcript,
   type TranscriptSegment,
   type TranscriptTurn,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   formatTranscriptForDisplay,
-  simplifyTranscript,
+  formatTranscriptForInference,
   type Transcript,
   type TranscriptSegment,
 } from "./transcript.ts";
@@ -103,7 +103,7 @@ describe("formatTranscriptForDisplay", () => {
   });
 });
 
-describe("simplifyTranscript", () => {
+describe("formatTranscriptForInference", () => {
   it("orders utterances by when they were actually said, not by activation start", () => {
     // Alice's activation starts first (T0) but her real speech, per Whisper,
     // happens 8s in. Bob's activation starts 2s later but he speaks immediately.
@@ -124,7 +124,7 @@ describe("simplifyTranscript", () => {
       whisper: { segments: [{ start: 0, text: "Bob's words", no_speech_prob: 0.1 }] },
     });
 
-    const result = simplifyTranscript(transcriptOf(alice, bob), []);
+    const result = formatTranscriptForInference(transcriptOf(alice, bob), []);
 
     expect(result.indexOf("Bob: Bob's words")).toBeLessThan(
       result.indexOf("Alice: Alice's real words"),
@@ -141,13 +141,13 @@ describe("simplifyTranscript", () => {
       },
     });
 
-    const result = simplifyTranscript(transcriptOf(segment), []);
+    const result = formatTranscriptForInference(transcriptOf(segment), []);
 
     expect(result).toContain("hello there");
     expect(result).not.toContain("[background noise]");
   });
 
-  it("still merges consecutive same-speaker utterances onto one line", () => {
+  it("preserves utterance boundaries while omitting timestamps", () => {
     const segment = makeSegment({
       whisper: {
         segments: [
@@ -157,10 +157,10 @@ describe("simplifyTranscript", () => {
       },
     });
 
-    const result = simplifyTranscript(transcriptOf(segment), []);
+    const result = formatTranscriptForInference(transcriptOf(segment), []);
 
-    expect(result).toContain("Alice: first part second part");
-    expect(result.match(/Alice:/g)).toHaveLength(1);
+    expect(result).toBe("Alice: first part\nAlice: second part\n");
+    expect(result).not.toContain(segment.timestamp);
   });
 
   it("falls back to the whole-clip text when whisper.segments is missing", () => {
@@ -169,7 +169,7 @@ describe("simplifyTranscript", () => {
       whisper: { text: "fallback whole clip text" },
     });
 
-    const result = simplifyTranscript(transcriptOf(segment), []);
+    const result = formatTranscriptForInference(transcriptOf(segment), []);
 
     expect(result).toContain("Alice: fallback whole clip text");
   });
@@ -180,7 +180,7 @@ describe("simplifyTranscript", () => {
       whisper: { segments: [] },
     });
 
-    const result = simplifyTranscript(transcriptOf(segment), []);
+    const result = formatTranscriptForInference(transcriptOf(segment), []);
 
     expect(result).toContain("Alice: fallback whole clip text");
   });
@@ -192,8 +192,8 @@ describe("simplifyTranscript", () => {
   ])("falls back without throwing when whisper is malformed (%s)", (_label, whisper) => {
     const segment = makeSegment({ text: "fallback whole clip text", whisper });
 
-    expect(() => simplifyTranscript(transcriptOf(segment), [])).not.toThrow();
-    const result = simplifyTranscript(transcriptOf(segment), []);
+    expect(() => formatTranscriptForInference(transcriptOf(segment), [])).not.toThrow();
+    const result = formatTranscriptForInference(transcriptOf(segment), []);
     expect(result).toContain("Alice: fallback whole clip text");
   });
 
@@ -207,7 +207,7 @@ describe("simplifyTranscript", () => {
       },
     });
 
-    const result = simplifyTranscript(transcriptOf(segment), []);
+    const result = formatTranscriptForInference(transcriptOf(segment), []);
 
     expect(result).toContain("good");
     expect(result).not.toContain("bad, missing start");
@@ -231,20 +231,20 @@ describe("simplifyTranscript", () => {
       whisper: { segments: [{ start: 0, text: "the only real line", no_speech_prob: 0.1 }] },
     });
 
-    const result = simplifyTranscript(transcriptOf(noisy, normal), []);
+    const result = formatTranscriptForInference(transcriptOf(noisy, normal), []);
 
     expect(result).not.toContain("should never appear");
     expect(result).toContain("Bob: the only real line");
   });
 
-  it("still prepends the cast legend, derived from the finer-grained utterances", () => {
+  it("prepends the cast legend, derived from the finer-grained utterances", () => {
     const segment = makeSegment({
       userId: "user-a",
       username: "Alice",
       whisper: { segments: [{ start: 0, text: "hello", no_speech_prob: 0.1 }] },
     });
 
-    const result = simplifyTranscript(transcriptOf(segment), [
+    const result = formatTranscriptForInference(transcriptOf(segment), [
       { userId: "user-a", username: "Alice", characterName: "Thorin" },
     ]);
 

@@ -189,30 +189,10 @@ export function formatTranscriptForDisplay(
   return turns;
 }
 
-// Reduce a full transcript down to what the LLM actually needs: wall-clock
-// timing is dropped, consecutive lines from the same speaker are merged onto
-// one labelled line, and a cast legend is prepended so dialogue can be
-// attributed to characters. This is the seam to improve if better LLM-facing
-// formatting is found later — re-run it over `Transcript.segments` from any
-// stored session to benefit retroactively, no re-transcription needed.
-export function simplifyTranscript(transcript: Transcript, cast: CastMember[]): string {
-  const turns = formatTranscriptForDisplay(transcript, cast);
-  const labelByUserId = new Map<string, string>();
-
-  for (const turn of turns) {
-    if (!labelByUserId.has(turn.userId)) labelByUserId.set(turn.userId, turn.speaker);
-  }
-
-  return (
-    buildCastLegend(cast, labelByUserId) +
-    turns.map((turn) => `${turn.speaker}: ${turn.text}`).join("\n") +
-    "\n"
-  );
-}
-
-// Preserve utterance-level timestamps and speaker boundaries for the detailed
-// record pipeline. These source markers let the model retain chronology and
-// make the resulting record auditable against the original transcript.
+// Preserve utterance-level speaker boundaries and chronological ordering for
+// inference, but omit timestamp strings to reduce context usage. Whisper's
+// timestamps are used only while ordering the lines; the stored transcript
+// remains the lossless source for display and future formatting improvements.
 export function formatTranscriptForInference(transcript: Transcript, cast: CastMember[]): string {
   const utterances = orderedUtterances(transcript);
   const labelByUserId = new Map<string, string>();
