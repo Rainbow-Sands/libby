@@ -254,9 +254,22 @@ export async function runSessionWorker(signal: AbortSignal): Promise<void> {
 
   await boss.work<TranscribeSegmentJob>(
     JOB_QUEUES.transcribeSegment,
-    { localConcurrency: TRANSCRIPTION_CONCURRENCY },
-    async ([job]) => {
-      if (job) await transcribeOne(job.id, job.data, job.signal);
+    {
+      batchSize: TRANSCRIPTION_CONCURRENCY,
+      burstWhenBatchFull: true,
+      perJobResults: true,
+    },
+    async (jobs) => {
+      return Promise.all(
+        jobs.map(async (job) => {
+          try {
+            await transcribeOne(job.id, job.data, job.signal);
+            return { id: job.id, status: "completed" as const };
+          } catch (error) {
+            return { id: job.id, status: "failed" as const, output: errorMessage(asError(error)) };
+          }
+        }),
+      );
     },
   );
   await boss.work<AdvanceProcessingRunJob>(
