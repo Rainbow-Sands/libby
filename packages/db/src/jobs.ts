@@ -24,20 +24,24 @@ interface StartJobQueueOptions {
   worker?: boolean;
 }
 
-function processingRetryLimit(): number {
-  const value = process.env.PROCESSING_MAX_ATTEMPTS;
-  if (!value) return 2;
+function retryLimit(name: string, fallbackAttempts: number): number {
+  const value = process.env[name];
+  if (!value) return fallbackAttempts - 1;
   const attempts = Number(value);
   if (!Number.isInteger(attempts) || attempts < 1) {
-    throw new Error("PROCESSING_MAX_ATTEMPTS must be a positive integer");
+    throw new Error(`${name} must be a positive integer`);
   }
   return attempts - 1;
 }
 
+// The transcription server may unload its model when idle, and reloading it can
+// take minutes. Back off up to two minutes per retry so the first activations
+// after a cold start outlast the reload (about 6.5 minutes across 8 attempts).
 const TRANSCRIPTION_QUEUE_OPTIONS = {
-  retryLimit: processingRetryLimit(),
-  retryDelay: 2,
+  retryLimit: retryLimit("TRANSCRIPTION_MAX_ATTEMPTS", 8),
+  retryDelay: 5,
   retryBackoff: true,
+  retryDelayMax: 120,
   expireInSeconds: 24 * 60 * 60,
   heartbeatSeconds: 60,
   deadLetter: JOB_QUEUES.transcribeSegmentDead,
@@ -45,7 +49,7 @@ const TRANSCRIPTION_QUEUE_OPTIONS = {
 } as const satisfies QueueDefinition;
 
 const PROCESSING_QUEUE_OPTIONS = {
-  retryLimit: processingRetryLimit(),
+  retryLimit: retryLimit("PROCESSING_MAX_ATTEMPTS", 3),
   retryDelay: 5,
   retryBackoff: true,
   expireInSeconds: 24 * 60 * 60,

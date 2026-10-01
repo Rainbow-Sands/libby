@@ -69,20 +69,21 @@ Service names below match `docker-compose.yml`; `db-migrate` is the
 
 ### Audio and processing
 
-| Variable                    | Used by              | Description                                                                     |
-| --------------------------- | -------------------- | ------------------------------------------------------------------------------- |
-| `S3_ACCESS_KEY_ID`          | discord, worker, web | Optional static access key; omit both credentials to use the AWS provider chain |
-| `S3_BUCKET_ARTIFACT`        | worker, web          | Private bucket for durable transcripts and detailed records                     |
-| `S3_BUCKET_AUDIO`           | discord, worker, web | Private, short-lived activation-audio bucket; web uses it for manual uploads    |
-| `S3_ENDPOINT`               | discord, worker, web | Optional shared S3-compatible endpoint; omit for AWS S3                         |
-| `S3_FORCE_PATH_STYLE`       | discord, worker, web | Set to `true` when the storage provider requires path-style requests            |
-| `S3_REGION`                 | discord, worker, web | Object-storage region                                                           |
-| `S3_SECRET_ACCESS_KEY`      | discord, worker, web | Optional static secret; must be set with the access key                         |
-| `TRANSCRIPTION_URL`         | worker               | Complete transcription endpoint, such as `http://whisper-server:8080/inference` |
-| `TRANSCRIPTION_MODEL`       | worker               | Transcription model ID (default: `whisper-large-v3-turbo`)                      |
-| `TRANSCRIPTION_CONCURRENCY` | worker               | Simultaneous activation transcriptions (default: `4`)                           |
-| `PROCESSING_CONCURRENCY`    | worker               | Sessions processed concurrently by one worker (default: `2`)                    |
-| `PROCESSING_MAX_ATTEMPTS`   | worker               | Maximum attempts for a session or activation before failure (default: `3`)      |
+| Variable                     | Used by              | Description                                                                     |
+| ---------------------------- | -------------------- | ------------------------------------------------------------------------------- |
+| `S3_ACCESS_KEY_ID`           | discord, worker, web | Optional static access key; omit both credentials to use the AWS provider chain |
+| `S3_BUCKET_ARTIFACT`         | worker, web          | Private bucket for durable transcripts and detailed records                     |
+| `S3_BUCKET_AUDIO`            | discord, worker, web | Private, short-lived activation-audio bucket; web uses it for manual uploads    |
+| `S3_ENDPOINT`                | discord, worker, web | Optional shared S3-compatible endpoint; omit for AWS S3                         |
+| `S3_FORCE_PATH_STYLE`        | discord, worker, web | Set to `true` when the storage provider requires path-style requests            |
+| `S3_REGION`                  | discord, worker, web | Object-storage region                                                           |
+| `S3_SECRET_ACCESS_KEY`       | discord, worker, web | Optional static secret; must be set with the access key                         |
+| `TRANSCRIPTION_URL`          | worker               | Complete transcription endpoint, such as `http://whisper-server:8080/inference` |
+| `TRANSCRIPTION_MODEL`        | worker               | Transcription model ID (default: `whisper-large-v3-turbo`)                      |
+| `TRANSCRIPTION_CONCURRENCY`  | worker               | Simultaneous activation transcriptions (default: `4`)                           |
+| `PROCESSING_CONCURRENCY`     | worker               | Sessions processed concurrently by one worker (default: `2`)                    |
+| `PROCESSING_MAX_ATTEMPTS`    | worker               | Maximum attempts for a session processing step before failure (default: `3`)    |
+| `TRANSCRIPTION_MAX_ATTEMPTS` | worker               | Maximum attempts for an activation transcription before failure (default: `8`)  |
 
 ### Language-model inference
 
