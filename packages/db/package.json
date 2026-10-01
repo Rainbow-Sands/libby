@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "drizzle-orm": "latest",
-    "pg-boss": "^12.30.0",
+    "pg-boss": "^12.35.1",
     "postgres": "latest"
   },
   "devDependencies": {
