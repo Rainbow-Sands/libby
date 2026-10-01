@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, exists, gte, inArray, isNotNull } from "drizzle-orm";
+import { and, asc, count, eq, exists, gte, inArray, isNotNull, isNull, ne, or } from "drizzle-orm";
 import { db, type DatabaseTransaction } from "./client.ts";
 import { JOB_QUEUES, enqueueJob, startJobQueue } from "./jobs.ts";
 import { evaluateTranscriptionBarrier } from "./processing-state.ts";
@@ -329,6 +329,112 @@ export async function startTranscriptRegeneration(
         tx,
         JOB_QUEUES.transcribeSegment,
         { jobId, sessionId, runId, segmentId: ref.segmentId },
+        jobId,
+      );
+    }
+
+    await tx
+      .update(sessions)
+      .set({ activeRunId: runId, status: "transcribing" })
+      .where(eq(sessions.id, sessionId));
+    return runId;
+  });
+}
+
+// Clips with saved audio whose transcription never completed. These remain on a
+// terminal run after a failure and are the only clips a retry re-transcribes.
+function untranscribedSegment(sessionId: string) {
+  return and(
+    eq(sessionSegments.sessionId, sessionId),
+    eq(sessionSegments.audioStatus, "ready"),
+    or(
+      isNull(sessionSegments.transcriptionStatus),
+      ne(sessionSegments.transcriptionStatus, "completed"),
+    ),
+  );
+}
+
+export async function countFailedTranscriptions(sessionId: string): Promise<number> {
+  const [row] = await db
+    .select({ count: count() })
+    .from(sessionSegments)
+    .innerJoin(sessions, eq(sessionSegments.sessionId, sessions.id))
+    .where(and(untranscribedSegment(sessionId), isNull(sessions.activeRunId)));
+  return row?.count ?? 0;
+}
+
+// Starts a retranscription run that keeps every completed clip and re-enqueues
+// only the clips that failed. Completed clips are moved onto the new run so the
+// transcription barrier and aggregation see the whole session.
+export async function startFailedTranscriptionRetry(sessionId: string): Promise<string> {
+  await startJobQueue();
+  const runId = randomUUID();
+  return db.transaction(async (tx) => {
+    const [session] = await tx
+      .select({ activeRunId: sessions.activeRunId })
+      .from(sessions)
+      .where(eq(sessions.id, sessionId))
+      .for("update");
+    if (!session) throw new Error(`Session ${sessionId} was not found`);
+    if (session.activeRunId) throw new Error(`Session ${sessionId} is already being processed`);
+
+    const [failedAudio] = await tx
+      .select({ segmentId: sessionSegments.segmentId })
+      .from(sessionSegments)
+      .where(
+        and(eq(sessionSegments.sessionId, sessionId), eq(sessionSegments.audioStatus, "failed")),
+      )
+      .limit(1);
+    if (failedAudio) {
+      throw new Error(`Session ${sessionId} has clips whose audio was never saved`);
+    }
+
+    const failed = await tx
+      .select({ segmentId: sessionSegments.segmentId })
+      .from(sessionSegments)
+      .where(untranscribedSegment(sessionId));
+    if (failed.length === 0) {
+      throw new Error(`Session ${sessionId} has no failed transcriptions`);
+    }
+
+    await tx.insert(processingRuns).values({
+      id: runId,
+      sessionId,
+      kind: "retranscription",
+      status: "transcribing",
+    });
+
+    await tx
+      .update(sessionSegments)
+      .set({ transcriptionRunId: runId, updatedAt: new Date() })
+      .where(
+        and(
+          eq(sessionSegments.sessionId, sessionId),
+          eq(sessionSegments.audioStatus, "ready"),
+          eq(sessionSegments.transcriptionStatus, "completed"),
+        ),
+      );
+
+    for (const { segmentId } of failed) {
+      const jobId = randomUUID();
+      await tx
+        .update(sessionSegments)
+        .set({
+          transcriptionRunId: runId,
+          transcriptionStatus: "pending",
+          transcriptionJobId: jobId,
+          transcript: null,
+          transcribedAt: null,
+          error: null,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(eq(sessionSegments.sessionId, sessionId), eq(sessionSegments.segmentId, segmentId)),
+        );
+      await enqueueJob(
+        tx,
+        JOB_QUEUES.transcribeSegment,
+        { jobId, sessionId, runId, segmentId },
         jobId,
       );
     }

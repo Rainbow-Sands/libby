@@ -80,6 +80,16 @@
     }
   }
 
+  function confirmFailedTranscriptionRetry(event: SubmitEvent) {
+    if (
+      !window.confirm(
+        "Re-transcribe only the failed audio clips and regenerate the detailed record, recap, and title?",
+      )
+    ) {
+      event.preventDefault();
+    }
+  }
+
   onMount(() => {
     if (!data.canViewDetails || ["done", "failed"].includes(data.session.status)) return;
 
@@ -167,6 +177,19 @@
             disabled={["recording", "transcribing", "summarizing"].includes(data.session.status)}
           >Regenerate transcript</button>
         </form>
+        {#if data.failedTranscriptions > 0}
+          <form
+            method="POST"
+            action="?/retryFailedTranscriptions"
+            onsubmit={confirmFailedTranscriptionRetry}
+          >
+            <button class="btn regenerate" type="submit"
+              >Retry {data.failedTranscriptions} failed {data.failedTranscriptions === 1
+                ? "clip"
+                : "clips"}</button
+            >
+          </form>
+        {/if}
       </div>
     {/if}
 

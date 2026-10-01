@@ -1,5 +1,6 @@
 import { error, fail, redirect } from "@sveltejs/kit";
 import {
+  countFailedTranscriptions,
   formatTranscriptForDisplay,
   getCampaignAccess,
   getCampaignCast,
@@ -7,7 +8,11 @@ import {
   isAdmin,
 } from "@rainbot/db";
 import { loadDetailedRecordArtifact, loadTranscriptArtifact } from "@rainbot/storage";
-import { requestInferenceRegeneration, requestTranscriptRegeneration } from "@rainbot/worker";
+import {
+  requestFailedTranscriptionRetry,
+  requestInferenceRegeneration,
+  requestTranscriptRegeneration,
+} from "@rainbot/worker";
 import type { Actions, PageServerLoad } from "./$types";
 
 function recapExcerpt(recap: string | null): string {
@@ -49,6 +54,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
       hasTranscript: Boolean(session.transcriptArtifact),
       canViewDetails: false,
       canRegenerate: false,
+      failedTranscriptions: 0,
       preview,
     };
   }
@@ -75,6 +81,10 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
     hasTranscript: Boolean(session.transcriptArtifact),
     canViewDetails: true,
     canRegenerate: access.isAdmin,
+    failedTranscriptions:
+      access.isAdmin && session.status === "failed"
+        ? await countFailedTranscriptions(session.id)
+        : 0,
     preview,
   };
 };
@@ -132,6 +142,43 @@ export const actions: Actions = {
     } catch (err) {
       if (err instanceof Error && err.message.includes("already being processed")) {
         return fail(409, { message: "Regeneration is already running for this session." });
+      }
+      throw err;
+    }
+
+    throw redirect(
+      303,
+      `/campaigns/${params.id}/sessions/${params.sessionId}?tab=transcript&regeneratingTranscript=1`,
+    );
+  },
+  retryFailedTranscriptions: async ({ params, locals }) => {
+    if (!locals.user) throw error(401, "Please log in to retry failed transcriptions.");
+
+    const session = await getSessionDetail(params.sessionId);
+    if (!session || session.campaignId !== params.id) {
+      throw error(404, "Session not found.");
+    }
+
+    if (!(await isAdmin(locals.user.id))) {
+      throw error(403, "Only administrators can retry failed transcriptions.");
+    }
+    if (session.status !== "failed") {
+      return fail(409, { message: "Only failed sessions can retry failed transcriptions." });
+    }
+
+    try {
+      await requestFailedTranscriptionRetry(session.id);
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("already being processed")) {
+        return fail(409, { message: "Regeneration is already running for this session." });
+      }
+      if (err instanceof Error && err.message.includes("no failed transcriptions")) {
+        return fail(409, { message: "This session has no failed transcriptions to retry." });
+      }
+      if (err instanceof Error && err.message.includes("audio was never saved")) {
+        return fail(409, {
+          message: "Some clips failed before their audio was saved and cannot be retried.",
+        });
       }
       throw err;
     }

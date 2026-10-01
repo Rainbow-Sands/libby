@@ -9,6 +9,7 @@ import {
   markSegmentDiscarded,
   markSegmentReady,
   registerRecordingSegment,
+  startFailedTranscriptionRetry,
   startInferenceRegeneration,
   startTranscriptRegeneration,
   type CreateRecordingSessionInput,
@@ -115,4 +116,8 @@ export async function requestInferenceRegeneration(sessionId: string): Promise<s
 export async function requestTranscriptRegeneration(sessionId: string): Promise<string> {
   const refs = await getAudioSegmentRefs(sessionId);
   return startTranscriptRegeneration(sessionId, refs);
+}
+
+export async function requestFailedTranscriptionRetry(sessionId: string): Promise<string> {
+  return startFailedTranscriptionRetry(sessionId);
 }

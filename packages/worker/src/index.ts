@@ -4,6 +4,7 @@ export {
   discardAudioSegment,
   finishSessionShutdown,
   registerAudioSegment,
+  requestFailedTranscriptionRetry,
   requestInferenceRegeneration,
   requestTranscriptRegeneration,
   startRecordingSession,
