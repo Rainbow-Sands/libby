@@ -4,6 +4,7 @@ import { stop } from "./commands/stop.ts";
 import { campaign } from "./commands/campaign.ts";
 import { addPlayer } from "./commands/add-player.ts";
 import { removePlayer } from "./commands/remove-player.ts";
+import { reminder } from "./commands/reminder.ts";
 import { DISCORD_TOKEN, DISCORD_APPLICATION_ID } from "./env.ts";
 
 const commands = {
@@ -12,6 +13,7 @@ const commands = {
   campaign,
   "add-player": addPlayer,
   "remove-player": removePlayer,
+  reminder,
 };
 
 export const registerCommands = async () => {
@@ -41,6 +43,16 @@ export const startBot = async () => {
       const command = commands[interaction.commandName as keyof typeof commands];
       if (command && "autocomplete" in command) {
         await command.autocomplete(interaction);
+      }
+      return;
+    }
+
+    if (interaction.isModalSubmit()) {
+      // Modal custom IDs are prefixed with the name of the command that opened them.
+      const [commandName] = interaction.customId.split(":");
+      const command = commands[commandName as keyof typeof commands];
+      if (command && "modalSubmit" in command) {
+        await command.modalSubmit(interaction);
       }
       return;
     }

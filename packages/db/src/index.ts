@@ -106,3 +106,12 @@ export {
   storeRunTitle,
   type ProcessingRunData,
 } from "./processing-runs.ts";
+export {
+  claimCampaignReminder,
+  getCampaignReminder,
+  getDueCampaignReminders,
+  setCampaignReminder,
+  type CampaignReminder,
+  type CampaignReminderSchedule,
+  type SetCampaignReminderInput,
+} from "./reminders.ts";

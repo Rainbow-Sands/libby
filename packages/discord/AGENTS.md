@@ -11,6 +11,8 @@ root `AGENTS.md` for workspace-wide conventions.
 - `session.ts` — voice join, per-activation recording, workflow signalling.
 - `recording.ts` — in-memory `activeSessions` map (keyed by guildId).
 - `recovery.ts` — rejoin/resume running sessions after a restart.
+- `reminders.ts` — polls for upcoming sessions and posts reminders; the
+  timezone-aware weekly schedule math lives in `reminder-schedule.ts`.
 - `env.ts` — asserts Discord and S3-compatible storage configuration.
 
 ## Commands
@@ -27,6 +29,16 @@ To add one:
 
 Campaign selection uses the shared `commands/autocomplete.ts` helper; DM-only
 management commands use `commands/guard.ts` (`requireDmOfCampaign`).
+
+A command that opens a modal also exports `modalSubmit`. The modal's custom ID
+must start with `<command name>:` — submissions are routed on that prefix.
+
+## Session reminders
+
+`/reminder` stores one weekly schedule per campaign (`campaign_reminders`) and
+the channel it was run in. The scheduler claims each occurrence with a
+conditional update before posting, so a reminder is sent at most once; an
+occurrence that started while the bot was down is skipped rather than sent late.
 
 ## Recording
 

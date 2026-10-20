@@ -83,6 +83,30 @@ export const campaignMembers = pgTable(
   ],
 );
 
+// One reminder configuration per campaign: a weekly session at a wall-clock
+// time in an IANA time zone. nextSessionAt is the next occurrence whose
+// reminder has not been sent; the bot advances it when it claims a reminder.
+export const campaignReminders = pgTable(
+  "campaign_reminders",
+  {
+    campaignId: uuid("campaign_id")
+      .primaryKey()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    channelId: varchar("channel_id", { length: 20 }).notNull(),
+    dayOfWeek: integer("day_of_week").notNull(),
+    minuteOfDay: integer("minute_of_day").notNull(),
+    timeZone: text("time_zone").notNull(),
+    nextSessionAt: timestamp("next_session_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    index("campaign_reminders_next_session_idx").on(t.nextSessionAt),
+    check("campaign_reminders_day_of_week_check", sql`${t.dayOfWeek} between 0 and 6`),
+    check("campaign_reminders_minute_of_day_check", sql`${t.minuteOfDay} between 0 and 1439`),
+  ],
+);
+
 export const sessions = pgTable(
   "sessions",
   {
