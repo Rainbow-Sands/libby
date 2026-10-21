@@ -130,6 +130,32 @@ export {
   storeRunTitle,
   type ProcessingRunData,
 } from "./processing-runs.ts";
+export {
+  claimCampaignReminder,
+  getCampaignReminder,
+  getCampaignRemindersForChannel,
+  getDueCampaignReminders,
+  getRecapRotation,
+  setCampaignReminderChannel,
+  setCampaignReminderSchedule,
+  setRecapRotation,
+  skipCampaignRecapper,
+  type CampaignReminder,
+  type ClaimedReminder,
+  type DueCampaignReminder,
+  type RecapRotationMember,
+  type SetReminderChannelInput,
+  type SkipRecapperResult,
+} from "./reminders.ts";
+export {
+  REMINDER_LEAD_MS,
+  WEEKDAYS,
+  formatTimeOfDay,
+  nextSessionAfter,
+  normalizeTimeZone,
+  parseTimeOfDay,
+  type CampaignReminderSchedule,
+} from "./schedule.ts";
 export { nextBackfillStep, type BackfillStep } from "./backfill.ts";
 export {
   PERSON_KINDS,

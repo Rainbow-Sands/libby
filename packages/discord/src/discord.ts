@@ -4,6 +4,8 @@ import { stop } from "./commands/stop.ts";
 import { campaign } from "./commands/campaign.ts";
 import { addPlayer } from "./commands/add-player.ts";
 import { removePlayer } from "./commands/remove-player.ts";
+import { reminder } from "./commands/reminder.ts";
+import { skipRecapper } from "./commands/skip-recapper.ts";
 import { DISCORD_TOKEN, DISCORD_APPLICATION_ID } from "./env.ts";
 
 const commands = {
@@ -12,6 +14,8 @@ const commands = {
   campaign,
   "add-player": addPlayer,
   "remove-player": removePlayer,
+  reminder,
+  "skip-recapper": skipRecapper,
 };
 
 export const registerCommands = async () => {

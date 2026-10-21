@@ -86,10 +86,54 @@ export const campaignMembers = pgTable(
       .notNull(),
     role: varchar("role", { length: 10 }).$type<CampaignMemberRole>().notNull().default("player"),
     characterName: text("character_name"),
+    // Recap duty goes to the rotation member who recapped least recently.
+    recapRotation: boolean("recap_rotation").notNull().default(true),
+    lastRecappedAt: timestamp("last_recapped_at", { withTimezone: true }),
+    joinedAt: timestamp("joined_at").defaultNow().notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.campaignId, t.userId] }),
     check("campaign_members_role_check", oneOf(t.role, CAMPAIGN_MEMBER_ROLES)),
+  ],
+);
+
+// One reminder configuration per campaign. /reminder records the channel; the
+// web app sets the weekly schedule (a wall-clock time in an IANA time zone).
+// nextSessionAt is the next occurrence whose reminder has not been sent; the
+// bot advances it when it claims a reminder.
+//
+// recapUserId is on recap duty for the session at recapSessionAt.
+// recapPreviousAt is that member's lastRecappedAt before they were assigned, so
+// a skip can restore it; recapSkippedUserIds are excluded for that session.
+export const campaignReminders = pgTable(
+  "campaign_reminders",
+  {
+    campaignId: uuid("campaign_id")
+      .primaryKey()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    channelId: varchar("channel_id", { length: 20 }).notNull(),
+    channelName: varchar("channel_name", { length: 100 }),
+    dayOfWeek: integer("day_of_week"),
+    minuteOfDay: integer("minute_of_day"),
+    timeZone: text("time_zone"),
+    nextSessionAt: timestamp("next_session_at", { withTimezone: true }),
+    recapUserId: varchar("recap_user_id", { length: 20 }).references(() => users.id),
+    recapSessionAt: timestamp("recap_session_at", { withTimezone: true }),
+    recapPreviousAt: timestamp("recap_previous_at", { withTimezone: true }),
+    recapSkippedUserIds: jsonb("recap_skipped_user_ids").$type<string[]>().notNull().default([]),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    index("campaign_reminders_next_session_idx").on(t.nextSessionAt),
+    check("campaign_reminders_day_of_week_check", sql`${t.dayOfWeek} between 0 and 6`),
+    check("campaign_reminders_minute_of_day_check", sql`${t.minuteOfDay} between 0 and 1439`),
+    check(
+      "campaign_reminders_schedule_check",
+      sql`(${t.dayOfWeek} is null) = (${t.minuteOfDay} is null)
+        and (${t.dayOfWeek} is null) = (${t.timeZone} is null)
+        and (${t.dayOfWeek} is null) = (${t.nextSessionAt} is null)`,
+    ),
   ],
 );
 

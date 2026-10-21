@@ -7,6 +7,7 @@ import { getCampaignMeta } from "@rainbot/db";
 export async function requireDmOfCampaign(
   interaction: ChatInputCommandInteraction,
   campaignId: string,
+  action = "manage players",
 ): Promise<{ guildId: string; dmId: string | null } | null> {
   const meta = await getCampaignMeta(campaignId);
   if (!meta || meta.guildId !== interaction.guildId) {
@@ -14,7 +15,7 @@ export async function requireDmOfCampaign(
     return null;
   }
   if (meta.dmId !== interaction.user.id) {
-    await interaction.reply("Only the campaign's DM can manage players.");
+    await interaction.reply(`Only the campaign's DM can ${action}.`);
     return null;
   }
   return meta;

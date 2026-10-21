@@ -10,6 +10,9 @@ for workspace-wide conventions.
 - `src/routes/` — pages + `+page.server.ts` loaders and `auth/` OAuth endpoints.
 - Session transcript routes include an authenticated SSE endpoint that polls
   completed segment checkpoints and streams snippets until processing ends.
+- `campaigns/[id]/schedule` — DM-only session schedule and recap rotation,
+  linked from Discord's `/reminder`. Pages that need a login can redirect to
+  `/auth/login?returnTo=<path>`; the callback returns there (same-site paths only).
 - `src/hooks.server.ts` — session cookie verification + theme injection.
 - `src/lib/server/` — `env.ts`, `session.ts` (HMAC cookie), `discord.ts` (OAuth).
 - `src/lib/components/`, `src/app.css`, `src/app.html`.
