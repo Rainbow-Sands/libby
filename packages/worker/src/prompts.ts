@@ -59,6 +59,7 @@ export const WORLD_UPDATE_SYSTEM = `You maintain the wiki of a tabletop RPG camp
 - summary: two or three sentences describing the page as of the end of this session, written from all of its facts. Present tense, no session numbers.
 - related: names of other pages closely tied to this one, such as an NPC's faction, a quest's people and places, or where an item was found.
 - Use canonical spellings throughout. When the ledger lists other spellings in heardAs, add them to aliases and report them in nameCorrections.
+- The session page links the recap's openThreads titles, newFaces names and loot items to pages by exact name. Every open thread and new face needs a page: a quest page for each open thread (an existing quest when the thread continues one), and the matching page for each new face. Loot gets a page only when it is a notable item, not coin or supplies. Whenever the recap's wording differs from the page's name, add the recap's exact wording to that page's aliases.
 
 ## Other output
 - possibleDuplicates: pairs of existing or new pages that may be the same thing under two names, with the reason. A person decides whether to merge them, so report them instead of merging.
