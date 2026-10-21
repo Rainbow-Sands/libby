@@ -223,6 +223,15 @@ export interface WorldUpdatePlan {
 // The parts of a session's recap the world update refers to by index.
 export type WorldRecap = Pick<RecapSections, "epicMoments" | "openThreads" | "newFaces">;
 
+function kindGroup(kind: WorldPageKind): string {
+  return (PERSON_KINDS as readonly WorldPageKind[]).includes(kind) ? "person" : kind;
+}
+
+function compatibleKinds(a: WorldPageKind, b: WorldPageKind): boolean {
+  if (a === "quest" || b === "quest") return a === b;
+  return a === "other" || b === "other" || kindGroup(a) === kindGroup(b);
+}
+
 export function planWorldUpdate(
   existing: WorldPageState[],
   update: WorldUpdate,
@@ -269,10 +278,13 @@ export function planWorldUpdate(
       ...entry.openThreads.map((i) => recap.openThreads[i]?.title),
       ...entry.newFaces.map((i) => recap.newFaces[i]?.name),
     ].filter((recapName): recapName is string => Boolean(recapName?.trim()));
-    // A quest is never the same page as the person or place it is about, even
-    // when it is named after them or the model points it at their slug.
+    // An entry only continues a page of the same kind: a quest is never the
+    // person it is about, and a winery is never the wine named after it, even
+    // when the model points at that page's slug or one of its aliases. Player
+    // characters and NPCs count as one kind, and "other" fits anything but a
+    // quest, since the model reclassifies those between sessions.
     const sameKind = (candidate: PlannedPage | undefined) =>
-      candidate !== undefined && (candidate.kind === "quest") === (entry.kind === "quest");
+      candidate !== undefined && compatibleKinds(candidate.kind, entry.kind);
     let page = [
       resolve(entry.page),
       resolve(name),

@@ -186,8 +186,12 @@ test("creates new pages with unique slugs and links related pages and moments", 
   const abbess = plan.pages.find((page) => page.slug === "glass-abbess");
   expect(abbess).toMatchObject({ created: true, kind: "npc" });
   expect(abbess?.content.related).toEqual(["magister-venn"]);
-  // The second entry's name collides with Venn's key, so it resolves to him.
-  expect(plan.pages.map((page) => page.slug).toSorted()).toEqual(["glass-abbess", "magister-venn"]);
+  // The second entry's name collides with Venn's key, but a place is never a
+  // person, so it gets its own page.
+  expect(plan.pages.map((page) => page.slug).toSorted()).toEqual([
+    "glass-abbess",
+    "magister-venn-2",
+  ]);
   expect(plan.moments).toEqual([
     {
       slug: "glass-abbess",
@@ -360,4 +364,54 @@ test("a quest named after a character never takes over the character's page", ()
   expect(
     plan.pages.map((page) => [page.slug, page.kind, page.content.name, page.content.aliases]),
   ).toEqual([["xerxes-s-missing-past", "quest", "Xerxes's missing past", ["Xerxes's memory gap"]]]);
+});
+
+test("a place never takes over an item that was named after it", () => {
+  const wine: WorldPageState = {
+    ...venn,
+    id: "p3",
+    slug: "champagne-de-l-estompe",
+    kind: "item",
+    content: { ...venn.content, name: "Champagne de l'Estompe", aliases: ["Wizard of Wines"] },
+  };
+  const plan = planWorldUpdate(
+    [wine],
+    {
+      ...empty,
+      pages: [
+        entry({
+          page: "champagne-de-l-estompe",
+          name: "Wizard of Wines",
+          kind: "location",
+          newFacts: [{ text: "The region's principal winery.", at: null }],
+        }),
+      ],
+    },
+    "s10",
+    noRecap,
+  );
+
+  expect(plan.pages.map((page) => [page.slug, page.kind, page.content.name])).toEqual([
+    ["wizard-of-wines", "location", "Wizard of Wines"],
+  ]);
+});
+
+test("an NPC who turns out to be a player character keeps their page", () => {
+  const plan = planWorldUpdate(
+    [venn],
+    {
+      ...empty,
+      pages: [
+        entry({
+          page: "magister-venn",
+          name: "Magister Venn",
+          kind: "character",
+          newFacts: [{ text: "Joined the party.", at: null }],
+        }),
+      ],
+    },
+    "s11",
+    noRecap,
+  );
+  expect(plan.pages.map((page) => page.slug)).toEqual(["magister-venn"]);
 });
