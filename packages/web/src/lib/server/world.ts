@@ -1,7 +1,7 @@
-import { pageNames, summaryLine, type WorldPageSnapshot } from "@rainbot/db";
+import { pageNames, summaryLine, type WorldPageSummary } from "@rainbot/db";
 import type { WorldLinkPage } from "$lib/world";
 
-export function toWorldLinkPages(world: WorldPageSnapshot[]): WorldLinkPage[] {
+export function toWorldLinkPages(world: WorldPageSummary[]): WorldLinkPage[] {
   return world.map((page) => ({
     slug: page.slug,
     kind: page.kind,

@@ -230,14 +230,14 @@
         aria-selected={activeTab === "recap"}
         class:active={activeTab === "recap"}>Recap</a
       >
-      {#if data.worldChanges}
+      {#if data.worldChangeCount !== null}
         <a
           role="tab"
           href="?tab=world"
           aria-selected={activeTab === "world"}
           class:active={activeTab === "world"}
-          >World changes{#if data.worldChanges.pages.length}<span class="count"
-              >{data.worldChanges.pages.length}</span
+          >World changes{#if data.worldChangeCount}<span class="count"
+              >{data.worldChangeCount}</span
             >{/if}</a
         >
       {/if}
@@ -250,7 +250,9 @@
     </div>
 
     <div role="tabpanel" hidden={activeTab !== "recap"}>
-      {#if data.session.recapSections}
+      {#if activeTab !== "recap"}
+        <!-- Rendered only while open; another tab's load has no world to link. -->
+      {:else if data.session.recapSections}
         <SessionRecap recap={data.session.recapSections} world={data.world} />
       {:else if data.session.recap}
         <div class="prose">{@html renderMarkdown(data.session.recap)}</div>

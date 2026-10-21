@@ -17,6 +17,7 @@ import {
   PERSON_KINDS,
   pageNames,
   planWorldUpdate,
+  type WorldFact,
   type WorldMoment,
   type WorldPageContent,
   type WorldPageKind,
@@ -60,6 +61,46 @@ export interface WorldBound {
   through?: Date;
 }
 
+// A page's content without its facts, which grow with every session and
+// which lists, links and the sidebar never show.
+export type WorldPageHeader = Omit<WorldPageContent, "facts">;
+
+export interface WorldPageSummary extends Omit<WorldPageSnapshot, "content"> {
+  content: WorldPageHeader;
+}
+
+function worldBoundConditions(campaignId: string, bound: WorldBound) {
+  const conditions = [eq(worldPages.campaignId, campaignId)];
+  if (bound.before) conditions.push(lt(sessions.startedAt, bound.before));
+  if (bound.through) conditions.push(lte(sessions.startedAt, bound.through));
+  return conditions;
+}
+
+// Every page of a campaign as it stood at the bound, like getWorldState, but
+// without facts, so only a small part of each revision is read and sent.
+export async function getWorldSummary(
+  campaignId: string,
+  bound: WorldBound = {},
+): Promise<WorldPageSummary[]> {
+  const rows = await db
+    .selectDistinctOn([worldPageRevisions.pageId], {
+      id: worldPages.id,
+      slug: worldPages.slug,
+      kind: worldPages.kind,
+      avatarId: worldPages.avatarId,
+      memberUserId: worldPages.memberUserId,
+      createdInSessionId: worldPages.createdInSessionId,
+      revisionSessionId: worldPageRevisions.sessionId,
+      content: sql<WorldPageHeader>`${worldPageRevisions.content} - 'facts'`,
+    })
+    .from(worldPageRevisions)
+    .innerJoin(worldPages, eq(worldPageRevisions.pageId, worldPages.id))
+    .innerJoin(sessions, eq(worldPageRevisions.sessionId, sessions.id))
+    .where(and(...worldBoundConditions(campaignId, bound)))
+    .orderBy(worldPageRevisions.pageId, desc(sessions.startedAt));
+  return rows.toSorted((a, b) => a.content.name.localeCompare(b.content.name));
+}
+
 // Every page of a campaign as it stood at the bound: the newest revision of
 // each page from a session inside it. Without a bound, the current world.
 export async function getWorldState(
@@ -67,9 +108,7 @@ export async function getWorldState(
   bound: WorldBound = {},
   queryable: Queryable = db,
 ): Promise<WorldPageSnapshot[]> {
-  const conditions = [eq(worldPages.campaignId, campaignId)];
-  if (bound.before) conditions.push(lt(sessions.startedAt, bound.before));
-  if (bound.through) conditions.push(lte(sessions.startedAt, bound.through));
+  const conditions = worldBoundConditions(campaignId, bound);
 
   const rows = await queryable
     .selectDistinctOn([worldPageRevisions.pageId], {
@@ -344,7 +383,7 @@ export interface WorldPageLink {
   avatarId: string | null;
 }
 
-function toLink(page: WorldPageSnapshot): WorldPageLink {
+function toLink(page: WorldPageSummary): WorldPageLink {
   return { slug: page.slug, kind: page.kind, name: page.content.name, avatarId: page.avatarId };
 }
 
@@ -386,57 +425,90 @@ export interface WorldPageMention {
   sentences: MentionSentence[];
 }
 
+// A page as it stood at the bound, the start of the session it is viewed as
+// of, or as it stands now without one. `world` is the campaign's world at the
+// same bound, for callers that already loaded it.
 export async function getWorldPage(
   campaignId: string,
   slug: string,
-  asOfSessionId: string | null,
+  bound: Date | null,
+  knownWorld?: WorldPageSummary[],
 ): Promise<WorldPageDetail | null> {
-  const [page] = await db
-    .select()
-    .from(worldPages)
-    .where(and(eq(worldPages.campaignId, campaignId), eq(worldPages.slug, slug)))
-    .limit(1);
+  const thisPage = and(eq(worldPages.campaignId, campaignId), eq(worldPages.slug, slug));
+  const momentConditions = [thisPage];
+  if (bound) momentConditions.push(lte(sessions.startedAt, bound));
+  const [[page], revisions, moments, world] = await Promise.all([
+    db.select().from(worldPages).where(thisPage).limit(1),
+    // Every revision is listed in the history, but only the one shown is read
+    // in full; the rest are summarized by Postgres.
+    db
+      .select({
+        pageId: worldPageRevisions.pageId,
+        sessionId: worldPageRevisions.sessionId,
+        sessionTitle: sessions.title,
+        startedAt: sessions.startedAt,
+        factIds: sql<
+          string[]
+        >`jsonb_path_query_array(${worldPageRevisions.content}, '$.facts[*].id')`,
+        factsSuperseded: sql<number>`jsonb_array_length(jsonb_path_query_array(
+          ${worldPageRevisions.content},
+          '$.facts[*] ? (@.supersededIn == $session)',
+          jsonb_build_object('session', ${worldPageRevisions.sessionId})
+        ))`,
+      })
+      .from(worldPageRevisions)
+      .innerJoin(worldPages, eq(worldPageRevisions.pageId, worldPages.id))
+      .innerJoin(sessions, eq(worldPageRevisions.sessionId, sessions.id))
+      .where(thisPage)
+      .orderBy(asc(sessions.startedAt)),
+    db
+      .select({
+        sessionId: worldPageMoments.sessionId,
+        sessionTitle: sessions.title,
+        moment: worldPageMoments.moment,
+      })
+      .from(worldPageMoments)
+      .innerJoin(worldPages, eq(worldPageMoments.pageId, worldPages.id))
+      .innerJoin(sessions, eq(worldPageMoments.sessionId, sessions.id))
+      .where(and(...momentConditions))
+      .orderBy(desc(sessions.startedAt), asc(worldPageMoments.position)),
+    knownWorld ?? getWorldSummary(campaignId, bound ? { through: bound } : {}),
+  ]);
   if (!page) return null;
-
-  const revisions = await db
-    .select({
-      sessionId: worldPageRevisions.sessionId,
-      sessionTitle: sessions.title,
-      startedAt: sessions.startedAt,
-      content: worldPageRevisions.content,
-    })
-    .from(worldPageRevisions)
-    .innerJoin(sessions, eq(worldPageRevisions.sessionId, sessions.id))
-    .where(eq(worldPageRevisions.pageId, page.id))
-    .orderBy(asc(sessions.startedAt));
-
-  const bound = asOfSessionId ? await sessionStart(asOfSessionId) : null;
   const visible = bound ? revisions.filter((revision) => revision.startedAt <= bound) : revisions;
-  const shown = visible.at(-1) ?? null;
+  const shownRevision = visible.at(-1) ?? null;
   const newest = revisions.at(-1) ?? null;
+  const [shown] = shownRevision
+    ? await db
+        .select({ sessionId: worldPageRevisions.sessionId, content: worldPageRevisions.content })
+        .from(worldPageRevisions)
+        .where(
+          and(
+            eq(worldPageRevisions.pageId, shownRevision.pageId),
+            eq(worldPageRevisions.sessionId, shownRevision.sessionId),
+          ),
+        )
+        .limit(1)
+    : [];
 
   const history = revisions.map((revision, index) => {
-    const previous = index > 0 ? revisions[index - 1].content : null;
-    const previousIds = new Set(previous?.facts.map((fact) => fact.id));
+    const previousIds = new Set(index > 0 ? revisions[index - 1].factIds : []);
     return {
       sessionId: revision.sessionId,
       sessionTitle: revision.sessionTitle,
       startedAt: revision.startedAt,
-      factsAdded: revision.content.facts.filter((fact) => !previousIds.has(fact.id)).length,
-      factsSuperseded: revision.content.facts.filter(
-        (fact) => fact.supersededIn === revision.sessionId,
-      ).length,
+      factsAdded: revision.factIds.filter((id) => !previousIds.has(id)).length,
+      factsSuperseded: revision.factsSuperseded,
       created: index === 0,
     };
   });
 
-  const shownIds = new Set(shown?.content.facts.map((fact) => fact.id));
-  const laterFacts =
-    shown && newest && shown !== newest
-      ? newest.content.facts.filter((fact) => !shownIds.has(fact.id)).length
-      : 0;
+  const shownIds = new Set(shownRevision?.factIds);
+  const isSnapshot = Boolean(shownRevision && newest && shownRevision !== newest);
+  const laterFacts = isSnapshot
+    ? (newest?.factIds.filter((id) => !shownIds.has(id)).length ?? 0)
+    : 0;
 
-  const world = await getWorldState(campaignId, bound ? { through: bound } : {});
   const related = new Map<string, WorldPageLink>();
   if (shown) {
     for (const target of world) {
@@ -458,33 +530,37 @@ export async function getWorldPage(
         .map(toLink)
     : [];
 
-  const momentConditions = [eq(worldPageMoments.pageId, page.id)];
-  if (bound) momentConditions.push(lte(sessions.startedAt, bound));
-  const moments = await db
-    .select({
-      sessionId: worldPageMoments.sessionId,
-      sessionTitle: sessions.title,
-      moment: worldPageMoments.moment,
-    })
-    .from(worldPageMoments)
-    .innerJoin(sessions, eq(worldPageMoments.sessionId, sessions.id))
-    .where(and(...momentConditions))
-    .orderBy(desc(sessions.startedAt), asc(worldPageMoments.position));
-
   // Mentions are found in the recaps as they read now, by the names the page
   // has in the view shown, so they follow renames and regenerated recaps.
-  const recaps = await db
-    .select({
-      sessionId: sessions.id,
-      sessionTitle: sessions.title,
-      startedAt: sessions.startedAt,
-      recap: sessions.recap,
-    })
-    .from(sessions)
-    .where(and(eq(sessions.campaignId, campaignId), isNotNull(sessions.recap)))
-    .orderBy(desc(sessions.startedAt));
+  // Postgres narrows the recaps to those containing a name anywhere, so only
+  // likely matches are read; word boundaries are checked here.
   const mentionNames = shown
     ? [...pageNames(shown.content), ...shortNames(page.kind, shown.content.name, page.slug, world)]
+    : [];
+  const patterns = mentionNames
+    .map((name) => name.trim())
+    .filter((name) => name.length >= 3)
+    .map((name) => `%${name.replace(/[\\%_]/g, "\\$&")}%`);
+  const recaps = patterns.length
+    ? await db
+        .select({
+          sessionId: sessions.id,
+          sessionTitle: sessions.title,
+          startedAt: sessions.startedAt,
+          recap: sessions.recap,
+        })
+        .from(sessions)
+        .where(
+          and(
+            eq(sessions.campaignId, campaignId),
+            isNotNull(sessions.recap),
+            sql`${sessions.recap} ilike any (array[${sql.join(
+              patterns.map((pattern) => sql`${pattern}`),
+              sql`, `,
+            )}])`,
+          ),
+        )
+        .orderBy(desc(sessions.startedAt))
     : [];
   const mentions: WorldPageMention[] = [];
   let laterMentions = 0;
@@ -504,7 +580,7 @@ export async function getWorldPage(
     createdInSessionId: page.createdInSessionId,
     content: shown?.content ?? null,
     revisionSessionId: shown?.sessionId ?? null,
-    isSnapshot: Boolean(shown && newest && shown !== newest),
+    isSnapshot,
     laterFacts,
     history,
     related: [...related.values()].toSorted((a, b) => a.name.localeCompare(b.name)),
@@ -525,7 +601,7 @@ function shortNames(
   kind: WorldPageKind,
   name: string,
   slug: string,
-  world: WorldPageSnapshot[],
+  world: WorldPageSummary[],
 ): string[] {
   if (!(PERSON_KINDS as readonly string[]).includes(kind)) return [];
   const words = name.trim().split(/\s+/);
@@ -543,13 +619,46 @@ function shortNames(
   return shared ? [] : [short];
 }
 
+// What one session changed on a page. Only the difference is kept, since a
+// page's full content grows with every session and the session page only
+// shows what changed.
 export interface WorldPageChange {
   slug: string;
   kind: WorldPageKind;
   avatarId: string | null;
   created: boolean;
-  content: WorldPageContent;
-  previous: WorldPageContent | null;
+  name: string;
+  holder: string | null;
+  // The page's summary, kept only for a new page that gained no facts.
+  summary: string | null;
+  added: WorldFact[];
+  superseded: WorldFact[];
+  renamedFrom: string | null;
+  status: { from: string | null; to: string | null } | null;
+}
+
+function pageChange(
+  sessionId: string,
+  content: WorldPageContent,
+  previous: WorldPageContent | null,
+): Pick<
+  WorldPageChange,
+  "name" | "holder" | "summary" | "added" | "superseded" | "renamedFrom" | "status"
+> {
+  const before = new Set(previous?.facts.map((fact) => fact.id));
+  const added = content.facts.filter((fact) => !before.has(fact.id));
+  return {
+    name: content.name,
+    holder: content.holder,
+    summary: !previous && added.length === 0 ? content.summary || null : null,
+    added,
+    superseded: content.facts.filter((fact) => fact.supersededIn === sessionId),
+    renamedFrom: previous && previous.name !== content.name ? previous.name : null,
+    status:
+      previous && previous.status !== content.status
+        ? { from: previous.status, to: content.status }
+        : null,
+  };
 }
 
 export interface SessionWorldChanges {
@@ -558,29 +667,39 @@ export interface SessionWorldChanges {
   pages: WorldPageChange[];
 }
 
+// How many pages a session's world update wrote, for the tab label.
+export async function countSessionWorldChanges(sessionId: string): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(worldPageRevisions)
+    .where(eq(worldPageRevisions.sessionId, sessionId));
+  return row?.count ?? 0;
+}
+
 // What one session's world update wrote, with each page's previous revision so
 // the session page can show the difference.
 export async function getSessionWorldChanges(sessionId: string): Promise<SessionWorldChanges> {
-  const [update] = await db
-    .select({ status: worldUpdates.status, report: worldUpdates.report })
-    .from(worldUpdates)
-    .where(eq(worldUpdates.sessionId, sessionId))
-    .limit(1);
-
-  const revisions = await db
-    .select({
-      pageId: worldPages.id,
-      slug: worldPages.slug,
-      kind: worldPages.kind,
-      avatarId: worldPages.avatarId,
-      createdInSessionId: worldPages.createdInSessionId,
-      content: worldPageRevisions.content,
-      startedAt: sessions.startedAt,
-    })
-    .from(worldPageRevisions)
-    .innerJoin(worldPages, eq(worldPageRevisions.pageId, worldPages.id))
-    .innerJoin(sessions, eq(worldPageRevisions.sessionId, sessions.id))
-    .where(eq(worldPageRevisions.sessionId, sessionId));
+  const [[update], revisions] = await Promise.all([
+    db
+      .select({ status: worldUpdates.status, report: worldUpdates.report })
+      .from(worldUpdates)
+      .where(eq(worldUpdates.sessionId, sessionId))
+      .limit(1),
+    db
+      .select({
+        pageId: worldPages.id,
+        slug: worldPages.slug,
+        kind: worldPages.kind,
+        avatarId: worldPages.avatarId,
+        createdInSessionId: worldPages.createdInSessionId,
+        content: worldPageRevisions.content,
+        startedAt: sessions.startedAt,
+      })
+      .from(worldPageRevisions)
+      .innerJoin(worldPages, eq(worldPageRevisions.pageId, worldPages.id))
+      .innerJoin(sessions, eq(worldPageRevisions.sessionId, sessions.id))
+      .where(eq(worldPageRevisions.sessionId, sessionId)),
+  ]);
 
   const startedAt = revisions[0]?.startedAt;
   const previous = startedAt
@@ -608,16 +727,14 @@ export async function getSessionWorldChanges(sessionId: string): Promise<Session
     kind: revision.kind,
     avatarId: revision.avatarId,
     created: revision.createdInSessionId === sessionId,
-    content: revision.content,
-    previous: previousByPage.get(revision.pageId) ?? null,
+    ...pageChange(sessionId, revision.content, previousByPage.get(revision.pageId) ?? null),
   }));
 
   return {
     status: update?.status ?? null,
     report: update?.report ?? null,
     pages: pages.toSorted(
-      (a, b) =>
-        Number(b.created) - Number(a.created) || a.content.name.localeCompare(b.content.name),
+      (a, b) => Number(b.created) - Number(a.created) || a.name.localeCompare(b.name),
     ),
   };
 }

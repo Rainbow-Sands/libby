@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { SessionWorldChanges, WorldPageChange } from "@rainbot/db";
+  import type { SessionWorldChanges } from "@rainbot/db";
   import WorldAvatar from "./WorldAvatar.svelte";
   import { KIND_LABELS, avatarHref, transcriptHref, worldPageHref } from "$lib/world";
 
@@ -13,22 +13,6 @@
   const updated = $derived(changes.pages.length - created);
   const duplicates = $derived(changes.report?.possibleDuplicates ?? []);
   const corrections = $derived(changes.report?.nameCorrections ?? []);
-
-  function diff(change: WorldPageChange) {
-    const before = new Set(change.previous?.facts.map((fact) => fact.id));
-    return {
-      added: change.content.facts.filter((fact) => !before.has(fact.id)),
-      superseded: change.content.facts.filter((fact) => fact.supersededIn === sessionId),
-      renamedFrom:
-        change.previous && change.previous.name !== change.content.name
-          ? change.previous.name
-          : null,
-      status:
-        change.previous && change.previous.status !== change.content.status
-          ? { from: change.previous.status, to: change.content.status }
-          : null,
-    };
-  }
 
   function elapsedSeconds(at: string | null): number | null {
     const match = at ? /^(\d+):([0-5]\d):([0-5]\d)$/.exec(at) : null;
@@ -81,7 +65,6 @@
     {/each}
 
     {#each changes.pages as change (change.slug)}
-      {@const d = diff(change)}
       <li class="change">
         <div class="head">
           <span class="pill {change.created ? 'ok' : 'info'}"
@@ -89,33 +72,32 @@
           >
           <WorldAvatar
             src={avatarHref(campaignId, change.avatarId)}
-            name={change.content.name}
+            name={change.name}
             kind={change.kind}
             size="sm"
           />
           <a class="name" href={worldPageHref(campaignId, change.slug, sessionId)}
-            >{change.content.name}</a
+            >{change.name}</a
           >
           <span class="muted"
-            >{KIND_LABELS[change.kind]}{#if change.content.holder}&nbsp;· held by {change.content
-                .holder}{/if}</span
+            >{KIND_LABELS[change.kind]}{#if change.holder}&nbsp;· held by {change.holder}{/if}</span
           >
         </div>
         <ul class="diff">
-          {#if d.renamedFrom}
-            <li class="meta">Renamed from “{d.renamedFrom}”</li>
+          {#if change.renamedFrom}
+            <li class="meta">Renamed from “{change.renamedFrom}”</li>
           {/if}
-          {#if d.status}
-            <li class="meta">Status: {d.status.from ?? "none"} → {d.status.to ?? "none"}</li>
+          {#if change.status}
+            <li class="meta">Status: {change.status.from ?? "none"} → {change.status.to ?? "none"}</li>
           {/if}
-          {#each d.superseded as fact (fact.id)}
+          {#each change.superseded as fact (fact.id)}
             <li class="del">{fact.text}</li>
           {/each}
-          {#each d.added as fact (fact.id)}
+          {#each change.added as fact (fact.id)}
             <li class="add">{fact.text} {@render cite(fact.at)}</li>
           {/each}
-          {#if change.created && d.added.length === 0 && change.content.summary}
-            <li class="meta">{change.content.summary}</li>
+          {#if change.summary}
+            <li class="meta">{change.summary}</li>
           {/if}
         </ul>
       </li>

@@ -1,12 +1,13 @@
 import { error, fail, redirect } from "@sveltejs/kit";
 import {
   countFailedTranscriptions,
+  countSessionWorldChanges,
   formatTranscriptForDisplay,
   getCampaignAccess,
   getCampaignCast,
   getSessionDetail,
   getSessionWorldChanges,
-  getWorldAsOfSession,
+  getWorldSummary,
   isAdmin,
 } from "@rainbot/db";
 import { loadTranscriptArtifact } from "@rainbot/storage";
@@ -56,6 +57,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
       transcriptTurns: null,
       world: null,
       worldChanges: null,
+      worldChangeCount: null,
       hasTranscript: Boolean(session.transcriptArtifact),
       canViewDetails: false,
       canRegenerate: false,
@@ -64,10 +66,20 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
     };
   }
 
-  const access = await getCampaignAccess(session.campaignId, locals.user.id);
+  // Each tab is its own load, so only the open tab's data is read. The world
+  // loads alongside the access check; nothing is returned unless it passes.
+  const tab = url.searchParams.get("tab");
+  const [access, worldPages, worldChanges, worldChangeCount] = await Promise.all([
+    getCampaignAccess(session.campaignId, locals.user.id),
+    // Only the recap tab links names to pages.
+    tab === "transcript" || tab === "world"
+      ? []
+      : getWorldSummary(session.campaignId, { through: session.startedAt }),
+    tab === "world" ? getSessionWorldChanges(session.id) : null,
+    countSessionWorldChanges(session.id),
+  ]);
   if (!access.canAccess) throw error(403, "You cannot view this campaign.");
 
-  const tab = url.searchParams.get("tab");
   const transcript =
     tab === "transcript" && session.transcriptArtifact
       ? await loadTranscriptArtifact(session.transcriptArtifact)
@@ -75,10 +87,6 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
   const transcriptTurns = transcript
     ? formatTranscriptForDisplay(transcript, await getCampaignCast(session.campaignId))
     : null;
-  const [worldPages, worldChanges] = await Promise.all([
-    getWorldAsOfSession(session.campaignId, session.id),
-    getSessionWorldChanges(session.id),
-  ]);
 
   return {
     session: { ...session, transcript },
@@ -89,6 +97,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
       pages: toWorldLinkPages(worldPages),
     },
     worldChanges,
+    worldChangeCount,
     hasTranscript: Boolean(session.transcriptArtifact),
     canViewDetails: true,
     canRegenerate: access.isAdmin,

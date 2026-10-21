@@ -24,59 +24,95 @@ export interface LinkTarget {
 
 export type LinkedText = ({ text: string; slug?: undefined } | { text: string; slug: string })[];
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+interface NameMatcher {
+  // Lowercased names grouped by their first word, longest first.
+  byFirstWord: Map<string, { key: string; slug: string }[]>;
 }
 
-// One regex matching every name of the targets, longest first so "the Glass
-// Abbess" beats "Glass", with word boundaries and no case. Null when there
-// is nothing long enough to match.
-function namePattern(
-  targets: LinkTarget[],
-): { pattern: RegExp; slugByName: Map<string, string> } | null {
+const WORD = /[\p{L}\p{N}]+/gu;
+const FIRST_WORD = /^[\p{L}\p{N}]+/u;
+const WORD_CHAR = /[\p{L}\p{N}]/uy;
+
+// Pages link every piece of their text against the same targets, so the
+// matcher is built once per targets array rather than once per piece.
+const matchers = new WeakMap<LinkTarget[], NameMatcher | null>();
+
+function cachedNameMatcher(targets: LinkTarget[]): NameMatcher | null {
+  if (!matchers.has(targets)) matchers.set(targets, nameMatcher(targets));
+  return matchers.get(targets) ?? null;
+}
+
+// Every name of the targets, with and without a leading article. Null when
+// there is nothing long enough to match.
+function nameMatcher(targets: LinkTarget[]): NameMatcher | null {
+  const byFirstWord = new Map<string, { key: string; slug: string }[]>();
+  const seen = new Set<string>();
   const names = targets
     .flatMap((target) =>
       target.names.flatMap((name) => {
         const trimmed = name.trim();
         const bare = trimmed.replace(/^(the|a|an)\s+/i, "");
-        return [trimmed, bare].map((variant) => ({ name: variant, slug: target.slug }));
+        return [trimmed, bare].map((variant) => ({
+          key: variant.toLowerCase(),
+          slug: target.slug,
+        }));
       }),
     )
-    .filter((entry) => entry.name.length >= 3)
-    .toSorted((a, b) => b.name.length - a.name.length);
-  if (names.length === 0) return null;
-
-  const slugByName = new Map<string, string>();
+    .filter((entry) => entry.key.length >= 3)
+    .toSorted((a, b) => b.key.length - a.key.length);
   for (const entry of names) {
-    const key = entry.name.toLowerCase();
-    if (!slugByName.has(key)) slugByName.set(key, entry.slug);
+    const first = FIRST_WORD.exec(entry.key)?.[0];
+    if (!first || seen.has(entry.key)) continue;
+    seen.add(entry.key);
+    const group = byFirstWord.get(first) ?? [];
+    group.push(entry);
+    byFirstWord.set(first, group);
   }
-  const pattern = new RegExp(
-    `(?<![\\p{L}\\p{N}])(?:${[...slugByName.keys()].map(escapeRegExp).join("|")})(?![\\p{L}\\p{N}])`,
-    "giu",
-  );
-  return { pattern, slugByName };
+  return byFirstWord.size > 0 ? { byFirstWord } : null;
+}
+
+// Each name in the text, left to right, longest first at each word, ignoring
+// case and requiring word boundaries, so "the Glass Abbess" beats "Glass"
+// and "Venn" does not match inside "Vennish".
+function* findNames(
+  text: string,
+  matcher: NameMatcher,
+): Generator<{ index: number; text: string; slug: string }> {
+  let next = 0;
+  for (const word of text.matchAll(WORD)) {
+    if (word.index < next) continue;
+    const candidates = matcher.byFirstWord.get(word[0].toLowerCase());
+    if (!candidates) continue;
+    for (const candidate of candidates) {
+      const end = word.index + candidate.key.length;
+      if (text.slice(word.index, end).toLowerCase() !== candidate.key) continue;
+      WORD_CHAR.lastIndex = end;
+      if (WORD_CHAR.test(text)) continue;
+      yield { index: word.index, text: text.slice(word.index, end), slug: candidate.slug };
+      next = end;
+      break;
+    }
+  }
 }
 
 // Splits text into plain runs and runs naming a page, linking the first
-// mention of each page. Matching ignores case and requires word boundaries.
+// mention of each page.
 export function linkPageNames(
   text: string,
   targets: LinkTarget[],
   linked: Set<string> = new Set(),
 ): LinkedText {
-  const matcher = text ? namePattern(targets) : null;
+  const matcher = text ? cachedNameMatcher(targets) : null;
   if (!matcher) return [{ text }];
 
   const result: LinkedText = [];
   let last = 0;
-  for (const match of text.matchAll(matcher.pattern)) {
-    const slug = matcher.slugByName.get(match[0].toLowerCase());
-    if (!slug || linked.has(slug)) continue;
-    linked.add(slug);
+  for (const match of findNames(text, matcher)) {
+    if (linked.has(match.slug)) continue;
+    linked.add(match.slug);
     if (match.index > last) result.push({ text: text.slice(last, match.index) });
-    result.push({ text: match[0], slug });
-    last = match.index + match[0].length;
+    result.push({ text: match.text, slug: match.slug });
+    last = match.index + match.text.length;
   }
   if (last < text.length) result.push({ text: text.slice(last) });
   return result;
@@ -104,7 +140,7 @@ function markdownLines(markdown: string): string[] {
 // Every sentence of a markdown recap that mentions one of the names, in
 // order, with each mention marked.
 export function mentionSentences(markdown: string, names: string[]): MentionSentence[] {
-  const matcher = namePattern([{ slug: "", names }]);
+  const matcher = nameMatcher([{ slug: "", names }]);
   if (!matcher || !markdown) return [];
   const segmenter = new Intl.Segmenter("en", { granularity: "sentence" });
 
@@ -114,11 +150,11 @@ export function mentionSentences(markdown: string, names: string[]): MentionSent
       const sentence = segment.trim();
       const parts: MentionSentence = [];
       let last = 0;
-      for (const match of sentence.matchAll(matcher.pattern)) {
+      for (const match of findNames(sentence, matcher)) {
         if (match.index > last)
           parts.push({ text: sentence.slice(last, match.index), mention: false });
-        parts.push({ text: match[0], mention: true });
-        last = match.index + match[0].length;
+        parts.push({ text: match.text, mention: true });
+        last = match.index + match.text.length;
       }
       if (parts.length === 0) continue;
       if (last < sentence.length) parts.push({ text: sentence.slice(last), mention: false });
