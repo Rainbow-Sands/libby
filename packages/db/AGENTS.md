@@ -100,9 +100,13 @@ pnpm --filter @rainbot/db db:migrate    # applies to the DB in DATABASE_URL
   oldest first. `world_page_moments` copies recap epic moments onto the pages
   of those who feature in them. `world_page_avatars` keeps every uploaded
   avatar; removing one only clears `world_pages.avatar_id`.
-  A page's "Mentioned in" list is not stored: `getWorldPage` finds the
-  sentences naming it in each session's `recap` at read time, so it follows
-  renames and regenerated recaps.
+  `world_updates.changes` keeps what each update changed per page, so the
+  session page never compares whole revisions; rows from before it existed
+  are filled in the first time they are viewed. `world_page_mentions` holds
+  the recap sentences naming each page. It is a cache: `world_mention_indexes`
+  stores a hash of the campaign's recaps and page names, and a page view
+  rebuilds the campaign's mentions when the hash no longer matches, so renames
+  and regenerated recaps need no hooks.
 - `users.is_admin` grants application-wide visibility into every campaign and
   is managed manually.
 - A ready audio segment and its `transcribe-segment` job are committed in the

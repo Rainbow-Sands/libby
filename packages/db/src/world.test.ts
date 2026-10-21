@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { planWorldUpdate, slugify, type WorldPageState, type WorldUpdate } from "./world.ts";
-import { linkPageNames, mentionSentences, summaryLine } from "./world-links.ts";
+import { linkPageNames, mentionSentences, mentionsBySlug, summaryLine } from "./world-links.ts";
 
 function entry(overrides: Partial<WorldUpdate["pages"][number]>): WorldUpdate["pages"][number] {
   return {
@@ -255,4 +255,33 @@ test("finds every recap sentence that mentions a page", () => {
   ]);
   expect(mentionSentences("## Venn\n\nNothing here.", ["Venn"])).toEqual([]);
   expect(mentionSentences("Venn left.", [])).toEqual([]);
+});
+
+test("finds mentions of every page at once, giving overlaps to the longest name", () => {
+  const mentions = mentionsBySlug(
+    "They searched the Hollowmere Archive. Hollowmere slept, as did Venn.",
+    [
+      { slug: "town", names: ["Hollowmere"] },
+      { slug: "archive", names: ["Hollowmere Archive"] },
+      { slug: "venn", names: ["Venn"] },
+    ],
+  );
+  expect(mentions.get("archive")).toEqual([
+    [
+      { text: "They searched the ", mention: false },
+      { text: "Hollowmere Archive", mention: true },
+      { text: ".", mention: false },
+    ],
+  ]);
+  expect(mentions.get("town")).toEqual([
+    [
+      { text: "Hollowmere", mention: true },
+      { text: " slept, as did Venn.", mention: false },
+    ],
+  ]);
+  expect(mentions.get("venn")?.[0]).toEqual([
+    { text: "Hollowmere slept, as did ", mention: false },
+    { text: "Venn", mention: true },
+    { text: ".", mention: false },
+  ]);
 });
