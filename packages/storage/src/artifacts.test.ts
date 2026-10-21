@@ -3,6 +3,7 @@ import type { SessionArtifactRef } from "@rainbot/db";
 import {
   ArtifactIntegrityError,
   loadDetailedRecordArtifact,
+  loadSessionLedgerArtifact,
   loadTranscriptArtifact,
   type ArtifactTextReader,
 } from "./artifacts.ts";
@@ -71,5 +72,27 @@ describe("artifact loading", () => {
     await expect(
       loadDetailedRecordArtifact(artifact("detailed_record", body), reader(body)),
     ).resolves.toBe(body);
+  });
+
+  it("loads a valid session ledger and rejects one that does not match the schema", async () => {
+    const ledger = {
+      events: [{ at: "0:01:00", summary: "The party arrived." }],
+      entities: [],
+      loot: [],
+      threads: [],
+      quotes: [],
+      rulings: [],
+      uncertainties: [],
+      leftOff: "At the gate.",
+    };
+    const body = JSON.stringify(ledger);
+    await expect(
+      loadSessionLedgerArtifact(artifact("session_ledger", body), reader(body)),
+    ).resolves.toEqual(ledger);
+
+    const invalid = JSON.stringify({ ...ledger, leftOff: undefined });
+    await expect(
+      loadSessionLedgerArtifact(artifact("session_ledger", invalid), reader(invalid)),
+    ).rejects.toThrow(/invalid session ledger/);
   });
 });

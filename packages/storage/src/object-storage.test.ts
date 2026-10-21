@@ -21,6 +21,9 @@ describe("object storage", () => {
     expect(artifactObjectKey("campaign", "session", "run", "detailed_record", "abc")).toMatch(
       /\/detailed-record\/abc\.md$/,
     );
+    expect(artifactObjectKey("campaign", "session", "run", "session_ledger", "abc")).toMatch(
+      /\/session-ledger\/abc\.json$/,
+    );
   });
 
   it("uses stable content hashes for immutable artifact versions", () => {

@@ -20,6 +20,13 @@
   --link: #7a200f;
   --link-hover: #922610;
   --shadow: rgba(70, 48, 22, 0.22);
+  /* thread statuses on the session recap */
+  --ok: #3f6b33;
+  --ok-soft: #dfe8cf;
+  --warn: #8a5a12;
+  --warn-soft: #f3e1b8;
+  --info: #2f5470;
+  --info-soft: #d6e2ea;
   color-scheme: light;
 }
 
@@ -38,6 +45,12 @@
     --link: #e0a96d;
     --link-hover: #f3c98d;
     --shadow: rgba(0, 0, 0, 0.55);
+    --ok: #9fc98a;
+    --ok-soft: #26321d;
+    --warn: #e4b562;
+    --warn-soft: #3a2c14;
+    --info: #9cc0dc;
+    --info-soft: #1c2a35;
     color-scheme: dark;
   }
 }
@@ -55,6 +68,12 @@
   --link: #e0a96d;
   --link-hover: #f3c98d;
   --shadow: rgba(0, 0, 0, 0.55);
+  --ok: #9fc98a;
+  --ok-soft: #26321d;
+  --warn: #e4b562;
+  --warn-soft: #3a2c14;
+  --info: #9cc0dc;
+  --info-soft: #1c2a35;
   color-scheme: dark;
 }
 

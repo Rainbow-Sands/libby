@@ -1,9 +1,11 @@
 export {
   JOB_QUEUES,
+  enqueueCampaignBackfill,
   enqueueJob,
   startJobQueue,
   stopJobQueue,
   type AdvanceProcessingRunJob,
+  type BackfillCampaignRecapsJob,
   type TranscribeSegmentJob,
 } from "./jobs.ts";
 export {
@@ -35,6 +37,7 @@ export {
   formatTranscriptForDisplay,
   formatTranscriptForInference,
   parseTranscript,
+  transcriptTableStats,
   type Transcript,
   type TranscriptSegment,
   type TranscriptTurn,
@@ -49,6 +52,7 @@ export {
 export {
   getCampaignsForGuild,
   getCampaignsForUser,
+  listCampaigns,
   getCampaignAccess,
   isAdmin,
   getCampaignMeta,
@@ -56,13 +60,29 @@ export {
   getCampaignDetail,
   getSessionDetail,
   getSessionStatus,
+  getPreviousSessionNotes,
   type CampaignMember,
   type CampaignAccess,
   type CampaignCastMember,
   type CampaignSessionSummary,
   type CampaignDetail,
   type SessionDetail,
+  type PreviousSessionNotes,
 } from "./queries.ts";
+export {
+  ENTITY_KINDS,
+  THREAD_STATUSES,
+  formatElapsed,
+  parseElapsed,
+  parseSessionLedger,
+  recapSectionsSchema,
+  renderRecapMarkdown,
+  sessionLedgerSchema,
+  type RecapSections,
+  type SessionLedger,
+  type SessionRecap,
+  type TableStats,
+} from "./session-notes.ts";
 export {
   beginClosingSession,
   createRecordingSession,
@@ -101,7 +121,7 @@ export {
   reconcilePendingJobs,
   startInferenceRegeneration,
   storeAggregatedTranscript,
-  storeRunDetailedRecord,
+  storeRunLedger,
   storeRunRecap,
   storeRunTitle,
   type ProcessingRunData,
@@ -132,3 +152,4 @@ export {
   parseTimeOfDay,
   type CampaignReminderSchedule,
 } from "./schedule.ts";
+export { nextBackfillStep, type BackfillStep } from "./backfill.ts";

@@ -2,6 +2,7 @@ export {
   ArtifactIntegrityError,
   loadArtifactText,
   loadDetailedRecordArtifact,
+  loadSessionLedgerArtifact,
   loadTranscriptArtifact,
   type ArtifactTextReader,
 } from "./artifacts.ts";

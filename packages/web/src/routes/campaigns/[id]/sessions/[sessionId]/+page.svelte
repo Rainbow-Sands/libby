@@ -3,13 +3,15 @@
   import type { ActionData, PageData } from "./$types";
   import { page } from "$app/state";
   import { invalidateAll } from "$app/navigation";
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import TaperedRule from "$lib/components/TaperedRule.svelte";
   import LibbyChat from "$lib/components/LibbyChat.svelte";
+  import SessionRecap from "$lib/components/SessionRecap.svelte";
+  import { speakerHue } from "$lib/speakers";
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
 
-  type SessionTab = "recap" | "summary" | "transcript";
+  type SessionTab = "recap" | "transcript";
   type TranscriptTurn = NonNullable<PageData["transcriptTurns"]>[number];
   type SessionStatus = PageData["session"]["status"];
   interface LiveTranscriptSnippet extends TranscriptTurn {
@@ -24,10 +26,32 @@
   );
 
   function sessionTab(value: string | null): SessionTab {
-    return value === "summary" || value === "transcript" ? value : "recap";
+    return value === "transcript" ? value : "recap";
   }
 
   let activeTab = $derived(sessionTab(page.url.searchParams.get("tab")));
+
+  // Recap citations link to "?tab=transcript#at-<seconds>", an elapsed offset
+  // from the first utterance, matching the markers the model cited. Highlight
+  // the last turn that started at or before it.
+  let citedTurn = $derived.by(() => {
+    const match = /^#at-(\d+)$/.exec(page.url.hash);
+    if (!match || activeTab !== "transcript" || transcriptTurns.length === 0) return null;
+    const startMs = new Date(transcriptTurns[0].timestamp).getTime();
+    const targetMs = startMs + Number(match[1]) * 1000;
+    const index = transcriptTurns.findLastIndex(
+      (turn) => new Date(turn.timestamp).getTime() <= targetMs,
+    );
+    return Math.max(index, 0);
+  });
+
+  $effect(() => {
+    const index = citedTurn;
+    if (index === null) return;
+    void tick().then(() =>
+      document.getElementById(`turn-${index}`)?.scrollIntoView({ block: "center" }),
+    );
+  });
 
   function formatDate(d: Date | string): string {
     return new Date(d).toLocaleString("en-CA", {
@@ -54,18 +78,12 @@
     return speaker.trim().charAt(0).toLocaleUpperCase() || "?";
   }
 
-  function speakerHue(userId: string): number {
-    let hash = 0;
-    for (const char of userId) hash = (hash * 31 + char.charCodeAt(0)) | 0;
-    return Math.abs(hash) % 360;
-  }
-
   function transcriptSpeakers(turns: TranscriptTurn[]): TranscriptTurn[] {
     return [...new Map(turns.map((turn) => [turn.userId, turn])).values()];
   }
 
   function confirmRegeneration(event: SubmitEvent) {
-    if (!window.confirm("Regenerate the detailed record, recap, and title from this transcript?")) {
+    if (!window.confirm("Regenerate the recap and title from this transcript?")) {
       event.preventDefault();
     }
   }
@@ -73,7 +91,7 @@
   function confirmTranscriptRegeneration(event: SubmitEvent) {
     if (
       !window.confirm(
-        "Re-transcribe every saved audio clip and regenerate the detailed record, recap, and title?",
+        "Re-transcribe every saved audio clip and regenerate the recap and title?",
       )
     ) {
       event.preventDefault();
@@ -83,7 +101,7 @@
   function confirmFailedTranscriptionRetry(event: SubmitEvent) {
     if (
       !window.confirm(
-        "Re-transcribe only the failed audio clips and regenerate the detailed record, recap, and title?",
+        "Re-transcribe only the failed audio clips and regenerate the recap and title?",
       )
     ) {
       event.preventDefault();
@@ -213,12 +231,6 @@
       >
       <a
         role="tab"
-        href="?tab=summary"
-        aria-selected={activeTab === "summary"}
-        class:active={activeTab === "summary"}>Detailed Record</a
-      >
-      <a
-        role="tab"
         href="?tab=transcript"
         aria-selected={activeTab === "transcript"}
         class:active={activeTab === "transcript"}>Transcript</a
@@ -226,18 +238,12 @@
     </div>
 
     <div role="tabpanel" hidden={activeTab !== "recap"}>
-      {#if data.session.recap}
+      {#if data.session.recapSections}
+        <SessionRecap recap={data.session.recapSections} />
+      {:else if data.session.recap}
         <div class="prose">{@html renderMarkdown(data.session.recap)}</div>
       {:else}
         <p class="empty">The bards have not yet composed this tale.</p>
-      {/if}
-    </div>
-
-    <div role="tabpanel" hidden={activeTab !== "summary"}>
-      {#if data.session.detailedRecord}
-        <div class="prose">{@html renderMarkdown(data.session.detailedRecord)}</div>
-      {:else}
-        <p class="empty">Not yet available.</p>
       {/if}
     </div>
 
@@ -273,7 +279,12 @@
 
           <ol class="transcript-list">
             {#each transcriptTurns as turn, index (`${turn.timestamp}-${turn.userId}-${index}`)}
-              <li class="transcript-turn" style={`--speaker-hue: ${speakerHue(turn.userId)}`}>
+              <li
+                id="turn-{index}"
+                class="transcript-turn"
+                class:cited={citedTurn === index}
+                style={`--speaker-hue: ${speakerHue(turn.userId)}`}
+              >
                 <div class="speaker-avatar" aria-hidden="true">
                   {speakerInitial(turn.speaker)}
                 </div>
@@ -469,6 +480,12 @@
     grid-template-columns: 2.35rem minmax(0, 1fr);
     gap: 0.85rem;
     padding: 1rem 0;
+  }
+  .transcript-turn.cited {
+    margin: 0 -0.6rem;
+    padding: 1rem 0.6rem;
+    background: color-mix(in srgb, var(--gold) 14%, transparent);
+    border-radius: 4px;
   }
   .transcript-turn + .transcript-turn {
     border-top: 1px solid color-mix(in srgb, var(--edge) 68%, transparent);

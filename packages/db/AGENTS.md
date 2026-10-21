@@ -20,6 +20,10 @@ Drizzle ORM schema, Postgres client, and all shared queries. See the root
 - `processing-runs.ts` — inference state, publication, and queue reconciliation.
 - `jobs.ts` — lazy pg-boss lifecycle, queue definitions, and transactional sends.
 - `artifacts.ts` — shared metadata types for durable session objects.
+- `session-notes.ts` — zod schemas and types for the session ledger and the
+  sectioned recap, shared by the worker (structured output) and readers.
+- `backfill.ts` — picks the next session a campaign recap backfill should
+  regenerate.
 - `transcript.ts` — the `Transcript`/`TranscriptSegment` JSON shape stored in
   transcript artifacts, plus display and inference formatting transforms.
 - `index.ts` — the package's **public API**. Export anything other packages need
@@ -54,13 +58,18 @@ pnpm --filter @rainbot/db db:migrate    # applies to the DB in DATABASE_URL
 ## Data model notes
 
 - `session_artifacts` stores versioned S3 object metadata for transcripts and
-  detailed records. `is_current` is switched atomically when a processing run
+  session ledgers (JSON typed as `SessionLedger`). Sessions processed before
+  the ledger keep their markdown `detailed_record` artifacts, which chat still
+  reads. `is_current` is switched atomically when a processing run
   publishes, so failed regeneration leaves old results intact. Recap/title stay
-  on `sessions` for fast listings and previews.
+  on `sessions` for fast listings and previews: `recap_sections` holds the
+  structured `SessionRecap` and `recap` its markdown rendering (or a free-form
+  recap from before recaps were sectioned).
 - A transcript artifact is JSON typed as `Transcript` (see `transcript.ts`):
   every recorded segment, lossless (timestamp, userId, username, text,
   whisper's own per-segment metadata). LLM-facing formatting prepends the cast
-  legend but omits timestamp strings to reduce context usage. It happens in
+  legend and replaces per-line timestamps with an elapsed `[h:mm:ss]` marker
+  each minute, which the model cites and the recap links back to. It happens in
   `formatTranscriptForInference`, not at write time — so improving that
   formatting later can be re-run over already-recorded sessions without
   re-transcribing. Both it and the display-oriented

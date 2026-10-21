@@ -1,7 +1,7 @@
 # rainbot-sands
 
 Discord bot that records tabletop RPG sessions, transcribes them with
-whisper.cpp, and generates detailed records and recaps with local or cloud
+whisper.cpp, and generates sectioned recaps with local or cloud
 language models. pg-boss provides a durable queue in PostgreSQL alongside the
 pipeline state, while S3-compatible object storage holds activation audio and
 generated session artifacts.
@@ -72,7 +72,7 @@ Service names below match `docker-compose.yml`; `db-migrate` is the
 | Variable                     | Used by              | Description                                                                     |
 | ---------------------------- | -------------------- | ------------------------------------------------------------------------------- |
 | `S3_ACCESS_KEY_ID`           | discord, worker, web | Optional static access key; omit both credentials to use the AWS provider chain |
-| `S3_BUCKET_ARTIFACT`         | worker, web          | Private bucket for durable transcripts and detailed records                     |
+| `S3_BUCKET_ARTIFACT`         | worker, web          | Private bucket for durable transcripts and session ledgers                      |
 | `S3_BUCKET_AUDIO`            | discord, worker, web | Private, short-lived activation-audio bucket; web uses it for manual uploads    |
 | `S3_ENDPOINT`                | discord, worker, web | Optional shared S3-compatible endpoint; omit for AWS S3                         |
 | `S3_FORCE_PATH_STYLE`        | discord, worker, web | Set to `true` when the storage provider requires path-style requests            |
@@ -102,7 +102,7 @@ Service names below match `docker-compose.yml`; `db-migrate` is the
 | `CHAT_REASONING_EFFORT`          | web     | Optional cloud effort: `none`, `low`, `medium`, `high`, `xhigh`, or `max`; `minimal` is OpenAI-only |
 | `CHAT_THINKING_BUDGET`           | web     | Local llama.cpp reasoning budget (default: `2048`)                                                  |
 
-Keep both buckets private. Transcript and detailed-record objects share the
+Keep both buckets private. Transcript and session-ledger objects share the
 artifact bucket under separate session/run prefixes; recap and title stay in
 Postgres for fast page listings and URL previews. Configure an audio-bucket
 lifecycle expiration as the provider-enforced retention boundary. Retain audio

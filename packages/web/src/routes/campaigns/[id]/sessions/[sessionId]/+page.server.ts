@@ -7,7 +7,7 @@ import {
   getSessionDetail,
   isAdmin,
 } from "@rainbot/db";
-import { loadDetailedRecordArtifact, loadTranscriptArtifact } from "@rainbot/storage";
+import { loadTranscriptArtifact } from "@rainbot/storage";
 import {
   requestFailedTranscriptionRetry,
   requestInferenceRegeneration,
@@ -47,7 +47,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
         status: session.status,
         startedAt: session.startedAt,
         recap: null,
-        detailedRecord: null,
+        recapSections: null,
         transcript: null,
       },
       transcriptTurns: null,
@@ -67,16 +67,12 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
     tab === "transcript" && session.transcriptArtifact
       ? await loadTranscriptArtifact(session.transcriptArtifact)
       : null;
-  const detailedRecord =
-    tab === "summary" && session.detailedRecordArtifact
-      ? await loadDetailedRecordArtifact(session.detailedRecordArtifact)
-      : null;
   const transcriptTurns = transcript
     ? formatTranscriptForDisplay(transcript, await getCampaignCast(session.campaignId))
     : null;
 
   return {
-    session: { ...session, transcript, detailedRecord },
+    session: { ...session, transcript },
     transcriptTurns,
     hasTranscript: Boolean(session.transcriptArtifact),
     canViewDetails: true,
@@ -119,7 +115,7 @@ export const actions: Actions = {
 
     throw redirect(
       303,
-      `/campaigns/${params.id}/sessions/${params.sessionId}?tab=summary&regenerating=1`,
+      `/campaigns/${params.id}/sessions/${params.sessionId}?tab=recap&regenerating=1`,
     );
   },
   regenerateTranscript: async ({ params, locals }) => {

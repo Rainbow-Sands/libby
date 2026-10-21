@@ -5,6 +5,7 @@ import { db } from "./client.ts";
 import type { NotificationStatus, ProcessingRunKind, ProcessingRunStatus } from "./domain.ts";
 import { processingRuns, sessionArtifacts, sessionSegments, sessions } from "./schema.ts";
 import { JOB_QUEUES, enqueueJob, startJobQueue } from "./jobs.ts";
+import type { SessionRecap } from "./session-notes.ts";
 import { advanceTranscriptionBarrier } from "./transcription.ts";
 
 function toArtifactRef(
@@ -31,7 +32,7 @@ export interface ProcessingRunData {
   status: ProcessingRunStatus;
   sourceTranscriptArtifact: SessionArtifactRef | null;
   generatedTranscriptArtifact: SessionArtifactRef | null;
-  generatedDetailedRecordArtifact: SessionArtifactRef | null;
+  generatedLedgerArtifact: SessionArtifactRef | null;
   recap: string | null;
   title: string | null;
   notificationChannelId: string | null;
@@ -82,9 +83,9 @@ export async function getProcessingRun(runId: string): Promise<ProcessingRunData
         (artifact) => artifact.generatedByRunId === run.id && artifact.kind === "transcript",
       ),
     ),
-    generatedDetailedRecordArtifact: toArtifactRef(
+    generatedLedgerArtifact: toArtifactRef(
       artifacts.find(
-        (artifact) => artifact.generatedByRunId === run.id && artifact.kind === "detailed_record",
+        (artifact) => artifact.generatedByRunId === run.id && artifact.kind === "session_ledger",
       ),
     ),
     recap: run.recap,
@@ -137,7 +138,7 @@ export async function storeAggregatedTranscript(
   });
 }
 
-export async function storeRunDetailedRecord(
+export async function storeRunLedger(
   runId: string,
   artifact: SessionArtifactWrite,
 ): Promise<boolean> {
@@ -154,7 +155,7 @@ export async function storeRunDetailedRecord(
       .values({
         sessionId: run.sessionId,
         generatedByRunId: runId,
-        kind: "detailed_record",
+        kind: "session_ledger",
         ...artifact,
       })
       .onConflictDoUpdate({
@@ -174,10 +175,14 @@ export async function storeRunDetailedRecord(
   });
 }
 
-export async function storeRunRecap(runId: string, recap: string): Promise<boolean> {
+export async function storeRunRecap(
+  runId: string,
+  recap: string,
+  recapSections: SessionRecap,
+): Promise<boolean> {
   const rows = await db
     .update(processingRuns)
-    .set({ recap, status: "titling", updatedAt: new Date() })
+    .set({ recap, recapSections, status: "titling", updatedAt: new Date() })
     .where(and(eq(processingRuns.id, runId), eq(processingRuns.status, "recapping")))
     .returning({ id: processingRuns.id });
   return rows.length > 0;
@@ -199,6 +204,7 @@ export async function completeProcessingRun(runId: string): Promise<boolean> {
         sessionId: processingRuns.sessionId,
         status: processingRuns.status,
         recap: processingRuns.recap,
+        recapSections: processingRuns.recapSections,
         title: processingRuns.title,
       })
       .from(processingRuns)
@@ -220,6 +226,7 @@ export async function completeProcessingRun(runId: string): Promise<boolean> {
       .update(sessions)
       .set({
         recap: run.recap,
+        recapSections: run.recapSections,
         title: run.title,
         status: "done",
         activeRunId: null,
