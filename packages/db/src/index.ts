@@ -150,10 +150,12 @@ export {
 } from "./world.ts";
 export {
   linkPageNames,
+  mentionSentences,
   nameKey,
   summaryLine,
   type LinkTarget,
   type LinkedText,
+  type MentionSentence,
 } from "./world-links.ts";
 export {
   clearWorldPageAvatar,
@@ -176,6 +178,7 @@ export {
   type WorldPageChange,
   type WorldPageDetail,
   type WorldPageLink,
+  type WorldPageMention,
   type WorldPageRevisionSummary,
   type WorldPageSnapshot,
   type WorldSession,

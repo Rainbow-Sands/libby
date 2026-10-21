@@ -12,7 +12,7 @@ import {
   worldUpdates,
 } from "./schema.ts";
 import type { RecapSections } from "./session-notes.ts";
-import { nameKey } from "./world-links.ts";
+import { mentionSentences, nameKey, type MentionSentence } from "./world-links.ts";
 import {
   PERSON_KINDS,
   pageNames,
@@ -374,6 +374,16 @@ export interface WorldPageDetail {
   related: WorldPageLink[];
   carries: WorldPageLink[];
   moments: (WorldMoment & { sessionId: string; sessionTitle: string | null })[];
+  // Sessions whose recap names the page, newest first.
+  mentions: WorldPageMention[];
+  // Sessions after the requested one whose recap names the page.
+  laterMentions: number;
+}
+
+export interface WorldPageMention {
+  sessionId: string;
+  sessionTitle: string | null;
+  sentences: MentionSentence[];
 }
 
 export async function getWorldPage(
@@ -461,6 +471,30 @@ export async function getWorldPage(
     .where(and(...momentConditions))
     .orderBy(desc(sessions.startedAt), asc(worldPageMoments.position));
 
+  // Mentions are found in the recaps as they read now, by the names the page
+  // has in the view shown, so they follow renames and regenerated recaps.
+  const recaps = await db
+    .select({
+      sessionId: sessions.id,
+      sessionTitle: sessions.title,
+      startedAt: sessions.startedAt,
+      recap: sessions.recap,
+    })
+    .from(sessions)
+    .where(and(eq(sessions.campaignId, campaignId), isNotNull(sessions.recap)))
+    .orderBy(desc(sessions.startedAt));
+  const mentionNames = shown
+    ? [...pageNames(shown.content), ...shortNames(page.kind, shown.content.name, page.slug, world)]
+    : [];
+  const mentions: WorldPageMention[] = [];
+  let laterMentions = 0;
+  for (const row of recaps) {
+    const sentences = mentionSentences(row.recap ?? "", mentionNames);
+    if (sentences.length === 0) continue;
+    if (bound && row.startedAt > bound) laterMentions += 1;
+    else mentions.push({ sessionId: row.sessionId, sessionTitle: row.sessionTitle, sentences });
+  }
+
   return {
     id: page.id,
     slug: page.slug,
@@ -480,7 +514,33 @@ export async function getWorldPage(
       sessionId: row.sessionId,
       sessionTitle: row.sessionTitle,
     })),
+    mentions,
+    laterMentions,
   };
+}
+
+// People are often called by the last word of their name, "Venn" for
+// "Magister Venn", so mentions count that too unless another page shares it.
+function shortNames(
+  kind: WorldPageKind,
+  name: string,
+  slug: string,
+  world: WorldPageSnapshot[],
+): string[] {
+  if (!(PERSON_KINDS as readonly string[]).includes(kind)) return [];
+  const words = name.trim().split(/\s+/);
+  const short = words.at(-1) ?? "";
+  if (words.length < 2 || short.length < 4) return [];
+  const key = nameKey(short);
+  const shared = world.some(
+    (other) =>
+      other.slug !== slug &&
+      pageNames(other.content).some(
+        (otherName) =>
+          nameKey(otherName) === key || nameKey(otherName.split(/\s+/).at(-1) ?? "") === key,
+      ),
+  );
+  return shared ? [] : [short];
 }
 
 export interface WorldPageChange {

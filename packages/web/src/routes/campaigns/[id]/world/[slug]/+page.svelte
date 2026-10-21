@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { linkPageNames } from "@rainbot/db/world-links";
+  import { linkPageNames, type MentionSentence } from "@rainbot/db/world-links";
   import AvatarUploader from "$lib/components/AvatarUploader.svelte";
   import LinkedText from "$lib/components/LinkedText.svelte";
   import TaperedRule from "$lib/components/TaperedRule.svelte";
@@ -26,6 +26,10 @@
       .map((page) => ({ slug: page.slug, names: page.names })),
   );
   const linkPages = $derived(new Map(data.world.pages.map((page) => [page.slug, page])));
+
+  // Sessions whose "+N more" is open, showing every sentence that mentions
+  // the page rather than only the first.
+  let openMentions = $state<Record<string, boolean>>({});
 
   function linkFor(slug: string): WorldLinkPage | undefined {
     return linkPages.get(slug);
@@ -66,6 +70,10 @@
 </script>
 
 <svelte:head><title>{content?.name ?? "World page"} — {data.campaign.name}</title></svelte:head>
+
+{#snippet sentence(parts: MentionSentence)}
+  <q>{#each parts as part, index (index)}{#if part.mention}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}</q>
+{/snippet}
 
 {#snippet source(sessionId: string, at: string | null)}
   <a class="src" href={transcriptHref(data.campaign.id, sessionId, elapsedSeconds(at))}
@@ -185,6 +193,47 @@
               </blockquote>
             {/each}
           </div>
+        {/if}
+
+        {#if detail.mentions.length}
+          <h3>Mentioned in</h3>
+          <ul class="mentions">
+            {#each detail.mentions as mention (mention.sessionId)}
+              {@const open = openMentions[mention.sessionId] ?? false}
+              {@const more = mention.sentences.length - 1}
+              <li>
+                <a class="from" href="/campaigns/{data.campaign.id}/sessions/{mention.sessionId}"
+                  >{sessionLabel(mention.sessionId)}</a
+                >
+                {@render sentence(mention.sentences[0])}
+                {#if open}
+                  <div class="rest" id="mentions-{mention.sessionId}">
+                    {#each mention.sentences.slice(1) as rest, index (index)}
+                      {@render sentence(rest)}
+                    {/each}
+                  </div>
+                {/if}
+                {#if more > 0}
+                  <button
+                    class="more"
+                    type="button"
+                    aria-expanded={open}
+                    aria-controls={open ? `mentions-${mention.sessionId}` : undefined}
+                    onclick={() => (openMentions[mention.sessionId] = !open)}
+                    >{open ? "Show less" : `+${more} more`}</button
+                  >
+                {/if}
+              </li>
+            {/each}
+          </ul>
+        {/if}
+        {#if detail.laterMentions > 0}
+          <p class="muted later">
+            {detail.laterMentions === 1
+              ? "A later session also mentions this."
+              : `${detail.laterMentions} later sessions also mention this.`}
+            <a href={worldPageHref(data.campaign.id, detail.slug)}>View current</a>
+          </p>
         {/if}
       </div>
 
@@ -431,6 +480,54 @@
   }
   .later {
     font-size: 0.92rem;
+  }
+  .mentions {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .mentions li {
+    display: grid;
+    gap: 0.2rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--surface-sunken);
+    border: 1px solid var(--edge);
+    border-radius: 4px;
+  }
+  .mentions q {
+    quotes: none;
+    font-size: 0.95rem;
+    color: var(--ink-soft);
+  }
+  .mentions mark {
+    padding: 0 0.1em;
+    color: var(--ink);
+    background: color-mix(in srgb, var(--gold) 22%, transparent);
+    border-radius: 2px;
+  }
+  .rest {
+    display: grid;
+    gap: 0.2rem;
+    padding-left: 0.7rem;
+    border-left: 2px solid var(--edge);
+  }
+  .more {
+    justify-self: start;
+    padding: 0.05rem 0.55rem;
+    font-family: var(--font-display);
+    font-size: 0.62rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--link);
+    cursor: pointer;
+    background: none;
+    border: 1px solid var(--edge);
+    border-radius: 999px;
+  }
+  .more:hover {
+    border-color: var(--gold);
   }
   .moments {
     display: grid;

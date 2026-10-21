@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { planWorldUpdate, slugify, type WorldPageState, type WorldUpdate } from "./world.ts";
-import { linkPageNames, summaryLine } from "./world-links.ts";
+import { linkPageNames, mentionSentences, summaryLine } from "./world-links.ts";
 
 function entry(overrides: Partial<WorldUpdate["pages"][number]>): WorldUpdate["pages"][number] {
   return {
@@ -223,4 +223,36 @@ test("linking can continue across several texts", () => {
   const linked = new Set<string>();
   expect(linkPageNames("Venn left.", targets, linked)).toHaveLength(2);
   expect(linkPageNames("Venn returned.", targets, linked)).toEqual([{ text: "Venn returned." }]);
+});
+
+test("finds every recap sentence that mentions a page", () => {
+  const recap = [
+    "## Recap",
+    "",
+    "The party reached **Hollowmere** at dusk. Magistra Ven had already gone. Nobody slept.",
+    "",
+    "## Open threads",
+    "",
+    "- [Find Venn](https://example.test) before the tide turns.",
+    "- Venn's desk was dry; Magister Venn kept the ledgers.",
+  ].join("\n");
+  expect(mentionSentences(recap, ["Magister Venn", "Venn", "Magistra Ven"])).toEqual([
+    [
+      { text: "Magistra Ven", mention: true },
+      { text: " had already gone.", mention: false },
+    ],
+    [
+      { text: "Find ", mention: false },
+      { text: "Venn", mention: true },
+      { text: " before the tide turns.", mention: false },
+    ],
+    [
+      { text: "Venn", mention: true },
+      { text: "'s desk was dry; ", mention: false },
+      { text: "Magister Venn", mention: true },
+      { text: " kept the ledgers.", mention: false },
+    ],
+  ]);
+  expect(mentionSentences("## Venn\n\nNothing here.", ["Venn"])).toEqual([]);
+  expect(mentionSentences("Venn left.", [])).toEqual([]);
 });
