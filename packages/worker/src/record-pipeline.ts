@@ -139,6 +139,13 @@ export async function createWorldUpdate(
     ? JSON.stringify(
         {
           recap: material.recap.recap,
+          openThreads: material.recap.openThreads.map((thread, index) => ({
+            index,
+            title: thread.title,
+            status: thread.status,
+            note: thread.note,
+          })),
+          newFaces: material.recap.newFaces.map((face, index) => ({ index, ...face })),
           epicMoments: material.recap.epicMoments.map((moment, index) => ({ index, ...moment })),
         },
         null,

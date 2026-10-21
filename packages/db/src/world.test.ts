@@ -1,5 +1,11 @@
 import { expect, test } from "vitest";
-import { planWorldUpdate, slugify, type WorldPageState, type WorldUpdate } from "./world.ts";
+import {
+  planWorldUpdate,
+  slugify,
+  type WorldPageState,
+  type WorldRecap,
+  type WorldUpdate,
+} from "./world.ts";
 import { linkPageNames, mentionSentences, summaryLine } from "./world-links.ts";
 
 function entry(overrides: Partial<WorldUpdate["pages"][number]>): WorldUpdate["pages"][number] {
@@ -14,6 +20,8 @@ function entry(overrides: Partial<WorldUpdate["pages"][number]>): WorldUpdate["p
     holder: null,
     related: [],
     summary: "",
+    openThreads: [],
+    newFaces: [],
     ...overrides,
   };
 }
@@ -42,6 +50,8 @@ const venn: WorldPageState = {
     related: [],
   },
 };
+
+const noRecap: WorldRecap = { epicMoments: [], openThreads: [], newFaces: [] };
 
 const empty: WorldUpdate = {
   pages: [],
@@ -73,7 +83,7 @@ test("adds facts, supersedes old ones and keeps the input untouched", () => {
       ],
     },
     "s5",
-    [],
+    noRecap,
   );
 
   expect(plan.pages).toHaveLength(1);
@@ -99,7 +109,7 @@ test("resolves loose references through names and aliases instead of duplicating
       ],
     },
     "s5",
-    [],
+    noRecap,
   );
   expect(plan.pages.map((page) => page.slug)).toEqual(["magister-venn"]);
 });
@@ -118,7 +128,7 @@ test("renames on a corrected spelling and keeps the old name as an alias", () =>
       ],
     },
     "s5",
-    [],
+    noRecap,
   );
   expect(plan.pages[0].content.name).toBe("Magister Venn the Elder");
   expect(plan.pages[0].content.aliases).toEqual(["Magister Venn", "Magistra Ven"]);
@@ -132,7 +142,7 @@ test("a page that only appeared writes no revision", () => {
       pages: [entry({ page: "magister-venn", name: "The magister venn", summary: "Reworded." })],
     },
     "s5",
-    [],
+    noRecap,
   );
   expect(plan.pages).toEqual([]);
 });
@@ -165,7 +175,12 @@ test("creates new pages with unique slugs and links related pages and moments", 
       ],
     },
     "s7",
-    [{ description: "The Abbess paid in gold.", quote: null, speaker: null, at: null }],
+    {
+      ...noRecap,
+      epicMoments: [
+        { description: "The Abbess paid in gold.", quote: null, speaker: null, at: null },
+      ],
+    },
   );
 
   const abbess = plan.pages.find((page) => page.slug === "glass-abbess");
@@ -255,4 +270,30 @@ test("finds every recap sentence that mentions a page", () => {
   ]);
   expect(mentionSentences("## Venn\n\nNothing here.", ["Venn"])).toEqual([]);
   expect(mentionSentences("Venn left.", [])).toEqual([]);
+});
+
+test("recap threads and new faces become names of the pages they belong to", () => {
+  const plan = planWorldUpdate(
+    [],
+    {
+      ...empty,
+      pages: [
+        entry({ name: "Missing gear and amnesia", kind: "quest", openThreads: [0, 5] }),
+        entry({ name: "Madam Eva", newFaces: [0] }),
+      ],
+    },
+    "s8",
+    {
+      epicMoments: [],
+      openThreads: [
+        { title: "Missing gear and Xerxes's memory gap", status: "new", note: "", at: null },
+      ],
+      newFaces: [{ name: "Madame Eva the seer", kind: "npc" }],
+    },
+  );
+
+  expect(plan.pages.map((page) => [page.content.name, page.content.aliases])).toEqual([
+    ["Missing gear and amnesia", ["Missing gear and Xerxes's memory gap"]],
+    ["Madam Eva", ["Madame Eva the seer"]],
+  ]);
 });

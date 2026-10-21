@@ -23,6 +23,7 @@ import {
   type WorldPageKind,
   type WorldPageState,
   type WorldUpdate,
+  type WorldRecap,
   type WorldUpdateReport,
 } from "./world.ts";
 import type { WorldUpdateStatus } from "./domain.ts";
@@ -317,7 +318,7 @@ export async function recordWorldUpdate(
   campaignId: string,
   sessionId: string,
   update: WorldUpdate,
-  epicMoments: RecapSections["epicMoments"],
+  recap: WorldRecap,
   cast: CampaignCastMember[],
 ): Promise<boolean> {
   return db.transaction(async (tx) => {
@@ -329,7 +330,7 @@ export async function recordWorldUpdate(
 
     const existing = await getWorldState(campaignId, {}, tx);
     const pageIds = new Map(existing.map((page) => [page.slug, page.id]));
-    const plan = planWorldUpdate(existing, update, sessionId, epicMoments);
+    const plan = planWorldUpdate(existing, update, sessionId, recap);
 
     for (const page of plan.pages) {
       let pageId = pageIds.get(page.slug);

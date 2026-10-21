@@ -48,7 +48,7 @@ export const WORLD_UPDATE_SYSTEM = `You maintain the wiki of a tabletop RPG camp
 - world: every existing page, each with its slug in square brackets, kind, status, other names, summary and numbered facts. It is empty before the first session.
 - cast: the player characters and who plays them.
 - ledger: a structured extraction of this session, with "h:mm:ss" times.
-- recap: this session's recap, including its numbered epicMoments.
+- recap: this session's recap, including its numbered openThreads, newFaces and epicMoments.
 
 ## Pages
 - One page per player character, NPC, place, faction, notable item and quest. "character" means a player character from the cast. Every other person or creature is "npc". Quests come from the ledger's threads: use the thread title as the quest name.
@@ -59,7 +59,7 @@ export const WORLD_UPDATE_SYSTEM = `You maintain the wiki of a tabletop RPG camp
 - summary: two or three sentences describing the page as of the end of this session, written from all of its facts. Present tense, no session numbers.
 - related: names of other pages closely tied to this one, such as an NPC's faction, a quest's people and places, or where an item was found.
 - Use canonical spellings throughout. When the ledger lists other spellings in heardAs, add them to aliases and report them in nameCorrections.
-- The session page links the recap's openThreads titles, newFaces names and loot items to pages by exact name. Every open thread and new face needs a page: a quest page for each open thread (an existing quest when the thread continues one), and the matching page for each new face. Loot gets a page only when it is a notable item, not coin or supplies. Whenever the recap's wording differs from the page's name, add the recap's exact wording to that page's aliases.
+- Every one of the recap's openThreads and newFaces belongs to exactly one page: a quest page for each open thread (the existing quest when the thread continues one, even under different wording), and the matching page for each new face. List their indexes in that page's openThreads and newFaces. Loot gets a page only when it is a notable item, not coin or supplies.
 
 ## Other output
 - possibleDuplicates: pairs of existing or new pages that may be the same thing under two names, with the reason. A person decides whether to merge them, so report them instead of merging.
