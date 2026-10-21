@@ -11,6 +11,8 @@ export {
   artifactContentHash,
   artifactObjectKey,
   audioObjectKey,
+  avatarObjectKey,
+  bytesContentHash,
   getArtifactStorage,
   getAudioStorage,
   loadArtifactStorageConfig,

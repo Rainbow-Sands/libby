@@ -7,15 +7,21 @@
 //
 // The transcript is the text formatTranscriptForInference produces. An optional
 // previous recap stands in for the earlier session's notes. Writes
-// <transcript>.ledger.json / .recap.json / .recap.md / .title.txt next to the
-// input so outputs persist for comparing prompts or models across runs.
+// <transcript>.ledger.json / .recap.json / .recap.md / .title.txt /
+// .world.json next to the input so outputs persist for comparing prompts or
+// models across runs. The world update starts from an empty world.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import type { FlexibleSchema } from "ai";
 import { TITLE_SYSTEM } from "../prompts.ts";
 import { normalizeTitle, stripCodeFence } from "../text.ts";
-import { createRecap, createSessionLedger, type SessionMaterial } from "../record-pipeline.ts";
+import {
+  createRecap,
+  createSessionLedger,
+  createWorldUpdate,
+  type SessionMaterial,
+} from "../record-pipeline.ts";
 import {
   createStructuredSummarizationInference,
   createSummarizationInference,
@@ -88,6 +94,7 @@ try {
           recapSections: null,
         }
       : null,
+    world: [],
   };
   const base = transcriptPath.replace(/\.txt$/, "");
 
@@ -106,9 +113,16 @@ try {
   });
   writeFileSync(`${base}.title.txt`, title, "utf8");
 
+  const world = await createWorldUpdate(
+    { world: [], cast: [], ledger, recap: recap.sections },
+    structured("World update"),
+  );
+  writeFileSync(`${base}.world.json`, JSON.stringify(world, null, 2), "utf8");
+
   console.log(
     `\nDone in ${((performance.now() - overall) / 1000).toFixed(1)}s. ` +
-      `Wrote ${base}.ledger.json, ${base}.recap.json, ${base}.recap.md, ${base}.title.txt`,
+      `Wrote ${base}.ledger.json, ${base}.recap.json, ${base}.recap.md, ${base}.title.txt, ` +
+      `${base}.world.json`,
   );
 } catch (err) {
   console.error(`\nFailed: ${err instanceof Error ? err.message : String(err)}`);

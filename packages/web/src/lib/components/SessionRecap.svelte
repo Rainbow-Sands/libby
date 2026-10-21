@@ -1,11 +1,45 @@
 <script lang="ts">
-  import { marked } from "marked";
   import type { SessionRecap } from "@rainbot/db";
+  import { linkPageNames, nameKey } from "@rainbot/db/world-links";
+  import LinkedMarkdown from "./LinkedMarkdown.svelte";
+  import LinkedText from "./LinkedText.svelte";
+  import PageLink from "./PageLink.svelte";
+  import WorldAvatar from "./WorldAvatar.svelte";
+  import { linkMarkdown } from "$lib/linked-markdown";
   import { speakerHue } from "$lib/speakers";
+  import { avatarHref, worldPageHref, type WorldLinkPage, type WorldLinks } from "$lib/world";
 
-  let { recap }: { recap: SessionRecap } = $props();
+  let { recap, world = null }: { recap: SessionRecap; world?: WorldLinks | null } = $props();
 
   const sections = $derived(recap.sections);
+
+  // Names in running text link to their pages, first mention only, in reading
+  // order. Titled entries (threads, loot, new faces) link when their whole name
+  // matches a page.
+  const linked = $derived.by(() => {
+    const targets = world?.pages.map((page) => ({ slug: page.slug, names: page.names })) ?? [];
+    const seen = new Set<string>();
+    return {
+      recap: linkMarkdown(sections.recap, targets, seen),
+      leftOff: linkPageNames(sections.leftOff, targets, seen),
+      moments: sections.epicMoments.map((moment) =>
+        linkPageNames(moment.description, targets, seen),
+      ),
+    };
+  });
+  const byName = $derived.by(() => {
+    const pages = new Map<string, WorldLinkPage>();
+    for (const page of world?.pages ?? []) {
+      for (const name of page.names) {
+        const key = nameKey(name);
+        if (key && !pages.has(key)) pages.set(key, page);
+      }
+    }
+    return pages;
+  });
+  function pageNamed(name: string | null): WorldLinkPage | undefined {
+    return name ? byName.get(nameKey(name)) : undefined;
+  }
   const totalWords = $derived(recap.stats.speakers.reduce((sum, s) => sum + s.words, 0));
 
   const STATUS_LABELS = {
@@ -43,6 +77,15 @@
   }
 </script>
 
+{#snippet named(name: string)}
+  {@const page = pageNamed(name)}
+  {#if page && world}
+    <PageLink campaignId={world.campaignId} asOf={world.asOf} {page} text={name} />
+  {:else}
+    {name}
+  {/if}
+{/snippet}
+
 {#snippet cite(at: string | null)}
   {@const seconds = elapsedSeconds(at)}
   {#if seconds !== null}
@@ -53,12 +96,12 @@
 <div class="recap">
   <section class="rsec">
     <h3>Recap</h3>
-    <div class="prose">{@html marked(sections.recap) as string}</div>
+    <div class="prose"><LinkedMarkdown blocks={linked.recap} {world} /></div>
   </section>
 
   <section class="rsec">
     <h3>Where we left off</h3>
-    <p class="left-off">{sections.leftOff}</p>
+    <p class="left-off"><LinkedText segments={linked.leftOff} {world} /></p>
   </section>
 
   {#if sections.openThreads.length}
@@ -69,7 +112,7 @@
           <li>
             <span class="pill status-{thread.status}">{STATUS_LABELS[thread.status]}</span>
             <div>
-              <strong>{thread.title}</strong>
+              <strong>{@render named(thread.title)}</strong>
               {@render cite(thread.at)}
               <p class="why">{thread.note}</p>
             </div>
@@ -87,8 +130,8 @@
           <tbody>
             {#each sections.loot as item, index (index)}
               <tr>
-                <td><strong>{item.item}</strong> {@render cite(item.at)}</td>
-                <td>{item.holder ?? "Unclear"}</td>
+                <td><strong>{@render named(item.item)}</strong> {@render cite(item.at)}</td>
+                <td>{#if item.holder}{@render named(item.holder)}{:else}Unclear{/if}</td>
                 <td class="muted">{item.note}</td>
               </tr>
             {/each}
@@ -104,7 +147,7 @@
       <div class="epic">
         {#each sections.epicMoments as moment, index (index)}
           <blockquote>
-            <p>{moment.description}</p>
+            <p><LinkedText segments={linked.moments[index]} {world} /></p>
             <cite>
               {#if moment.quote}
                 “{moment.quote}”{#if moment.speaker}&nbsp;· {moment.speaker}{/if}
@@ -122,7 +165,23 @@
       <h3>New faces &amp; places</h3>
       <div class="chips">
         {#each sections.newFaces as face, index (index)}
-          <span class="chip"><span class="kind">{KIND_LABELS[face.kind]}</span>{face.name}</span>
+          {@const page = pageNamed(face.name)}
+          <span class="chip" class:with-avatar={page && world}>
+            {#if page && world}
+              <WorldAvatar
+                src={avatarHref(world.campaignId, page.avatarId)}
+                name={page.name}
+                kind={page.kind}
+                size="sm"
+              />
+            {/if}
+            <span class="kind">{KIND_LABELS[face.kind]}</span>
+            {#if page && world}
+              <a href={worldPageHref(world.campaignId, page.slug, world.asOf)}>{face.name}</a>
+            {:else}
+              {face.name}
+            {/if}
+          </span>
         {/each}
       </div>
     </section>
@@ -338,6 +397,9 @@
     background: var(--surface-sunken);
     border: 1px solid var(--edge);
     border-radius: 999px;
+  }
+  .chip.with-avatar {
+    padding-left: 0.25rem;
   }
   .kind {
     font-family: var(--font-display);

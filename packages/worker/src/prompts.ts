@@ -4,7 +4,7 @@ const SOURCE_GUIDE = `## What you are reading
 - An automatic Whisper transcript of a Discord voice call. Each line is "Discord username: words". Every line from one username is the same person.
 - The cast legend maps players to the characters they play. A user with no character is usually the game master (GM), who narrates and voices every NPC, so work out which NPC is speaking from context.
 - Lines starting with "[h:mm:ss]" are elapsed-time markers. Cite the marker at or just before the line you are describing, in the same "h:mm:ss" form.
-- Expect mishearings, especially of invented names. When a name sounds like one in the earlier-session notes, use that spelling. When several spellings in this transcript clearly mean the same thing, choose one and use it consistently.
+- Expect mishearings, especially of invented names. When a name sounds like one in the world glossary or the earlier-session notes, use that spelling. When several spellings in this transcript clearly mean the same thing, choose one and use it consistently.
 - Separate the game from the table. Out-of-character chatter, scheduling, snack breaks and jokes about real life are not events. Plans, theories and hypotheticals ("what if we just kill him") are not events unless the party then does them. Rules discussion matters only when it changes what happened.
 - Do not invent details, motives or connections the transcript does not support. When the transcript is unclear, say so instead of guessing.`;
 
@@ -27,6 +27,7 @@ export const RECAP_SYSTEM = `You write the between-session recap for a tabletop 
 ${SOURCE_GUIDE}
 
 ## Inputs
+- world_glossary: the campaign's known characters, places, factions, items and quests with their canonical spellings, when there are any.
 - earlier_session: notes from the previous session, when there is one. Use it for name spellings and for open threads.
 - ledger: a structured extraction of this session. Treat it as your checklist of facts.
 - transcript: the full session. Use it for tone, quotes and anything the ledger missed.
@@ -40,6 +41,29 @@ ${SOURCE_GUIDE}
 - newFaces: NPCs, places and factions introduced to the story this session.
 - rulings: rules calls or house rules decided at the table, only when there were some.
 - Cite "h:mm:ss" in every at field you can. Use null when no single moment applies.`;
+
+export const WORLD_UPDATE_SYSTEM = `You maintain the wiki of a tabletop RPG campaign's world. After each session you update it from that session's ledger and recap. Players browse the wiki between sessions to remember who is who, and future sessions rely on it for name spellings and continuity.
+
+## Inputs
+- world: every existing page, each with its slug in square brackets, kind, status, other names, summary and numbered facts. It is empty before the first session.
+- cast: the player characters and who plays them.
+- ledger: a structured extraction of this session, with "h:mm:ss" times.
+- recap: this session's recap, including its numbered epicMoments.
+
+## Pages
+- One page per player character, NPC, place, faction, notable item and quest. "character" means a player character from the cast. Every other person or creature is "npc". Quests come from the ledger's threads: use the thread title as the quest name.
+- List every page this session touched: pages it introduced, pages it changed, and existing pages that merely appeared. Set page to the existing slug, or null for a page that does not exist yet. Never create a second page for something that already has one, even under a misheard or shortened name: use the existing slug and add the new spelling to aliases.
+- newFacts: only what this session established that the page does not already say, one self-contained sentence each, with the "h:mm:ss" time from the ledger. Leave it empty for a page that merely appeared. Keep facts about the game world, not about the players or the table.
+- supersededFacts: ids of the page's facts this session proved wrong or outdated, such as a death, a betrayal revealed or an item changing hands. Never supersede a fact just to reword it.
+- status: for people "alive", "dead", "missing" or similar; for quests "open", "resolved" or "abandoned". Null keeps the current one.
+- summary: two or three sentences describing the page as of the end of this session, written from all of its facts. Present tense, no session numbers.
+- related: names of other pages closely tied to this one, such as an NPC's faction, a quest's people and places, or where an item was found.
+- Use canonical spellings throughout. When the ledger lists other spellings in heardAs, add them to aliases and report them in nameCorrections.
+
+## Other output
+- possibleDuplicates: pairs of existing or new pages that may be the same thing under two names, with the reason. A person decides whether to merge them, so report them instead of merging.
+- epicMoments: for each of the recap's epic moments, by index, the names of the characters and NPCs who feature in it.
+- Do not invent details the ledger and recap do not support.`;
 
 export const TITLE_SYSTEM = `I am going to give you a recap of a DnD session. Your goal is to write a short, evocative title for the session — the kind of name a chapter in a fantasy novel might have.
 The title should capture the most memorable moment or theme of the session.

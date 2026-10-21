@@ -8,6 +8,7 @@ export const JOB_QUEUES = {
   advanceProcessingRun: "advance-processing-run",
   advanceProcessingRunDead: "advance-processing-run-dead",
   backfillCampaignRecaps: "backfill-campaign-recaps",
+  updateCampaignWorld: "update-campaign-world",
 } as const;
 
 export interface TranscribeSegmentJob {
@@ -22,6 +23,10 @@ export interface AdvanceProcessingRunJob {
 }
 
 export interface BackfillCampaignRecapsJob {
+  campaignId: string;
+}
+
+export interface UpdateCampaignWorldJob {
   campaignId: string;
 }
 
@@ -73,6 +78,16 @@ const BACKFILL_QUEUE_OPTIONS = {
   expireInSeconds: 15 * 60,
 } as const satisfies QueueDefinition;
 
+// World updates for a campaign must run one session at a time, oldest first,
+// so the queue is "stately" per campaign like the recap backfill. Each job
+// applies one session and re-enqueues itself while sessions remain.
+const WORLD_QUEUE_OPTIONS = {
+  retryLimit: 3,
+  retryDelay: 30,
+  retryBackoff: true,
+  expireInSeconds: 30 * 60,
+} as const satisfies QueueDefinition;
+
 type QueueDefinition = Omit<Queue, "name" | "policy" | "partition">;
 
 let boss: PgBoss | null = null;
@@ -109,6 +124,13 @@ async function ensureQueues(instance: PgBoss): Promise<void> {
     instance,
     JOB_QUEUES.backfillCampaignRecaps,
     BACKFILL_QUEUE_OPTIONS,
+    workerMode,
+    "stately",
+  );
+  await ensureQueue(
+    instance,
+    JOB_QUEUES.updateCampaignWorld,
+    WORLD_QUEUE_OPTIONS,
     workerMode,
     "stately",
   );
@@ -194,6 +216,17 @@ export async function enqueueCampaignBackfill(
 ): Promise<string | null> {
   const instance = await startJobQueue();
   return instance.send(JOB_QUEUES.backfillCampaignRecaps, data, {
+    singletonKey: data.campaignId,
+    startAfter: startAfterSeconds,
+  });
+}
+
+export async function enqueueWorldUpdate(
+  data: UpdateCampaignWorldJob,
+  startAfterSeconds = 0,
+): Promise<string | null> {
+  const instance = await startJobQueue();
+  return instance.send(JOB_QUEUES.updateCampaignWorld, data, {
     singletonKey: data.campaignId,
     startAfter: startAfterSeconds,
   });

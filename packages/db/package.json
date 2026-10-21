@@ -3,7 +3,8 @@
   "version": "0.0.1",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./world-links": "./src/world-links.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",
