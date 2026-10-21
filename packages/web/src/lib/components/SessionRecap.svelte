@@ -94,8 +94,8 @@
 {/snippet}
 
 <div class="recap">
-  <section class="rsec">
-    <h3>Recap</h3>
+  <!-- The Recap tab names this section, so it has no heading of its own. -->
+  <section class="rsec" aria-label="Recap">
     <div class="prose"><LinkedMarkdown blocks={linked.recap} {world} /></div>
   </section>
 
