@@ -297,3 +297,38 @@ test("recap threads and new faces become names of the pages they belong to", () 
     ["Madam Eva", ["Madame Eva the seer"]],
   ]);
 });
+
+test("a quest named after a character never takes over the character's page", () => {
+  const xerxes: WorldPageState = {
+    ...venn,
+    id: "p2",
+    slug: "xerxes",
+    kind: "character",
+    content: { ...venn.content, name: "Xerxes", aliases: ["Xerces"], status: "alive" },
+  };
+  const plan = planWorldUpdate(
+    [xerxes],
+    {
+      ...empty,
+      pages: [
+        entry({
+          page: "xerxes",
+          name: "Xerxes's missing past",
+          kind: "quest",
+          aliases: ["Xerxes"],
+          status: "open",
+          openThreads: [0],
+        }),
+      ],
+    },
+    "s9",
+    {
+      ...noRecap,
+      openThreads: [{ title: "Xerxes's memory gap", status: "new", note: "", at: null }],
+    },
+  );
+
+  expect(
+    plan.pages.map((page) => [page.slug, page.kind, page.content.name, page.content.aliases]),
+  ).toEqual([["xerxes-s-missing-past", "quest", "Xerxes's missing past", ["Xerxes's memory gap"]]]);
+});
