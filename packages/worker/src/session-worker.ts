@@ -327,7 +327,7 @@ async function updateCampaignWorldStep(payload: UpdateCampaignWorldJob): Promise
           payload.campaignId,
           step.sessionId,
           update,
-          step.recapSections?.epicMoments ?? [],
+          step.recapSections ?? { epicMoments: [], openThreads: [], newFaces: [] },
           cast,
         );
         console.log(
