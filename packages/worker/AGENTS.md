@@ -12,7 +12,8 @@ conventions.
 - `prompts.ts` / `text.ts` — shared prompts and response cleanup.
 - `summarization-inference.ts` — local/OpenAI/Anthropic provider configuration.
 - `scripts/evaluate-inference.ts` — standalone ledger/recap/title pipeline harness.
-- `scripts/backfill-recaps.ts` — queues a campaign recap backfill.
+- `scripts/backfill-recaps.ts` — queues a campaign recap backfill, which then
+  builds the campaign's world.
 
 ## Durable state
 
@@ -46,7 +47,10 @@ the standalone test harness:
 pnpm --filter @rainbot/worker eval:inference <transcript.txt> [previous-recap.md]
 ```
 
-A run moves through three inference stages, each one call:
+A run moves through three inference stages, each one call. The ledger and
+recap prompts include a glossary of the campaign's world as it stood when the
+session began (never later sessions, so regenerating an old session cannot
+leak spoilers), which keeps name spellings consistent:
 
 1. `summarizing` writes the **session ledger**: a structured extraction
    (events, entities, loot, threads, quotes, rulings, where the party left off)
@@ -60,6 +64,27 @@ A run moves through three inference stages, each one call:
 The ledger and recap use AI SDK structured output with the zod schemas in
 `@rainbot/db`'s `session-notes.ts`.
 
+### World updates
+
+After a run completes, the worker enqueues `update-campaign-world`, another
+`stately` queue keyed by campaign. Each job applies one session's world
+update, then re-enqueues itself until none remain:
+
+- `nextWorldStep` picks the oldest `done` session newer than the last one
+  the world has seen. Sessions are applied strictly in order because each
+  reads the world the previous one left; a session that finishes out of order
+  later is not replayed (rebuilding the world will handle that).
+- The update is one structured call (`WORLD_UPDATE_SYSTEM`) over the current
+  world pages, the cast, the session ledger and the recap. It returns pages
+  touched, new facts, superseded fact ids, possible duplicates, name
+  corrections and who features in each epic moment.
+- `recordWorldUpdate` recomputes the plan with `planWorldUpdate` inside its
+  transaction and writes new immutable page revisions, so redelivery is safe.
+- A session without a ledger stops the chain when it still needs a recap
+  backfill (the backfill resumes the world when it finishes) and is skipped
+  otherwise. A failed update is retried three times a minute apart, then
+  marked failed so the world moves on.
+
 ### Recap backfill
 
 Sessions processed before sectioned recaps can be regenerated campaign by
@@ -67,7 +92,7 @@ campaign:
 
 ```sh
 pnpm --filter @rainbot/worker backfill:recaps <campaign-id> [...]   # or --all
-node src/scripts/backfill-recaps.ts --all                           # in the worker container
+docker compose exec worker node packages/worker/src/scripts/backfill-recaps.ts --all
 ```
 
 This only enqueues a `backfill-campaign-recaps` job (a `stately` queue keyed
@@ -76,7 +101,9 @@ inference regeneration for the oldest `done` session without
 `recap_sections`, then re-checks every minute, waiting while any session in
 the campaign is processing. Oldest first matters because each recap reads the
 previous session's open threads. A session whose regeneration fails becomes
-`failed` and is skipped.
+`failed` and is skipped. Once no session needs a recap, the backfill enqueues
+the world update chain, so the same command builds a campaign's world from
+its whole history.
 
 `TRANSCRIPTION_URL` is the complete whisper request URL.
 `SUMMARIZATION_PROVIDER` selects `local`, `openai`, or `anthropic`; cloud

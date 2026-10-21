@@ -7,11 +7,12 @@
   import TaperedRule from "$lib/components/TaperedRule.svelte";
   import LibbyChat from "$lib/components/LibbyChat.svelte";
   import SessionRecap from "$lib/components/SessionRecap.svelte";
+  import WorldChanges from "$lib/components/WorldChanges.svelte";
   import { speakerHue } from "$lib/speakers";
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
 
-  type SessionTab = "recap" | "transcript";
+  type SessionTab = "recap" | "world" | "transcript";
   type TranscriptTurn = NonNullable<PageData["transcriptTurns"]>[number];
   type SessionStatus = PageData["session"]["status"];
   interface LiveTranscriptSnippet extends TranscriptTurn {
@@ -26,7 +27,7 @@
   );
 
   function sessionTab(value: string | null): SessionTab {
-    return value === "transcript" ? value : "recap";
+    return value === "transcript" || value === "world" ? value : "recap";
   }
 
   let activeTab = $derived(sessionTab(page.url.searchParams.get("tab")));
@@ -229,6 +230,17 @@
         aria-selected={activeTab === "recap"}
         class:active={activeTab === "recap"}>Recap</a
       >
+      {#if data.worldChanges}
+        <a
+          role="tab"
+          href="?tab=world"
+          aria-selected={activeTab === "world"}
+          class:active={activeTab === "world"}
+          >World changes{#if data.worldChanges.pages.length}<span class="count"
+              >{data.worldChanges.pages.length}</span
+            >{/if}</a
+        >
+      {/if}
       <a
         role="tab"
         href="?tab=transcript"
@@ -239,13 +251,23 @@
 
     <div role="tabpanel" hidden={activeTab !== "recap"}>
       {#if data.session.recapSections}
-        <SessionRecap recap={data.session.recapSections} />
+        <SessionRecap recap={data.session.recapSections} world={data.world} />
       {:else if data.session.recap}
         <div class="prose">{@html renderMarkdown(data.session.recap)}</div>
       {:else}
         <p class="empty">The bards have not yet composed this tale.</p>
       {/if}
     </div>
+
+    {#if data.worldChanges}
+      <div role="tabpanel" hidden={activeTab !== "world"}>
+        <WorldChanges
+          changes={data.worldChanges}
+          campaignId={data.session.campaignId}
+          sessionId={data.session.id}
+        />
+      </div>
+    {/if}
 
     <div role="tabpanel" hidden={activeTab !== "transcript"}>
       {#if transcriptTurns.length}
@@ -366,6 +388,26 @@
   .tabs a.active {
     color: var(--gold);
     border-bottom-color: var(--gold);
+  }
+  @media (max-width: 520px) {
+    .tabs {
+      gap: 0;
+    }
+    .tabs a {
+      padding: 0.5rem 0.5rem;
+      font-size: 0.88rem;
+      white-space: nowrap;
+    }
+  }
+  .count {
+    margin-left: 0.4rem;
+    padding: 0 0.45em;
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+    background: var(--surface-sunken);
+    border: 1px solid var(--edge);
+    border-radius: 999px;
   }
   .prose {
     line-height: 1.7;

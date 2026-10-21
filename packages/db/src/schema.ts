@@ -17,6 +17,7 @@ import { sql, type SQLWrapper } from "drizzle-orm";
 import { SESSION_ARTIFACT_KINDS, type SessionArtifactKind } from "./artifacts.ts";
 import {
   AUDIO_STATUSES,
+  WORLD_UPDATE_STATUSES,
   CAMPAIGN_MEMBER_ROLES,
   NOTIFICATION_STATUSES,
   PROCESSING_RUN_KINDS,
@@ -30,9 +31,17 @@ import {
   type ProcessingRunStatus,
   type SessionStatus,
   type TranscriptionStatus,
+  type WorldUpdateStatus,
 } from "./domain.ts";
 import type { SessionRecap } from "./session-notes.ts";
 import type { TranscriptSegment } from "./transcript.ts";
+import {
+  WORLD_PAGE_KINDS,
+  type WorldMoment,
+  type WorldPageContent,
+  type WorldPageKind,
+  type WorldUpdateReport,
+} from "./world.ts";
 
 function oneOf(column: SQLWrapper, values: readonly string[]) {
   const literals = values.map((value) => `'${value.replaceAll("'", "''")}'`).join(", ");
@@ -266,5 +275,115 @@ export const sessionSegments = pgTable(
       "session_segments_transcription_status_check",
       oneOf(t.transcriptionStatus, TRANSCRIPTION_STATUSES),
     ),
+  ],
+);
+
+// One wiki page in a campaign's world. Its content lives in revisions; the row
+// holds what does not change from session to session.
+export const worldPages = pgTable(
+  "world_pages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    campaignId: uuid("campaign_id")
+      .references(() => campaigns.id)
+      .notNull(),
+    slug: varchar("slug", { length: 100 }).notNull(),
+    kind: varchar("kind", { length: 20 }).$type<WorldPageKind>().notNull(),
+    // The player whose character this page describes.
+    memberUserId: varchar("member_user_id", { length: 20 }).references(() => users.id),
+    avatarId: uuid("avatar_id"),
+    createdInSessionId: varchar("created_in_session_id", { length: 30 })
+      .references(() => sessions.id)
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("world_pages_campaign_slug_unique").on(t.campaignId, t.slug),
+    check("world_pages_kind_check", oneOf(t.kind, WORLD_PAGE_KINDS)),
+  ],
+);
+
+// Immutable page content written by one session's world update. The page as of
+// session N is its newest revision from a session that started at or before N.
+export const worldPageRevisions = pgTable(
+  "world_page_revisions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    pageId: uuid("page_id")
+      .references(() => worldPages.id)
+      .notNull(),
+    sessionId: varchar("session_id", { length: 30 })
+      .references(() => sessions.id)
+      .notNull(),
+    content: jsonb("content").$type<WorldPageContent>().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("world_page_revisions_page_session_unique").on(t.pageId, t.sessionId),
+    index("world_page_revisions_session_idx").on(t.sessionId),
+  ],
+);
+
+// Every uploaded avatar is kept; world_pages.avatar_id names the one shown.
+export const worldPageAvatars = pgTable(
+  "world_page_avatars",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    pageId: uuid("page_id")
+      .references(() => worldPages.id)
+      .notNull(),
+    bucket: text("bucket").notNull(),
+    objectKey: text("object_key").notNull(),
+    contentType: varchar("content_type", { length: 100 }).notNull(),
+    byteSize: bigint("byte_size", { mode: "number" }).notNull(),
+    sha256: varchar("sha256", { length: 64 }).notNull(),
+    uploadedByUserId: varchar("uploaded_by_user_id", { length: 20 }).references(() => users.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("world_page_avatars_page_idx").on(t.pageId)],
+);
+
+// A recap epic moment featuring a page, copied so the page keeps it even if
+// the session's recap is regenerated later.
+export const worldPageMoments = pgTable(
+  "world_page_moments",
+  {
+    pageId: uuid("page_id")
+      .references(() => worldPages.id)
+      .notNull(),
+    sessionId: varchar("session_id", { length: 30 })
+      .references(() => sessions.id)
+      .notNull(),
+    position: integer("position").notNull(),
+    moment: jsonb("moment").$type<WorldMoment>().notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.pageId, t.sessionId, t.position] }),
+    index("world_page_moments_session_idx").on(t.sessionId),
+  ],
+);
+
+// The world update of one session. Sessions update the world oldest first, so
+// a row exists for every finished session up to the newest one processed.
+export const worldUpdates = pgTable(
+  "world_updates",
+  {
+    sessionId: varchar("session_id", { length: 30 })
+      .references(() => sessions.id)
+      .primaryKey(),
+    campaignId: uuid("campaign_id")
+      .references(() => campaigns.id)
+      .notNull(),
+    status: varchar("status", { length: 20 }).$type<WorldUpdateStatus>().notNull(),
+    attempts: integer("attempts").default(0).notNull(),
+    report: jsonb("report").$type<WorldUpdateReport>(),
+    error: text("error"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    index("world_updates_campaign_idx").on(t.campaignId),
+    check("world_updates_status_check", oneOf(t.status, WORLD_UPDATE_STATUSES)),
   ],
 );

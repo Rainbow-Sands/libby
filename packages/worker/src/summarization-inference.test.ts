@@ -1,7 +1,12 @@
 import { expect, test } from "vitest";
 import type { RecapSections, SessionLedger } from "@rainbot/db";
-import { createRecap, createSessionLedger, type CompleteObject } from "./record-pipeline.ts";
-import { RECAP_SYSTEM, SESSION_LEDGER_SYSTEM } from "./prompts.ts";
+import {
+  createRecap,
+  createSessionLedger,
+  createWorldUpdate,
+  type CompleteObject,
+} from "./record-pipeline.ts";
+import { RECAP_SYSTEM, SESSION_LEDGER_SYSTEM, WORLD_UPDATE_SYSTEM } from "./prompts.ts";
 import { loadSummarizationConfig } from "./summarization-inference.ts";
 
 test("loads a local summarization profile", () => {
@@ -96,6 +101,23 @@ test("ledger and recap each make one structured call with the earlier session's 
         stats: { durationSeconds: 0, speakers: [] },
       },
     },
+    world: [
+      {
+        id: "page-1",
+        slug: "magister-venn",
+        kind: "npc" as const,
+        content: {
+          version: 1 as const,
+          name: "Magister Venn",
+          aliases: ["Magistra Ven"],
+          status: "alive",
+          summary: "The former archivist of Hollowmere. He fled before the party arrived.",
+          facts: [],
+          holder: null,
+          related: [],
+        },
+      },
+    ],
   };
 
   expect(await createSessionLedger(material, complete)).toBe(ledger);
@@ -106,6 +128,9 @@ test("ledger and recap each make one structured call with the earlier session's 
     [RECAP_SYSTEM, "session_recap"],
   ]);
   expect(calls[0].prompt).toContain("Unresolved threads:\n- The Missing Keeper: Untouched.");
+  expect(calls[0].prompt).toContain(
+    "- Magister Venn [npc] (also heard as Magistra Ven): The former archivist of Hollowmere.",
+  );
   expect(calls[1].prompt).toContain('"leftOff": "At the cellar door."');
   expect(calls[1].prompt).toContain("Alice: hello");
   expect(recap.sections.recap).toBe("The party reached **Hollowmere**.");
@@ -113,4 +138,91 @@ test("ledger and recap each make one structured call with the earlier session's 
   expect(recap.sections.epicMoments[0].at).toBe("0:01:02");
   expect(recap.markdown).toContain("## Where we left off\n\nAt the cellar door.");
   expect(recap.markdown).toContain("- **The Missing Keeper** (Still open): Untouched.");
+});
+
+test("updates the world from the ledger and recap", async () => {
+  let call: { prompt: string; system: string; name: string } | null = null;
+  const complete: CompleteObject = async <T>(
+    prompt: string,
+    system: string,
+    _schema: unknown,
+    name: string,
+  ) => {
+    call = { prompt, system, name };
+    return {
+      pages: [
+        {
+          page: "magister-venn",
+          name: "Magister Venn",
+          kind: "npc",
+          aliases: [],
+          status: null,
+          newFacts: [{ text: "Sold the lantern.", at: "2:31" }],
+          supersededFacts: [],
+          holder: null,
+          related: [],
+          summary: "The former archivist.",
+        },
+      ],
+      possibleDuplicates: [],
+      nameCorrections: [],
+      epicMoments: [],
+    } as T;
+  };
+
+  const update = await createWorldUpdate(
+    {
+      world: [
+        {
+          id: "page-1",
+          slug: "magister-venn",
+          kind: "npc",
+          content: {
+            version: 1,
+            name: "Magister Venn",
+            aliases: [],
+            status: "alive",
+            summary: "The former archivist.",
+            facts: [
+              { id: 1, text: "Kept the archive.", sessionId: "s1", at: null, supersededIn: null },
+              { id: 2, text: "Drowned.", sessionId: "s1", at: null, supersededIn: "s2" },
+            ],
+            holder: null,
+            related: [],
+          },
+        },
+      ],
+      cast: [{ userId: "u1", username: "kit", characterName: "Ilsa" }],
+      ledger: {
+        events: [],
+        entities: [],
+        loot: [],
+        threads: [],
+        quotes: [],
+        rulings: [],
+        uncertainties: [],
+        leftOff: "At the abbey.",
+      },
+      recap: {
+        recap: "They sailed.",
+        leftOff: "At the abbey.",
+        openThreads: [],
+        loot: [],
+        epicMoments: [{ description: "Ilsa leapt.", quote: null, speaker: null, at: null }],
+        newFaces: [],
+        rulings: [],
+      },
+    },
+    complete,
+  );
+
+  expect(call).not.toBeNull();
+  const { prompt, system, name } = call!;
+  expect([system, name]).toEqual([WORLD_UPDATE_SYSTEM, "world_update"]);
+  expect(prompt).toContain("[magister-venn] Magister Venn (npc, alive)");
+  expect(prompt).toContain("#1 Kept the archive.");
+  expect(prompt).not.toContain("Drowned.");
+  expect(prompt).toContain("- Ilsa, played by kit");
+  expect(prompt).toContain('"index": 0');
+  expect(update.pages[0].newFacts[0].at).toBe("0:02:31");
 });

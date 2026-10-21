@@ -5,7 +5,12 @@ import { UnrecoverableTaskError } from "./errors.ts";
 import { SUMMARIZATION_CONFIG, TRANSCRIPTION_MODEL, TRANSCRIPTION_URL } from "./env.ts";
 import { TITLE_SYSTEM } from "./prompts.ts";
 import { stripCodeFence, normalizeTitle } from "./text.ts";
-import { createRecap, createSessionLedger, type SessionMaterial } from "./record-pipeline.ts";
+import {
+  createRecap,
+  createSessionLedger,
+  createWorldUpdate,
+  type SessionMaterial,
+} from "./record-pipeline.ts";
 import {
   createStructuredSummarizationInference,
   createSummarizationInference,
@@ -14,13 +19,17 @@ import {
   formatTranscriptForInference,
   getCampaignCast,
   getPreviousSessionNotes,
+  getWorldBeforeSession,
+  getWorldState,
   transcriptTableStats,
   type AudioSegmentRef,
   type CampaignCastMember,
+  type RecapSections,
   type SessionLedger,
   type SessionRecap,
   type Transcript,
   type TranscriptSegment,
+  type WorldUpdate,
 } from "@rainbot/db";
 
 interface WhisperResponse {
@@ -190,12 +199,13 @@ async function sessionMaterial(
   campaignId: string,
   sessionId: string,
 ): Promise<SessionInferenceInput> {
-  const [cast, previous] = await Promise.all([
+  const [cast, previous, world] = await Promise.all([
     getCampaignCast(campaignId),
     getPreviousSessionNotes(sessionId),
+    getWorldBeforeSession(campaignId, sessionId),
   ]);
   return {
-    material: { transcript: formatTranscriptForInference(transcript, cast), previous },
+    material: { transcript: formatTranscriptForInference(transcript, cast), previous, world },
     cast,
   };
 }
@@ -225,4 +235,19 @@ export async function recap(
     markdown,
     recap: { version: 1, sections, stats: transcriptTableStats(transcript, input.cast) },
   };
+}
+
+// Sessions update the world in order, so the current world is the one the
+// previous session left.
+export async function updateWorld(
+  campaignId: string,
+  ledger: SessionLedger,
+  recapSections: RecapSections | null,
+): Promise<{ update: WorldUpdate; cast: CampaignCastMember[] }> {
+  const [cast, world] = await Promise.all([getCampaignCast(campaignId), getWorldState(campaignId)]);
+  const update = await createWorldUpdate(
+    { world, cast, ledger, recap: recapSections },
+    inferenceCompleteObject,
+  );
+  return { update, cast };
 }
