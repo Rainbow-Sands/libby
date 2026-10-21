@@ -149,6 +149,12 @@ export const worldUpdateSchema = z.object({
         related: z
           .array(z.string())
           .describe("Names of other pages closely tied to it, such as a faction or a quest's NPCs"),
+        openThreads: z
+          .array(z.number().int())
+          .describe("Indexes of the recap's openThreads that this quest page tracks"),
+        newFaces: z
+          .array(z.number().int())
+          .describe("Indexes of the recap's newFaces that are this page"),
         summary: z
           .string()
           .describe("Two or three sentences describing it as of the end of this session"),
@@ -214,11 +220,14 @@ export interface WorldUpdatePlan {
 // caller can recompute it inside the transaction that writes the result.
 // Model output names pages loosely, so every reference resolves through the
 // page's slug, name or any alias, and anything unknown becomes a new page.
+// The parts of a session's recap the world update refers to by index.
+export type WorldRecap = Pick<RecapSections, "epicMoments" | "openThreads" | "newFaces">;
+
 export function planWorldUpdate(
   existing: WorldPageState[],
   update: WorldUpdate,
   sessionId: string,
-  epicMoments: RecapSections["epicMoments"],
+  recap: WorldRecap,
 ): WorldUpdatePlan {
   const bySlug = new Map<string, PlannedPage>();
   const byName = new Map<string, PlannedPage>();
@@ -254,10 +263,16 @@ export function planWorldUpdate(
   for (const entry of update.pages) {
     const name = entry.name.trim();
     if (!name) continue;
+    // The session page links the recap's open threads and new faces by exact
+    // name, so their wording always becomes one of the page's names.
+    const recapNames = [
+      ...entry.openThreads.map((i) => recap.openThreads[i]?.title),
+      ...entry.newFaces.map((i) => recap.newFaces[i]?.name),
+    ].filter((recapName): recapName is string => Boolean(recapName?.trim()));
     let page =
       resolve(entry.page) ??
       resolve(name) ??
-      entry.aliases.map((alias) => resolve(alias)).find(Boolean);
+      [...entry.aliases, ...recapNames].map((alias) => resolve(alias)).find(Boolean);
     const before = page ? JSON.stringify(page.content) : null;
 
     if (!page) {
@@ -286,7 +301,10 @@ export function planWorldUpdate(
       content.name = name;
       content.aliases = uniqueNames([previous, ...content.aliases], name);
     }
-    content.aliases = uniqueNames([...content.aliases, ...entry.aliases], content.name);
+    content.aliases = uniqueNames(
+      [...content.aliases, ...entry.aliases, ...recapNames],
+      content.name,
+    );
 
     const status = entry.status?.trim().toLowerCase();
     if (status) content.status = status;
@@ -328,7 +346,7 @@ export function planWorldUpdate(
 
   const moments: WorldUpdatePlan["moments"] = [];
   for (const tag of update.epicMoments) {
-    const moment = epicMoments[tag.moment];
+    const moment = recap.epicMoments[tag.moment];
     if (!moment) continue;
     const slugs = new Set(
       tag.pages.map((name) => resolve(name)?.slug).filter((slug) => slug !== undefined),

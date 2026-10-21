@@ -174,6 +174,7 @@ export {
   type WorldPageDiff,
   type WorldPageKind,
   type WorldPageState,
+  type WorldRecap,
   type WorldUpdate,
   type WorldUpdatePlan,
   type WorldUpdateReport,

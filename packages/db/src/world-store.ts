@@ -40,6 +40,7 @@ import {
   type WorldPageKind,
   type WorldPageState,
   type WorldUpdate,
+  type WorldRecap,
   type WorldUpdateReport,
 } from "./world.ts";
 import type { WorldUpdateStatus } from "./domain.ts";
@@ -346,7 +347,7 @@ export async function recordWorldUpdate(
   campaignId: string,
   sessionId: string,
   update: WorldUpdate,
-  epicMoments: RecapSections["epicMoments"],
+  recap: WorldRecap,
   cast: CampaignCastMember[],
 ): Promise<boolean> {
   return db.transaction(async (tx) => {
@@ -360,7 +361,7 @@ export async function recordWorldUpdate(
     const pageIds = new Map(existing.map((page) => [page.slug, page.id]));
     const before = new Map(existing.map((page) => [page.slug, page.content]));
     const changes: StoredWorldPageChange[] = [];
-    const plan = planWorldUpdate(existing, update, sessionId, epicMoments);
+    const plan = planWorldUpdate(existing, update, sessionId, recap);
 
     // Each kind of write is one statement for all pages, not one per page.
     const newPages = plan.pages.filter((page) => !pageIds.has(page.slug));
