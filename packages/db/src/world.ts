@@ -228,10 +228,21 @@ export function planWorldUpdate(
       ...entry.openThreads.map((i) => recap.openThreads[i]?.title),
       ...entry.newFaces.map((i) => recap.newFaces[i]?.name),
     ].filter((recapName): recapName is string => Boolean(recapName?.trim()));
-    let page =
-      resolve(entry.page) ??
-      resolve(name) ??
-      [...entry.aliases, ...recapNames].map((alias) => resolve(alias)).find(Boolean);
+    // A quest is never the same page as the person or place it is about, even
+    // when it is named after them or the model points it at their slug.
+    const sameKind = (candidate: PlannedPage | undefined) =>
+      candidate !== undefined && (candidate.kind === "quest") === (entry.kind === "quest");
+    let page = [
+      resolve(entry.page),
+      resolve(name),
+      ...[...entry.aliases, ...recapNames].map(resolve),
+    ].find(sameKind);
+    // Names that already belong to another page stay with it.
+    const ownNames = (names: string[]) =>
+      names.filter((alias) => {
+        const owner = resolve(alias);
+        return !owner || owner === page;
+      });
     const before = page ? JSON.stringify(page.content) : null;
 
     if (!page) {
@@ -253,6 +264,7 @@ export function planWorldUpdate(
     }
 
     const content = page.content;
+    const aliases = ownNames([...entry.aliases, ...recapNames]);
     // Capitalization and articles vary from mention to mention; only a
     // different spelling renames the page.
     if (nameKey(name) !== nameKey(content.name)) {
@@ -260,10 +272,7 @@ export function planWorldUpdate(
       content.name = name;
       content.aliases = uniqueNames([previous, ...content.aliases], name);
     }
-    content.aliases = uniqueNames(
-      [...content.aliases, ...entry.aliases, ...recapNames],
-      content.name,
-    );
+    content.aliases = uniqueNames([...content.aliases, ...aliases], content.name);
 
     const status = entry.status?.trim().toLowerCase();
     if (status) content.status = status;
