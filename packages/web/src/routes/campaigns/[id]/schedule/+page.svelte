@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Breadcrumbs from "$lib/components/Breadcrumbs.svelte";
   import { onMount, untrack } from "svelte";
   import type { ActionData, PageData } from "./$types";
 
@@ -40,7 +41,12 @@
 
 <svelte:head><title>Session schedule — {data.campaign.name}</title></svelte:head>
 
-<p><a href="/campaigns/{data.campaign.id}">← {data.campaign.name}</a></p>
+<Breadcrumbs
+  items={[
+    { label: data.campaign.name, href: `/campaigns/${data.campaign.id}` },
+    { label: "Schedule" },
+  ]}
+/>
 
 <div class="panel">
   <p class="eyebrow">{data.campaign.name}</p>

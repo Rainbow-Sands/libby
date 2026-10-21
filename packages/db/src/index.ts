@@ -54,6 +54,11 @@ export {
   type AddCampaignMemberInput,
 } from "./campaigns.ts";
 export {
+  getCampaignName,
+  getCampaignSessionStats,
+  type CampaignSessionStats,
+} from "./campaign-overview.ts";
+export {
   getCampaignsForGuild,
   getCampaignsForUser,
   listCampaigns,

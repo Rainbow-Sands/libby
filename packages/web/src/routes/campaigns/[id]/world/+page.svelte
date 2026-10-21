@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { WorldPageKind } from "@rainbot/db";
   import { page } from "$app/state";
+  import Breadcrumbs from "$lib/components/Breadcrumbs.svelte";
   import TaperedRule from "$lib/components/TaperedRule.svelte";
   import WorldAvatar from "$lib/components/WorldAvatar.svelte";
   import { KIND_LABELS, KIND_PLURALS, avatarHref, worldPageHref } from "$lib/world";
@@ -74,7 +75,9 @@
 
 <svelte:head><title>World — {data.campaign.name}</title></svelte:head>
 
-<p><a href="/campaigns/{data.campaign.id}">← Campaign</a></p>
+<Breadcrumbs
+  items={[{ label: data.campaign.name, href: `/campaigns/${data.campaign.id}` }, { label: "World" }]}
+/>
 
 <div class="panel">
   <p class="eyebrow">World{#if data.latestSession}&nbsp;· as of Session {data.latestSession}{/if}</p>
@@ -87,36 +90,42 @@
       finishes.
     </p>
   {:else}
-    <nav class="kinds" aria-label="Kinds of page">
-      {#each kinds as kind (kind)}
-        <a href="?kind={kind}" class:on={!needle && kind === activeKind} aria-current={!needle && kind === activeKind ? "page" : undefined}
-          >{KIND_PLURALS[kind]} <span>{counts.get(kind)}</span></a
-        >
-      {/each}
-    </nav>
+    <div class="toolbar">
+      <nav class="kinds" aria-label="Kinds of page">
+        {#each kinds as kind (kind)}
+          <a href="?kind={kind}" class:on={!needle && kind === activeKind} aria-current={!needle && kind === activeKind ? "page" : undefined}
+            >{KIND_PLURALS[kind]} <span>{counts.get(kind)}</span></a
+          >
+        {/each}
+      </nav>
 
-    <input
-      class="search"
-      type="search"
-      placeholder="Search names and aliases…"
-      aria-label="Search names and aliases"
-      bind:value={query}
-    />
+      <input
+        class="search"
+        type="search"
+        placeholder="Search names and aliases…"
+        aria-label="Search names and aliases"
+        bind:value={query}
+      />
+    </div>
 
     {#snippet row(p: IndexPage, showKind: boolean)}
       <li>
-        <WorldAvatar
-          src={avatarHref(data.campaign.id, p.avatarId)}
-          name={p.name}
-          kind={p.kind}
-          size="md"
-        />
-        <span class="text">
-          <a href={worldPageHref(data.campaign.id, p.slug)}>{p.name}</a>
-          {#if showKind}<span class="kind">{KIND_LABELS[p.kind]}</span>{/if}
-          {#if p.line}<span class="sub">{p.line}</span>{/if}
-        </span>
-        <span class="meta">{meta(p)}</span>
+        <a class="entry" href={worldPageHref(data.campaign.id, p.slug)}>
+          <WorldAvatar
+            src={avatarHref(data.campaign.id, p.avatarId)}
+            name={p.name}
+            kind={p.kind}
+            size="md"
+          />
+          <span class="text">
+            <span class="head">
+              <b>{p.name}</b>
+              {#if showKind}<span class="kind">{KIND_LABELS[p.kind]}</span>{/if}
+              <span class="meta">{meta(p)}</span>
+            </span>
+            {#if p.line}<span class="sub">{p.line}</span>{/if}
+          </span>
+        </a>
       </li>
     {/snippet}
 
@@ -165,11 +174,18 @@
 </div>
 
 <style>
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.1rem;
+  }
   .kinds {
     display: flex;
     flex-wrap: wrap;
     gap: 0.4rem;
-    margin-bottom: 0.8rem;
   }
   .kinds a {
     padding: 0.2rem 0.75rem;
@@ -184,7 +200,7 @@
     color: var(--ink-soft);
   }
   .kinds a.on {
-    color: var(--surface);
+    color: #fbf4e3;
     background: var(--accent);
     border-color: var(--accent);
   }
@@ -196,38 +212,55 @@
     text-decoration: none;
   }
   .search {
-    width: 100%;
-    margin-bottom: 0.5rem;
-    padding: 0.5rem 0.75rem;
+    flex: 0 1 17rem;
+    min-width: 12rem;
+    padding: 0.45rem 0.75rem;
     font: inherit;
     font-size: 1rem;
     color: var(--ink);
     background: var(--surface-sunken);
     border: 1px solid var(--edge);
-    border-radius: 4px;
+    border-radius: 6px;
   }
   .rows {
     display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+    gap: 0.6rem;
     margin: 0;
     padding: 0;
     list-style: none;
   }
   .rows li {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    gap: 0.75rem;
-    align-items: center;
-    padding: 0.55rem 0;
-    border-bottom: 1px solid var(--edge);
   }
-  .rows li:last-child {
-    border-bottom: 0;
+  .entry {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.8rem;
+    align-items: start;
+    padding: 0.75rem 0.9rem;
+    color: var(--ink);
+    background: var(--surface-sunken);
+    border: 1px solid var(--edge);
+    border-radius: 8px;
   }
-  .text a {
+  .entry:hover {
+    color: var(--ink);
+    text-decoration: none;
+    border-color: var(--gold);
+  }
+  .head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.1rem 0.5rem;
+    align-items: baseline;
+  }
+  .head b {
+    font-family: var(--font-display);
     font-weight: 600;
+    color: var(--link);
   }
   .kind {
-    margin-left: 0.4rem;
     font-family: var(--font-display);
     font-size: 0.62rem;
     letter-spacing: 0.08em;
@@ -241,6 +274,7 @@
     color: var(--ink-soft);
   }
   .meta {
+    margin-left: auto;
     font-size: 0.82rem;
     white-space: nowrap;
     color: var(--ink-soft);
@@ -273,7 +307,7 @@
     color: var(--ink);
     background: var(--surface-sunken);
     border: 1px solid var(--edge);
-    border-radius: 4px;
+    border-radius: 8px;
   }
   .card:hover {
     text-decoration: none;
@@ -295,12 +329,6 @@
   @media (max-width: 680px) {
     .board {
       grid-template-columns: 1fr;
-    }
-    .rows li {
-      grid-template-columns: auto minmax(0, 1fr);
-    }
-    .rows .meta {
-      display: none;
     }
   }
 </style>
