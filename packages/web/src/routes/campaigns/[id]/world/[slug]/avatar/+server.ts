@@ -38,10 +38,11 @@ async function editablePage({ params, locals, request, url }: RequestEvent) {
   const origin = request.headers.get("origin");
   if (origin && origin !== url.origin) throw error(403, "Cross-site requests are not allowed.");
 
-  const access = await getCampaignAccess(params.id, locals.user.id);
+  const [access, page] = await Promise.all([
+    getCampaignAccess(params.id, locals.user.id),
+    getWorldPageRef(params.id, params.slug),
+  ]);
   if (!access.canAccess) throw error(403, "You cannot edit this campaign.");
-
-  const page = await getWorldPageRef(params.id, params.slug);
   if (!page) throw error(404, "There is no such page in this world.");
   return { page, userId: locals.user.id };
 }

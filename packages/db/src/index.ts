@@ -2,6 +2,7 @@ export {
   JOB_QUEUES,
   enqueueCampaignBackfill,
   enqueueJob,
+  enqueueJobs,
   enqueueWorldUpdate,
   startJobQueue,
   stopJobQueue,

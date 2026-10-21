@@ -34,12 +34,14 @@ function wait(milliseconds: number, signal: AbortSignal): Promise<void> {
 export const GET: RequestHandler = async ({ params, locals, request }) => {
   if (!locals.user) throw error(401, "Please log in to view this transcript.");
 
-  const session = await getSessionDetail(params.sessionId);
+  const [session, access, cast] = await Promise.all([
+    getSessionDetail(params.sessionId),
+    getCampaignAccess(params.id, locals.user.id),
+    getCampaignCast(params.id),
+  ]);
   if (!session || session.campaignId !== params.id) throw error(404, "Session not found.");
-  const access = await getCampaignAccess(session.campaignId, locals.user.id);
   if (!access.canAccess) throw error(403, "You cannot view this campaign.");
 
-  const cast = await getCampaignCast(session.campaignId);
   const characterByUserId = new Map(cast.map((member) => [member.userId, member.characterName]));
 
   let cancelled = false;

@@ -208,6 +208,28 @@ export async function enqueueJob(
   }
 }
 
+// Many jobs in one statement, for loops that would otherwise enqueue one at a
+// time. A job whose id already exists is skipped, as with enqueueJob.
+export async function enqueueJobs(
+  tx: DrizzleTransactionLike,
+  name: typeof JOB_QUEUES.transcribeSegment,
+  jobs: { id: string; data: TranscribeSegmentJob }[],
+): Promise<void>;
+export async function enqueueJobs(
+  tx: DrizzleTransactionLike,
+  name: typeof JOB_QUEUES.advanceProcessingRun,
+  jobs: { id: string; data: AdvanceProcessingRunJob }[],
+): Promise<void>;
+export async function enqueueJobs(
+  tx: DrizzleTransactionLike,
+  name: string,
+  jobs: { id: string; data: object }[],
+): Promise<void> {
+  if (jobs.length === 0) return;
+  const instance = await startJobQueue();
+  await instance.insert(name, jobs, { db: fromDrizzle(tx, sql) });
+}
+
 // Backfill jobs are not tied to application rows, so they are sent outside a
 // transaction and deduplicated per campaign by the queue policy instead.
 export async function enqueueCampaignBackfill(

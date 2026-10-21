@@ -11,10 +11,11 @@ export const GET: RequestHandler = async ({ params, locals }) => {
   if (!locals.user) throw error(401, "Please log in to view avatars.");
   if (!UUID.test(params.avatarId)) throw error(404, "Avatar not found.");
 
-  const access = await getCampaignAccess(params.id, locals.user.id);
+  const [access, avatar] = await Promise.all([
+    getCampaignAccess(params.id, locals.user.id),
+    getWorldAvatar(params.id, params.avatarId),
+  ]);
   if (!access.canAccess) throw error(403, "You cannot view this campaign.");
-
-  const avatar = await getWorldAvatar(params.id, params.avatarId);
   if (!avatar) throw error(404, "Avatar not found.");
 
   const bytes = await getArtifactStorage().downloadBytes(avatar.objectKey, avatar.bucket);

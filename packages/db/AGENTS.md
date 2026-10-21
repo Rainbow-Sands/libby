@@ -46,6 +46,17 @@ the env var at module load would break `vite build` (where `DATABASE_URL` is
 absent). **Do not read `DATABASE_URL` at import time** or add top-level DB
 connections.
 
+## Count round trips
+
+Production's database is in another region, so every query costs a network
+round trip (each parameterized query takes two, and a transaction adds BEGIN
+and COMMIT). Never query inside a loop: write many rows with one multi-row
+statement (`excluded.<column>` in `onConflictDoUpdate`, `returning` for
+generated ids) and enqueue many jobs with `enqueueJobs`. Run independent reads
+with `Promise.all`, and bound a read by a subquery (`throughSession`) rather
+than reading the bound first. Recording only starts once
+`registerRecordingSegment` returns, so it stays a single statement.
+
 ## Migrations
 
 Workflow after any change to `schema.ts`:

@@ -50,9 +50,8 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
   if (!locals.user) {
     throw redirect(303, `/auth/login?returnTo=${encodeURIComponent(url.pathname)}`);
   }
-  await requireScheduleAccess(params.id, locals.user.id);
-
-  const [campaign, reminder, rotation] = await Promise.all([
+  const [, campaign, reminder, rotation] = await Promise.all([
+    requireScheduleAccess(params.id, locals.user.id),
     getCampaignDetail(params.id),
     getCampaignReminder(params.id),
     getRecapRotation(params.id),

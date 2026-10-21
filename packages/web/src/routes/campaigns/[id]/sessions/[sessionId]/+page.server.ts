@@ -32,7 +32,22 @@ function recapExcerpt(recap: string | null): string {
 }
 
 export const load: PageServerLoad = async ({ params, locals, url }) => {
-  const session = await getSessionDetail(params.sessionId);
+  // Each tab is its own load, so only the open tab's data is read. Everything
+  // that does not depend on the session row loads alongside it; nothing is
+  // returned unless the session and access checks pass.
+  const user = locals.user;
+  const tab = url.searchParams.get("tab");
+  const [session, access, worldPages, worldChanges, worldChangeCount, cast] = await Promise.all([
+    getSessionDetail(params.sessionId),
+    user ? getCampaignAccess(params.id, user.id) : null,
+    // Only the recap tab links names to pages.
+    user && tab !== "transcript" && tab !== "world"
+      ? getWorldSummary(params.id, { throughSession: params.sessionId })
+      : [],
+    user && tab === "world" ? getSessionWorldChanges(params.sessionId) : null,
+    user ? countSessionWorldChanges(params.sessionId) : null,
+    user && tab === "transcript" ? getCampaignCast(params.id) : null,
+  ]);
   if (!session || session.campaignId !== params.id) {
     throw error(404, "Session not found.");
   }
@@ -42,7 +57,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
     description: recapExcerpt(session.recap),
   };
 
-  if (!locals.user) {
+  if (!access) {
     return {
       session: {
         id: session.id,
@@ -65,28 +80,15 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
       preview,
     };
   }
-
-  // Each tab is its own load, so only the open tab's data is read. The world
-  // loads alongside the access check; nothing is returned unless it passes.
-  const tab = url.searchParams.get("tab");
-  const [access, worldPages, worldChanges, worldChangeCount] = await Promise.all([
-    getCampaignAccess(session.campaignId, locals.user.id),
-    // Only the recap tab links names to pages.
-    tab === "transcript" || tab === "world"
-      ? []
-      : getWorldSummary(session.campaignId, { through: session.startedAt }),
-    tab === "world" ? getSessionWorldChanges(session.id) : null,
-    countSessionWorldChanges(session.id),
-  ]);
   if (!access.canAccess) throw error(403, "You cannot view this campaign.");
 
-  const transcript =
+  const [transcript, failedTranscriptions] = await Promise.all([
     tab === "transcript" && session.transcriptArtifact
-      ? await loadTranscriptArtifact(session.transcriptArtifact)
-      : null;
-  const transcriptTurns = transcript
-    ? formatTranscriptForDisplay(transcript, await getCampaignCast(session.campaignId))
-    : null;
+      ? loadTranscriptArtifact(session.transcriptArtifact)
+      : null,
+    access.isAdmin && session.status === "failed" ? countFailedTranscriptions(session.id) : 0,
+  ]);
+  const transcriptTurns = transcript && cast ? formatTranscriptForDisplay(transcript, cast) : null;
 
   return {
     session: { ...session, transcript },
@@ -101,10 +103,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
     hasTranscript: Boolean(session.transcriptArtifact),
     canViewDetails: true,
     canRegenerate: access.isAdmin,
-    failedTranscriptions:
-      access.isAdmin && session.status === "failed"
-        ? await countFailedTranscriptions(session.id)
-        : 0,
+    failedTranscriptions,
     preview,
   };
 };
@@ -113,12 +112,15 @@ export const actions: Actions = {
   regenerate: async ({ params, locals }) => {
     if (!locals.user) throw error(401, "Please log in to regenerate this session.");
 
-    const session = await getSessionDetail(params.sessionId);
+    const [session, admin] = await Promise.all([
+      getSessionDetail(params.sessionId),
+      isAdmin(locals.user.id),
+    ]);
     if (!session || session.campaignId !== params.id) {
       throw error(404, "Session not found.");
     }
 
-    if (!(await isAdmin(locals.user.id))) {
+    if (!admin) {
       throw error(403, "Only administrators can regenerate session inference.");
     }
     if (!session.transcriptArtifact) {
@@ -145,12 +147,15 @@ export const actions: Actions = {
   regenerateTranscript: async ({ params, locals }) => {
     if (!locals.user) throw error(401, "Please log in to regenerate this transcript.");
 
-    const session = await getSessionDetail(params.sessionId);
+    const [session, admin] = await Promise.all([
+      getSessionDetail(params.sessionId),
+      isAdmin(locals.user.id),
+    ]);
     if (!session || session.campaignId !== params.id) {
       throw error(404, "Session not found.");
     }
 
-    if (!(await isAdmin(locals.user.id))) {
+    if (!admin) {
       throw error(403, "Only administrators can regenerate session transcripts.");
     }
     if (["recording", "transcribing", "summarizing"].includes(session.status)) {
@@ -174,12 +179,15 @@ export const actions: Actions = {
   retryFailedTranscriptions: async ({ params, locals }) => {
     if (!locals.user) throw error(401, "Please log in to retry failed transcriptions.");
 
-    const session = await getSessionDetail(params.sessionId);
+    const [session, admin] = await Promise.all([
+      getSessionDetail(params.sessionId),
+      isAdmin(locals.user.id),
+    ]);
     if (!session || session.campaignId !== params.id) {
       throw error(404, "Session not found.");
     }
 
-    if (!(await isAdmin(locals.user.id))) {
+    if (!admin) {
       throw error(403, "Only administrators can retry failed transcriptions.");
     }
     if (session.status !== "failed") {
