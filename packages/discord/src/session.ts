@@ -31,6 +31,8 @@ const SILENT_FRAME = Buffer.alloc(FRAME_SIZE * CHANNELS * 2);
 const MIN_CLIP_BYTES = 1024;
 
 interface ActiveActivation extends FinalizableActivation {
+  // Settles once the clip stops receiving audio, before it is finalized.
+  listening: Promise<void>;
   completed: Promise<void>;
 }
 
@@ -54,6 +56,9 @@ function startActivation(
   const audioStream = connection.receiver.subscribe(ref.userId, {
     end: { behavior: EndBehaviorType.AfterSilence, duration: 2000 },
   });
+  // The receiver drops this user's subscription when the stream closes, so a
+  // new activation can subscribe from then on.
+  const listening = new Promise<void>((resolve) => audioStream.once("close", () => resolve()));
 
   const ffmpegProcess = spawn("ffmpeg", [
     "-f",
@@ -177,7 +182,7 @@ function startActivation(
     }
   });
 
-  return { completed, finish };
+  return { listening, completed, finish };
 }
 
 export function attachRecordingSession(
@@ -201,9 +206,11 @@ export function attachRecordingSession(
 
   let segmentCounter = initialSegmentCount;
   let ending: Promise<void> | null = null;
-  const activeActivations = new Map<string, ActiveActivation>();
-  const startingActivations = new Set<Promise<void>>();
-  const startingUsers = new Set<string>();
+  // Activations still receiving audio, by user, and every activation that has
+  // not finished uploading yet.
+  const listening = new Map<string, ActiveActivation>();
+  const activeActivations = new Set<ActiveActivation>();
+  const registrations = new Set<Promise<boolean>>();
 
   const endSession = (): Promise<void> => {
     if (ending) return ending;
@@ -213,7 +220,7 @@ export function attachRecordingSession(
       client.off(Events.VoiceStateUpdate, voiceStateHandler);
       connection.receiver.speaking.off("start", speakingStartHandler);
 
-      await Promise.allSettled(startingActivations);
+      await Promise.allSettled(registrations);
       await beginSessionShutdown(sessionId, runId);
       await finishActiveActivations(activeActivations.values());
 
@@ -251,9 +258,12 @@ export function attachRecordingSession(
     end: endSession,
   });
 
+  // The receiver emits "start" while handling the user's first packet, before
+  // it hands that packet to subscribers, so subscribing here synchronously
+  // records from the first packet. The clip is registered in Postgres
+  // alongside the recording rather than before it.
   const speakingStartHandler = (userId: string) => {
-    if (ending || activeActivations.has(userId) || startingUsers.has(userId)) return;
-    startingUsers.add(userId);
+    if (ending || listening.has(userId)) return;
 
     const segmentId = randomUUID();
     segmentCounter++;
@@ -270,29 +280,42 @@ export function attachRecordingSession(
       userId,
       username,
     };
-    const starting = (async () => {
-      await registerAudioSegment(sessionId, runId, ref);
-      const activation = startActivation(
-        sessionDir,
-        ref,
-        connection,
-        () => completeAudioSegment(sessionId, runId, path.join(sessionDir, ref.audioFile), ref),
-        (reason) => discardAudioSegment(sessionId, runId, segmentId, reason),
-      );
-      activeActivations.set(userId, activation);
-      void activation.completed.finally(() => {
-        if (activeActivations.get(userId) === activation) {
-          activeActivations.delete(userId);
-        }
-      });
-    })();
-    startingActivations.add(starting);
-    void starting
-      .catch((error) => console.error(`[session] could not start segment ${segmentId}:`, error))
-      .finally(() => {
-        startingActivations.delete(starting);
-        startingUsers.delete(userId);
-      });
+    const clipPath = path.join(sessionDir, ref.audioFile);
+    const registered = registerAudioSegment(sessionId, runId, ref).then(
+      () => true,
+      (error: unknown) => {
+        console.error(`[session] could not register segment ${segmentId}:`, error);
+        return false;
+      },
+    );
+    registrations.add(registered);
+    void registered.finally(() => registrations.delete(registered));
+
+    // A clip that was never registered is unknown to the session, so its
+    // file is dropped instead of uploaded.
+    const activation = startActivation(
+      sessionDir,
+      ref,
+      connection,
+      async () => {
+        if (await registered) await completeAudioSegment(sessionId, runId, clipPath, ref);
+        else await rm(clipPath, { force: true });
+      },
+      async (reason) => {
+        if (await registered) await discardAudioSegment(sessionId, runId, segmentId, reason);
+        else await rm(clipPath, { force: true });
+      },
+    );
+    listening.set(userId, activation);
+    activeActivations.add(activation);
+    void activation.listening.finally(() => {
+      if (listening.get(userId) === activation) listening.delete(userId);
+    });
+    void activation.completed.finally(() => activeActivations.delete(activation));
+    // A session that stopped accepting audio records no more of this clip.
+    void registered.then((accepted) => {
+      if (!accepted) void activation.finish();
+    });
   };
 
   connection.receiver.speaking.on("start", speakingStartHandler);
