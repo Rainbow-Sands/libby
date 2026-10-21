@@ -30,7 +30,9 @@ Drizzle ORM schema, Postgres client, and all shared queries. See the root
 - `world-links.ts` — name matching and text linking. Free of database
   imports and exported as `@rainbot/db/world-links` so browser code can use it.
 - `world-store.ts` — world reads (snapshots as of a session, page detail,
-  a session's changes), the ordered world update step, and avatars.
+  a session's changes), the ordered world update step, and avatars. Pages
+  that only list or link world pages use `getWorldSummary`, which leaves out
+  facts; `getWorldState` reads whole revisions and is for prompts.
 - `transcript.ts` — the `Transcript`/`TranscriptSegment` JSON shape stored in
   transcript artifacts, plus display and inference formatting transforms.
 - `index.ts` — the package's **public API**. Export anything other packages need

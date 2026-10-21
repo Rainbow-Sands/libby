@@ -185,6 +185,7 @@ export {
 } from "./world-links.ts";
 export {
   clearWorldPageAvatar,
+  countSessionWorldChanges,
   getSessionWorldChanges,
   getWorldAsOfSession,
   getWorldAvatar,
@@ -192,6 +193,7 @@ export {
   getWorldPage,
   getWorldPageRef,
   getWorldState,
+  getWorldSummary,
   listWorldSessions,
   markWorldUpdateSkipped,
   nextWorldStep,
@@ -206,7 +208,9 @@ export {
   type WorldPageLink,
   type WorldPageMention,
   type WorldPageRevisionSummary,
+  type WorldPageHeader,
   type WorldPageSnapshot,
+  type WorldPageSummary,
   type WorldSession,
   type WorldStep,
 } from "./world-store.ts";
