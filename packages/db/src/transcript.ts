@@ -1,3 +1,5 @@
+import { formatElapsed, type TableStats } from "./session-notes.ts";
+
 // One recorded audio clip, transcribed. We keep everything the transcription
 // server gave us (under `whisper`) alongside the fields the pipeline actually
 // uses, so future formatting improvements can re-derive better output from the
@@ -190,22 +192,62 @@ export function formatTranscriptForDisplay(
 }
 
 // Preserve utterance-level speaker boundaries and chronological ordering for
-// inference, but omit timestamp strings to reduce context usage. Whisper's
-// timestamps are used only while ordering the lines; the stored transcript
-// remains the lossless source for display and future formatting improvements.
+// inference. Instead of a timestamp on every line, a "[h:mm:ss]" marker of
+// elapsed time since the first utterance opens each new minute, so the model
+// can cite where something happened without much extra context. The stored
+// transcript remains the lossless source for display and future formatting
+// improvements.
 export function formatTranscriptForInference(transcript: Transcript, cast: CastMember[]): string {
-  const utterances = orderedUtterances(transcript);
+  const utterances = orderedUtterances(transcript).filter((utterance) => utterance.text.trim());
   const labelByUserId = new Map<string, string>();
+  const startMs = utterances.length > 0 ? new Date(utterances[0].timestamp).getTime() : NaN;
+  let lastMinute = -1;
 
   const lines = utterances.flatMap((utterance) => {
-    const text = utterance.text.trim();
-    if (!text) return [];
     const name = utterance.username ?? utterance.userId;
     if (!labelByUserId.has(utterance.userId)) labelByUserId.set(utterance.userId, name);
-    return [`${name}: ${text}`];
+    const line = `${name}: ${utterance.text.trim()}`;
+
+    const elapsedMs = new Date(utterance.timestamp).getTime() - startMs;
+    const minute = Number.isNaN(elapsedMs)
+      ? lastMinute
+      : Math.floor(Math.max(0, elapsedMs) / 60_000);
+    if (minute <= lastMinute) return [line];
+    lastMinute = minute;
+    return [`[${formatElapsed(minute * 60)}]`, line];
   });
 
   return buildCastLegend(cast, labelByUserId) + lines.join("\n") + "\n";
+}
+
+// Session length and how much each voice spoke, for the recap's table stats.
+// Word counts are a robust stand-in for talk time: Whisper's sub-segment end
+// times include trailing silence, while words reflect who actually spoke.
+export function transcriptTableStats(transcript: Transcript, cast: CastMember[]): TableStats {
+  const utterances = orderedUtterances(transcript).filter((utterance) => utterance.text.trim());
+  const characterByUserId = new Map(cast.map((member) => [member.userId, member.characterName]));
+  const speakers = new Map<string, TableStats["speakers"][number]>();
+
+  for (const utterance of utterances) {
+    const speaker = speakers.get(utterance.userId) ?? {
+      userId: utterance.userId,
+      name: utterance.username ?? utterance.userId,
+      characterName: characterByUserId.get(utterance.userId) ?? null,
+      words: 0,
+    };
+    speaker.words += utterance.text.trim().split(/\s+/).length;
+    speakers.set(utterance.userId, speaker);
+  }
+
+  const first = utterances.at(0);
+  const last = utterances.at(-1);
+  const durationMs =
+    first && last ? new Date(last.timestamp).getTime() - new Date(first.timestamp).getTime() : 0;
+
+  return {
+    durationSeconds: Number.isNaN(durationMs) ? 0 : Math.round(durationMs / 1000),
+    speakers: [...speakers.values()].toSorted((a, b) => b.words - a.words),
+  };
 }
 
 function buildCastLegend(cast: CastMember[], labelByUserId: Map<string, string>): string {

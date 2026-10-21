@@ -4,6 +4,9 @@ import path from "node:path";
 import {
   JOB_QUEUES,
   claimAggregationIfReady,
+  enqueueCampaignBackfill,
+  nextBackfillStep,
+  startInferenceRegeneration,
   claimSegmentForTranscription,
   completeProcessingRun,
   completeSegmentTranscription,
@@ -17,12 +20,14 @@ import {
   startJobQueue,
   stopJobQueue,
   storeAggregatedTranscript,
-  storeRunDetailedRecord,
+  storeRunLedger,
   storeRunRecap,
   storeRunTitle,
   type AdvanceProcessingRunJob,
+  type BackfillCampaignRecapsJob,
   type ProcessingRunData,
   type SessionArtifactKind,
+  type SessionLedger,
   type SegmentForTranscription,
   type Transcript,
   type TranscribeSegmentJob,
@@ -33,7 +38,7 @@ import {
   artifactObjectKey,
   getArtifactStorage,
   getAudioStorage,
-  loadDetailedRecordArtifact,
+  loadSessionLedgerArtifact,
   loadTranscriptArtifact,
 } from "@rainbot/storage";
 import { UnrecoverableTaskError } from "./errors.ts";
@@ -166,11 +171,11 @@ async function readTranscript(run: ProcessingRunData): Promise<Transcript> {
   return loadTranscriptArtifact(artifact);
 }
 
-async function readDetailedRecord(run: ProcessingRunData): Promise<string> {
-  if (!run.generatedDetailedRecordArtifact) {
-    throw new UnrecoverableTaskError(`Run ${run.id} has no detailed record artifact`);
+async function readLedger(run: ProcessingRunData): Promise<SessionLedger> {
+  if (!run.generatedLedgerArtifact) {
+    throw new UnrecoverableTaskError(`Run ${run.id} has no session ledger artifact`);
   }
-  return loadDetailedRecordArtifact(run.generatedDetailedRecordArtifact);
+  return loadSessionLedgerArtifact(run.generatedLedgerArtifact);
 }
 
 async function processCurrentStage(run: ProcessingRunData): Promise<void> {
@@ -182,21 +187,24 @@ async function processCurrentStage(run: ProcessingRunData): Promise<void> {
       await aggregateRun(run);
       return;
     case "summarizing": {
-      const detailedRecord = await summarize(await readTranscript(run), run.campaignId);
+      const ledger = await summarize(await readTranscript(run), run.campaignId, run.sessionId);
       const artifact = await uploadSessionArtifact(
         run.campaignId,
         run.sessionId,
         run.id,
-        "detailed_record",
-        detailedRecord,
-        "text/markdown; charset=utf-8",
+        "session_ledger",
+        JSON.stringify(ledger),
+        "application/json",
       );
-      await storeRunDetailedRecord(run.id, artifact);
+      await storeRunLedger(run.id, artifact);
       return;
     }
-    case "recapping":
-      await storeRunRecap(run.id, await recap(await readDetailedRecord(run)));
+    case "recapping": {
+      const [transcript, ledger] = await Promise.all([readTranscript(run), readLedger(run)]);
+      const result = await recap(transcript, ledger, run.campaignId, run.sessionId);
+      await storeRunRecap(run.id, result.markdown, result.recap);
       return;
+    }
     case "titling":
       if (!run.recap) throw new UnrecoverableTaskError(`Run ${run.id} has no recap`);
       if (await storeRunTitle(run.id, await generateTitle(run.recap))) {
@@ -242,6 +250,32 @@ async function processRun(payload: AdvanceProcessingRunJob): Promise<void> {
   }
 }
 
+// How long a backfill waits between checks on the session it started.
+const BACKFILL_POLL_SECONDS = 60;
+
+// One step of a campaign backfill: start regenerating the oldest session that
+// lacks a sectioned recap, then check back later. Each regeneration is an
+// ordinary inference run, so it reuses every idempotency rule of the pipeline.
+async function backfillCampaignStep(payload: BackfillCampaignRecapsJob): Promise<void> {
+  const step = await nextBackfillStep(payload.campaignId);
+  if (step.kind === "finished") {
+    console.log(`[backfill] campaign ${payload.campaignId} has no sessions left to backfill`);
+    return;
+  }
+  if (step.kind === "next") {
+    try {
+      await startInferenceRegeneration(step.sessionId);
+      console.log(`[backfill] campaign ${payload.campaignId}: regenerating ${step.sessionId}`);
+    } catch (error) {
+      // Another run claimed the session first; check again on the next poll.
+      if (!(error instanceof Error && error.message.includes("already being processed"))) {
+        throw error;
+      }
+    }
+  }
+  await enqueueCampaignBackfill(payload, BACKFILL_POLL_SECONDS);
+}
+
 function abortPromise(signal: AbortSignal): Promise<void> {
   if (signal.aborted) return Promise.resolve();
   return new Promise((resolve) =>
@@ -279,6 +313,9 @@ export async function runSessionWorker(signal: AbortSignal): Promise<void> {
       if (job) await processRun(job.data);
     },
   );
+  await boss.work<BackfillCampaignRecapsJob>(JOB_QUEUES.backfillCampaignRecaps, async ([job]) => {
+    if (job) await backfillCampaignStep(job.data);
+  });
   await boss.work<TranscribeSegmentJob>(JOB_QUEUES.transcribeSegmentDead, async ([job]) => {
     if (!job) return;
     await failSegmentTranscription(

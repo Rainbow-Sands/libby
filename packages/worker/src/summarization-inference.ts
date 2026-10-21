@@ -2,7 +2,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { SharedV4ProviderOptions as ProviderOptions } from "@ai-sdk/provider";
-import { streamText, type LanguageModel } from "ai";
+import { Output, streamText, type FlexibleSchema, type LanguageModel } from "ai";
 
 export type SummarizationProvider = "local" | "openai" | "anthropic";
 export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
@@ -162,6 +162,61 @@ function modelAndOptions(config: SummarizationConfig): {
       };
     }
   }
+}
+
+export interface SummarizationObjectCompletion<T> extends Omit<SummarizationCompletion, "content"> {
+  object: T;
+}
+
+export type StructuredSummarization = <T>(
+  prompt: string,
+  system: string,
+  schema: FlexibleSchema<T>,
+  name: string,
+  abortSignal?: AbortSignal,
+) => Promise<SummarizationObjectCompletion<T>>;
+
+// Same provider setup as createSummarizationInference, but the response is
+// validated against a schema. Providers with native structured output use it;
+// the rest fall back to the SDK's JSON instructions and parsing.
+export function createStructuredSummarizationInference(
+  config: SummarizationConfig,
+): StructuredSummarization {
+  const selected = modelAndOptions(config);
+
+  return async function completeObject<T>(
+    prompt: string,
+    system: string,
+    schema: FlexibleSchema<T>,
+    name: string,
+    abortSignal?: AbortSignal,
+  ): Promise<SummarizationObjectCompletion<T>> {
+    const result = streamText({
+      model: selected.model,
+      system,
+      prompt,
+      abortSignal,
+      maxRetries: 0,
+      output: Output.object({ schema, name }),
+      providerOptions: selected.providerOptions,
+      temperature: selected.temperature,
+    });
+
+    const [object, finishReason, usage] = await Promise.all([
+      result.output,
+      result.finishReason,
+      result.usage,
+    ]);
+
+    return {
+      object,
+      provider: config.provider,
+      model: config.model,
+      finishReason,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+    };
+  };
 }
 
 export function createSummarizationInference(config: SummarizationConfig) {

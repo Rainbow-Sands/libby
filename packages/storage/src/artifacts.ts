@@ -1,4 +1,10 @@
-import { parseTranscript, type SessionArtifactRef, type Transcript } from "@rainbot/db";
+import {
+  parseSessionLedger,
+  parseTranscript,
+  type SessionArtifactRef,
+  type SessionLedger,
+  type Transcript,
+} from "@rainbot/db";
 import { artifactContentHash, getArtifactStorage } from "./object-storage.ts";
 
 export interface ArtifactTextReader {
@@ -45,4 +51,21 @@ export async function loadDetailedRecordArtifact(
     throw new ArtifactIntegrityError(`Artifact ${artifact.id} is not a detailed record`);
   }
   return loadArtifactText(artifact, storage);
+}
+
+export async function loadSessionLedgerArtifact(
+  artifact: SessionArtifactRef,
+  storage?: ArtifactTextReader,
+): Promise<SessionLedger> {
+  if (artifact.kind !== "session_ledger") {
+    throw new ArtifactIntegrityError(`Artifact ${artifact.id} is not a session ledger`);
+  }
+  const body = await loadArtifactText(artifact, storage);
+  try {
+    return parseSessionLedger(JSON.parse(body));
+  } catch (error) {
+    throw new ArtifactIntegrityError(`Artifact ${artifact.id} contains an invalid session ledger`, {
+      cause: error,
+    });
+  }
 }

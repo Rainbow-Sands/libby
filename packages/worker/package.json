@@ -7,6 +7,7 @@
   },
   "scripts": {
     "dev": "node --env-file=../../.env --watch src/worker.ts",
+    "backfill:recaps": "node --env-file=../../.env src/scripts/backfill-recaps.ts",
     "eval:inference": "node --env-file=../../.env src/scripts/evaluate-inference.ts",
     "start": "node src/worker.ts",
     "test": "vitest run"

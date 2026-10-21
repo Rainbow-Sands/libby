@@ -141,6 +141,13 @@
       "when": 1788721784320,
       "tag": "0019_square_red_wolf",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792549817127,
+      "tag": "0020_unknown_vin_gonzales",
+      "breakpoints": true
     }
   ]
 }

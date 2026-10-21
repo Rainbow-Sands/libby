@@ -127,6 +127,9 @@ importers:
       postgres:
         specifier: latest
         version: 3.4.9
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@types/node':
         specifier: ^25.0.0
@@ -4168,8 +4171,7 @@ snapshots:
 
   '@types/resolve@1.20.2': {}
 
-  '@types/trusted-types@2.0.7':
-    optional: true
+  '@types/trusted-types@2.0.7': {}
 
   '@types/ws@8.18.1':
     dependencies:
@@ -4462,7 +4464,6 @@ snapshots:
   esrap@2.2.12:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
-    optional: true
 
   estree-walker@2.0.2: {}
 
@@ -5080,7 +5081,6 @@ snapshots:
       zimmerframe: 1.1.4
     transitivePeerDependencies:
       - '@typescript-eslint/types'
-    optional: true
 
   tagged-tag@1.0.0: {}
 

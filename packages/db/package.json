@@ -13,7 +13,8 @@
   "dependencies": {
     "drizzle-orm": "latest",
     "pg-boss": "^12.35.1",
-    "postgres": "latest"
+    "postgres": "latest",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^25.0.0",

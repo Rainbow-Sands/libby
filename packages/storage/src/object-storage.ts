@@ -84,8 +84,8 @@ export function artifactObjectKey(
   kind: SessionArtifactKind,
   contentHash: string,
 ): string {
-  const directory = kind === "transcript" ? "transcript" : "detailed-record";
-  const extension = kind === "transcript" ? "json" : "md";
+  const directory = kind.replaceAll("_", "-");
+  const extension = kind === "detailed_record" ? "md" : "json";
   return [
     "campaigns",
     encodeURIComponent(campaignId),

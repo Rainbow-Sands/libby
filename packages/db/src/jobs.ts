@@ -7,6 +7,7 @@ export const JOB_QUEUES = {
   transcribeSegmentDead: "transcribe-segment-dead",
   advanceProcessingRun: "advance-processing-run",
   advanceProcessingRunDead: "advance-processing-run-dead",
+  backfillCampaignRecaps: "backfill-campaign-recaps",
 } as const;
 
 export interface TranscribeSegmentJob {
@@ -18,6 +19,10 @@ export interface TranscribeSegmentJob {
 
 export interface AdvanceProcessingRunJob {
   runId: string;
+}
+
+export interface BackfillCampaignRecapsJob {
+  campaignId: string;
 }
 
 interface StartJobQueueOptions {
@@ -58,6 +63,16 @@ const PROCESSING_QUEUE_OPTIONS = {
   notify: true,
 } as const satisfies QueueDefinition;
 
+// One backfill job per campaign at a time: it re-enqueues itself until every
+// session has a sectioned recap, so "stately" (one queued plus one active per
+// campaign key) stops a second kick-off from running two chains in parallel.
+const BACKFILL_QUEUE_OPTIONS = {
+  retryLimit: 3,
+  retryDelay: 30,
+  retryBackoff: true,
+  expireInSeconds: 15 * 60,
+} as const satisfies QueueDefinition;
+
 type QueueDefinition = Omit<Queue, "name" | "policy" | "partition">;
 
 let boss: PgBoss | null = null;
@@ -69,8 +84,9 @@ async function ensureQueue(
   name: string,
   options: QueueDefinition = {},
   update = false,
+  policy: Queue["policy"] = "standard",
 ): Promise<void> {
-  await instance.createQueue(name, { policy: "standard", ...options });
+  await instance.createQueue(name, { policy, ...options });
   if (update && Object.keys(options).length > 0) await instance.updateQueue(name, options);
 }
 
@@ -88,6 +104,13 @@ async function ensureQueues(instance: PgBoss): Promise<void> {
     JOB_QUEUES.advanceProcessingRun,
     PROCESSING_QUEUE_OPTIONS,
     workerMode,
+  );
+  await ensureQueue(
+    instance,
+    JOB_QUEUES.backfillCampaignRecaps,
+    BACKFILL_QUEUE_OPTIONS,
+    workerMode,
+    "stately",
   );
 }
 
@@ -161,4 +184,17 @@ export async function enqueueJob(
   if (jobId !== null && jobId !== id) {
     throw new Error(`pg-boss returned unexpected job id ${jobId} for ${id}`);
   }
+}
+
+// Backfill jobs are not tied to application rows, so they are sent outside a
+// transaction and deduplicated per campaign by the queue policy instead.
+export async function enqueueCampaignBackfill(
+  data: BackfillCampaignRecapsJob,
+  startAfterSeconds = 0,
+): Promise<string | null> {
+  const instance = await startJobQueue();
+  return instance.send(JOB_QUEUES.backfillCampaignRecaps, data, {
+    singletonKey: data.campaignId,
+    startAfter: startAfterSeconds,
+  });
 }

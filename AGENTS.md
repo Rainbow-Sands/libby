@@ -20,7 +20,7 @@ Discord voice ──/start──▶ Postgres session + processing run
    │                                                        │
    └──/stop or empty channel────────────────────────────────┘
                                                             ▼
-                         aggregate ▶ detailed record ▶ recap ▶ title
+                         aggregate ▶ session ledger ▶ recap ▶ title
                              │              │            ▼
                              └──── private artifact S3 + Postgres metadata
                                                    └──▶ SvelteKit web app
