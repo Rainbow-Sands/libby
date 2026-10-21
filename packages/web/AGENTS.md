@@ -39,7 +39,9 @@ fully self-contained. Consequences that are load-bearing:
 Use `$env/dynamic/private` via `lib/server/env.ts`, guarded by the `building`
 flag so assertions don't fire during `vite build`. Never import server env (or
 `@rainbot/db`) into client-side code — DB access lives only in `+page.server.ts`,
-`+server.ts`, and `hooks.server.ts`.
+`+server.ts`, and `hooks.server.ts`. Type-only imports are fine, and
+`@rainbot/db/world-links` is the one runtime entry point built for the
+browser (name matching and linking for world pages).
 
 Required vars: `DATABASE_URL`, `DISCORD_APPLICATION_ID`, `DISCORD_CLIENT_SECRET`,
 `SESSION_SECRET`, and `ORIGIN` (SvelteKit needs it for CSRF/form-action origin
@@ -51,7 +53,23 @@ requires `CHAT_API_KEY` and `CHAT_MODEL`; it does not require any local inferenc
 or transcription URL.
 
 The web service needs `S3_BUCKET_AUDIO` for manual ingestion and
-`S3_BUCKET_ARTIFACT` to read transcript/detailed-record tabs and session chat context.
+`S3_BUCKET_ARTIFACT` to read transcript/detailed-record tabs and session chat
+context. It also writes world page avatars to `S3_BUCKET_ARTIFACT` and serves
+them back through `/campaigns/[id]/avatars/[avatarId]`, so its credentials need
+write access to that bucket.
+
+## World wiki
+
+- `/campaigns/[id]/world` lists pages by kind (quests as a board);
+  `/campaigns/[id]/world/[slug]?asOf=<sessionId>` shows a page as it stood
+  after that session.
+- Session recaps link names to pages as of that session. Running text uses
+  `PageLink` (hover card on devices that hover); recap markdown is rendered
+  through `linkMarkdown` + `LinkedMarkdown` instead of `{@html}` so names can
+  become components.
+- Avatars are cropped and resized in the browser (`AvatarUploader`), posted
+  raw to `/campaigns/[id]/world/[slug]/avatar`, checked by magic bytes, and
+  stored under a content-hash key. Any campaign member can change them.
 
 ## Notes
 

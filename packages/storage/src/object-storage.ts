@@ -102,6 +102,27 @@ export function artifactContentHash(body: string): string {
   return createHash("sha256").update(body, "utf8").digest("hex");
 }
 
+// Keyed by content hash, so an upload never replaces an earlier avatar.
+export function avatarObjectKey(
+  campaignId: string,
+  pageId: string,
+  sha256: string,
+  extension: string,
+): string {
+  return [
+    "campaigns",
+    encodeURIComponent(campaignId),
+    "world",
+    encodeURIComponent(pageId),
+    "avatars",
+    `${sha256}.${extension}`,
+  ].join("/");
+}
+
+export function bytesContentHash(body: Uint8Array): string {
+  return createHash("sha256").update(body).digest("hex");
+}
+
 export class ObjectStorage {
   readonly #bucket: string;
   readonly #client: S3Client;
@@ -170,6 +191,28 @@ export class ObjectStorage {
       formatVersion,
       sha256: artifactContentHash(body),
     };
+  }
+
+  async uploadBytes(objectKey: string, body: Uint8Array, contentType: string): Promise<void> {
+    const upload = new Upload({
+      client: this.#client,
+      params: {
+        Bucket: this.#bucket,
+        Key: objectKey,
+        Body: body,
+        ContentLength: body.byteLength,
+        ContentType: contentType,
+      },
+    });
+    await upload.done();
+  }
+
+  async downloadBytes(objectKey: string, bucket = this.#bucket): Promise<Uint8Array<ArrayBuffer>> {
+    const response = await this.#client.send(
+      new GetObjectCommand({ Bucket: bucket, Key: objectKey }),
+    );
+    if (!response.Body) throw new Error(`Object has no body: ${objectKey}`);
+    return new Uint8Array(await response.Body.transformToByteArray());
   }
 
   async downloadText(objectKey: string, bucket = this.#bucket): Promise<string> {

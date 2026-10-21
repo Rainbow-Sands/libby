@@ -1,14 +1,17 @@
 // Queues a backfill that regenerates sectioned recaps for a campaign's older
 // sessions, oldest first and one at a time, so each recap can carry forward the
-// previous session's open threads. The running worker does the work; this only
-// enqueues it. Running it again while a campaign's backfill is queued is a no-op.
+// previous session's open threads. When no session is left without one, the
+// worker builds the campaign's world from every session in order. The running
+// worker does the work; this only enqueues it. Running it again while a
+// campaign's backfill is queued is a no-op, and running it after recaps are
+// done just continues the world.
 //
 // Usage:
 //   pnpm --filter @rainbot/worker backfill:recaps <campaign-id> [...campaign-id]
 //   pnpm --filter @rainbot/worker backfill:recaps --all
 //
-// In the deployed worker container:
-//   node src/scripts/backfill-recaps.ts --all
+// In the deployed worker container (working directory /app):
+//   docker compose exec worker node packages/worker/src/scripts/backfill-recaps.ts --all
 
 import { enqueueCampaignBackfill, listCampaigns, stopJobQueue } from "@rainbot/db";
 

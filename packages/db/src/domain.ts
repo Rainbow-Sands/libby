@@ -43,3 +43,8 @@ export type AudioStatus = ValueOf<typeof AUDIO_STATUSES>;
 
 export const TRANSCRIPTION_STATUSES = ["pending", "processing", "completed", "failed"] as const;
 export type TranscriptionStatus = ValueOf<typeof TRANSCRIPTION_STATUSES>;
+
+// "pending" holds a failed attempt that will be retried; "skipped" marks a
+// session with no ledger to read.
+export const WORLD_UPDATE_STATUSES = ["pending", "done", "skipped", "failed"] as const;
+export type WorldUpdateStatus = ValueOf<typeof WORLD_UPDATE_STATUSES>;

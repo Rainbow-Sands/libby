@@ -5,7 +5,12 @@ import {
   JOB_QUEUES,
   claimAggregationIfReady,
   enqueueCampaignBackfill,
+  enqueueWorldUpdate,
+  markWorldUpdateSkipped,
   nextBackfillStep,
+  nextWorldStep,
+  recordWorldUpdate,
+  recordWorldUpdateFailure,
   startInferenceRegeneration,
   claimSegmentForTranscription,
   completeProcessingRun,
@@ -31,6 +36,7 @@ import {
   type SegmentForTranscription,
   type Transcript,
   type TranscribeSegmentJob,
+  type UpdateCampaignWorldJob,
 } from "@rainbot/db";
 import {
   ArtifactIntegrityError,
@@ -43,7 +49,7 @@ import {
 } from "@rainbot/storage";
 import { UnrecoverableTaskError } from "./errors.ts";
 import { postSessionLink } from "./notify.ts";
-import { generateTitle, recap, summarize, transcribeSegment } from "./tasks.ts";
+import { generateTitle, recap, summarize, transcribeSegment, updateWorld } from "./tasks.ts";
 
 const PROCESSING_CONCURRENCY = positiveInteger("PROCESSING_CONCURRENCY", 2);
 const TRANSCRIPTION_CONCURRENCY = positiveInteger("TRANSCRIPTION_CONCURRENCY", 4);
@@ -161,7 +167,9 @@ async function aggregateRun(run: ProcessingRunData): Promise<void> {
     "application/json",
   );
   if (!(await storeAggregatedTranscript(run.id, artifact))) return;
-  if (transcript.segments.length === 0) await completeProcessingRun(run.id);
+  if (transcript.segments.length === 0 && (await completeProcessingRun(run.id))) {
+    await enqueueWorldUpdate({ campaignId: run.campaignId });
+  }
 }
 
 async function readTranscript(run: ProcessingRunData): Promise<Transcript> {
@@ -207,8 +215,11 @@ async function processCurrentStage(run: ProcessingRunData): Promise<void> {
     }
     case "titling":
       if (!run.recap) throw new UnrecoverableTaskError(`Run ${run.id} has no recap`);
-      if (await storeRunTitle(run.id, await generateTitle(run.recap))) {
-        await completeProcessingRun(run.id);
+      if (
+        (await storeRunTitle(run.id, await generateTitle(run.recap))) &&
+        (await completeProcessingRun(run.id))
+      ) {
+        await enqueueWorldUpdate({ campaignId: run.campaignId });
       }
       return;
     case "done":
@@ -260,6 +271,8 @@ async function backfillCampaignStep(payload: BackfillCampaignRecapsJob): Promise
   const step = await nextBackfillStep(payload.campaignId);
   if (step.kind === "finished") {
     console.log(`[backfill] campaign ${payload.campaignId} has no sessions left to backfill`);
+    // The world waits for older sessions' ledgers, so it resumes from here.
+    await enqueueWorldUpdate(payload);
     return;
   }
   if (step.kind === "next") {
@@ -274,6 +287,64 @@ async function backfillCampaignStep(payload: BackfillCampaignRecapsJob): Promise
     }
   }
   await enqueueCampaignBackfill(payload, BACKFILL_POLL_SECONDS);
+}
+
+// A failed world update is retried a few times, then the world moves on
+// without that session rather than stalling the campaign.
+const WORLD_UPDATE_ATTEMPTS = 3;
+
+// One step of a campaign's world: apply the oldest finished session the world
+// has not seen, then continue with the next. A live session finishing, or a
+// recap backfill completing, starts the chain.
+async function updateCampaignWorldStep(payload: UpdateCampaignWorldJob): Promise<void> {
+  const step = await nextWorldStep(payload.campaignId);
+  switch (step.kind) {
+    case "finished":
+      return;
+    case "waiting":
+      await enqueueWorldUpdate(payload, BACKFILL_POLL_SECONDS);
+      return;
+    case "needs-recap":
+      console.log(
+        `[world] campaign ${payload.campaignId}: session ${step.sessionId} has no ledger yet; ` +
+          "run the recap backfill to continue the world",
+      );
+      return;
+    case "skip":
+      await markWorldUpdateSkipped(payload.campaignId, step.sessionId);
+      await enqueueWorldUpdate(payload);
+      return;
+    case "next":
+      try {
+        const ledger = await loadSessionLedgerArtifact(step.ledgerArtifact);
+        const { update, cast } = await updateWorld(payload.campaignId, ledger, step.recapSections);
+        await recordWorldUpdate(
+          payload.campaignId,
+          step.sessionId,
+          update,
+          step.recapSections?.epicMoments ?? [],
+          cast,
+        );
+        console.log(
+          `[world] campaign ${payload.campaignId}: applied ${step.sessionId} (${update.pages.length} pages)`,
+        );
+      } catch (error) {
+        const failure = asError(error);
+        const unrecoverable =
+          failure instanceof UnrecoverableTaskError || failure instanceof ArtifactIntegrityError;
+        const status = await recordWorldUpdateFailure(
+          payload.campaignId,
+          step.sessionId,
+          errorMessage(failure),
+          unrecoverable ? 1 : WORLD_UPDATE_ATTEMPTS,
+        );
+        console.error(`[world] session ${step.sessionId} failed (${status}):`, failure);
+        await enqueueWorldUpdate(payload, status === "pending" ? BACKFILL_POLL_SECONDS : 0);
+        return;
+      }
+      await enqueueWorldUpdate(payload);
+      return;
+  }
 }
 
 function abortPromise(signal: AbortSignal): Promise<void> {
@@ -315,6 +386,9 @@ export async function runSessionWorker(signal: AbortSignal): Promise<void> {
   );
   await boss.work<BackfillCampaignRecapsJob>(JOB_QUEUES.backfillCampaignRecaps, async ([job]) => {
     if (job) await backfillCampaignStep(job.data);
+  });
+  await boss.work<UpdateCampaignWorldJob>(JOB_QUEUES.updateCampaignWorld, async ([job]) => {
+    if (job) await updateCampaignWorldStep(job.data);
   });
   await boss.work<TranscribeSegmentJob>(JOB_QUEUES.transcribeSegmentDead, async ([job]) => {
     if (!job) return;

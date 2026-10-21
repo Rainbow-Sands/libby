@@ -20,6 +20,13 @@ Drizzle ORM schema, Postgres client, and all shared queries. See the root
   sectioned recap, shared by the worker (structured output) and readers.
 - `backfill.ts` — picks the next session a campaign recap backfill should
   regenerate.
+- `world.ts` — the world wiki's page kinds and content shape, the zod schema
+  for a session's world update, and `planWorldUpdate`, the pure function
+  that turns one update into page revisions.
+- `world-links.ts` — name matching and text linking. Free of database
+  imports and exported as `@rainbot/db/world-links` so browser code can use it.
+- `world-store.ts` — world reads (snapshots as of a session, page detail,
+  a session's changes), the ordered world update step, and avatars.
 - `transcript.ts` — the `Transcript`/`TranscriptSegment` JSON shape stored in
   transcript artifacts, plus display and inference formatting transforms.
 - `index.ts` — the package's **public API**. Export anything other packages need
@@ -77,6 +84,19 @@ pnpm --filter @rainbot/db db:migrate    # applies to the DB in DATABASE_URL
   flags as noise — the pattern to extend for future formatting improvements.
 - `campaign_members` has `role` (`dm` | `player`) and `characterName` (null for
   the DM). The cast legend and player management depend on these.
+- The world wiki: `world_pages` holds a page's stable identity (slug, kind,
+  avatar, the player whose character it is). Its content lives in immutable
+  `world_page_revisions`, one per page per session that changed it, holding
+  the whole `WorldPageContent` (facts with session citations, aliases,
+  summary). The page "as of session N" is its newest revision from a session
+  that started at or before N. `world_updates` records each session's update
+  and its report (possible duplicates, name corrections); sessions are applied
+  oldest first. `world_page_moments` copies recap epic moments onto the pages
+  of those who feature in them. `world_page_avatars` keeps every uploaded
+  avatar; removing one only clears `world_pages.avatar_id`.
+  A page's "Mentioned in" list is not stored: `getWorldPage` finds the
+  sentences naming it in each session's `recap` at read time, so it follows
+  renames and regenerated recaps.
 - `users.is_admin` grants application-wide visibility into every campaign and
   is managed manually.
 - A ready audio segment and its `transcribe-segment` job are committed in the

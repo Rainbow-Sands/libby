@@ -5,6 +5,8 @@ import {
   getCampaignAccess,
   getCampaignCast,
   getSessionDetail,
+  getSessionWorldChanges,
+  getWorldAsOfSession,
   isAdmin,
 } from "@rainbot/db";
 import { loadTranscriptArtifact } from "@rainbot/storage";
@@ -13,6 +15,7 @@ import {
   requestInferenceRegeneration,
   requestTranscriptRegeneration,
 } from "@rainbot/worker";
+import { toWorldLinkPages } from "$lib/server/world";
 import type { Actions, PageServerLoad } from "./$types";
 
 function recapExcerpt(recap: string | null): string {
@@ -51,6 +54,8 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
         transcript: null,
       },
       transcriptTurns: null,
+      world: null,
+      worldChanges: null,
       hasTranscript: Boolean(session.transcriptArtifact),
       canViewDetails: false,
       canRegenerate: false,
@@ -70,10 +75,20 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
   const transcriptTurns = transcript
     ? formatTranscriptForDisplay(transcript, await getCampaignCast(session.campaignId))
     : null;
+  const [worldPages, worldChanges] = await Promise.all([
+    getWorldAsOfSession(session.campaignId, session.id),
+    getSessionWorldChanges(session.id),
+  ]);
 
   return {
     session: { ...session, transcript },
     transcriptTurns,
+    world: {
+      campaignId: session.campaignId,
+      asOf: session.id,
+      pages: toWorldLinkPages(worldPages),
+    },
+    worldChanges,
     hasTranscript: Boolean(session.transcriptArtifact),
     canViewDetails: true,
     canRegenerate: access.isAdmin,

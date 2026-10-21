@@ -3,12 +3,17 @@ import {
   recapSectionsSchema,
   renderRecapMarkdown,
   sessionLedgerSchema,
+  summaryLine,
+  worldUpdateSchema,
+  type CampaignCastMember,
   type PreviousSessionNotes,
   type RecapSections,
   type SessionLedger,
+  type WorldPageState,
+  type WorldUpdate,
 } from "@rainbot/db";
 import type { FlexibleSchema } from "ai";
-import { RECAP_SYSTEM, SESSION_LEDGER_SYSTEM } from "./prompts.ts";
+import { RECAP_SYSTEM, SESSION_LEDGER_SYSTEM, WORLD_UPDATE_SYSTEM } from "./prompts.ts";
 
 export type CompleteObject = <T>(
   prompt: string,
@@ -21,6 +26,42 @@ export interface SessionMaterial {
   // Transcript already formatted for inference: cast legend, minute markers.
   transcript: string;
   previous: PreviousSessionNotes | null;
+  // The world as it stood when the session began.
+  world: WorldPageState[];
+}
+
+// Names and one line each: enough to spell names consistently and recognize
+// returning characters without spending the context on full pages.
+export function formatWorldGlossary(world: WorldPageState[]): string {
+  if (world.length === 0) return "None yet.";
+  return world
+    .map((page) => {
+      const also = page.content.aliases.length
+        ? ` (also heard as ${page.content.aliases.join(", ")})`
+        : "";
+      const line = summaryLine(page.content.summary);
+      return `- ${page.content.name} [${page.kind}]${also}${line ? `: ${line}` : ""}`;
+    })
+    .join("\n");
+}
+
+export function formatWorldPages(world: WorldPageState[]): string {
+  if (world.length === 0) return "No pages yet. This is the world's first session.";
+  return world
+    .map((page) => {
+      const { content } = page;
+      const lines = [
+        `[${page.slug}] ${content.name} (${page.kind}${content.status ? `, ${content.status}` : ""})`,
+      ];
+      if (content.aliases.length) lines.push(`Also: ${content.aliases.join(", ")}`);
+      if (content.holder) lines.push(`Held by: ${content.holder}`);
+      if (content.summary) lines.push(`Summary: ${content.summary}`);
+      for (const fact of content.facts) {
+        if (!fact.supersededIn) lines.push(`#${fact.id} ${fact.text}`);
+      }
+      return lines.join("\n");
+    })
+    .join("\n\n");
 }
 
 function formatPrevious(previous: PreviousSessionNotes | null): string {
@@ -56,6 +97,7 @@ export async function createSessionLedger(
   completeObject: CompleteObject,
 ): Promise<SessionLedger> {
   const prompt = [
+    tagged("world_glossary", formatWorldGlossary(material.world)),
     tagged("earlier_session", formatPrevious(material.previous)),
     tagged("transcript", material.transcript),
   ].join("\n\n");
@@ -68,6 +110,7 @@ export async function createRecap(
   completeObject: CompleteObject,
 ): Promise<{ sections: RecapSections; markdown: string }> {
   const prompt = [
+    tagged("world_glossary", formatWorldGlossary(material.world)),
     tagged("earlier_session", formatPrevious(material.previous)),
     tagged("ledger", JSON.stringify(ledger, null, 2)),
     tagged("transcript", material.transcript),
@@ -76,6 +119,51 @@ export async function createRecap(
     await completeObject(prompt, RECAP_SYSTEM, recapSectionsSchema, "session_recap"),
   );
   return { sections, markdown: renderRecapMarkdown(sections) };
+}
+
+export interface WorldMaterial {
+  world: WorldPageState[];
+  cast: CampaignCastMember[];
+  ledger: SessionLedger;
+  recap: RecapSections | null;
+}
+
+export async function createWorldUpdate(
+  material: WorldMaterial,
+  completeObject: CompleteObject,
+): Promise<WorldUpdate> {
+  const cast = material.cast.length
+    ? material.cast.map((member) => `- ${member.characterName}, played by ${member.username}`)
+    : ["- No player characters are registered."];
+  const recap = material.recap
+    ? JSON.stringify(
+        {
+          recap: material.recap.recap,
+          epicMoments: material.recap.epicMoments.map((moment, index) => ({ index, ...moment })),
+        },
+        null,
+        2,
+      )
+    : "No recap was written.";
+  const prompt = [
+    tagged("world", formatWorldPages(material.world)),
+    tagged("cast", cast.join("\n")),
+    tagged("ledger", JSON.stringify(material.ledger, null, 2)),
+    tagged("recap", recap),
+  ].join("\n\n");
+  const update = await completeObject(
+    prompt,
+    WORLD_UPDATE_SYSTEM,
+    worldUpdateSchema,
+    "world_update",
+  );
+  return {
+    ...update,
+    pages: update.pages.map((page) => ({
+      ...page,
+      newFacts: page.newFacts.map((fact) => ({ ...fact, at: normalizeAt(fact.at) })),
+    })),
+  };
 }
 
 // Models sometimes cite "1:23" or "01:23:00"; store one canonical form so the
