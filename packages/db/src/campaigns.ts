@@ -41,6 +41,7 @@ export async function createCampaign(input: CreateCampaignInput): Promise<{ id: 
       campaignId: campaign.id,
       userId: input.dm.id,
       role: "dm",
+      recapRotation: false,
     });
 
     return campaign;

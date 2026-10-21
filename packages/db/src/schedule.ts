@@ -1,4 +1,9 @@
-import type { CampaignReminderSchedule } from "@rainbot/db";
+// A weekly session at a wall-clock time in an IANA time zone.
+export interface CampaignReminderSchedule {
+  dayOfWeek: number;
+  minuteOfDay: number;
+  timeZone: string;
+}
 
 export const WEEKDAYS = [
   "Sunday",
@@ -13,6 +18,8 @@ export const WEEKDAYS = [
 const MINUTE_MS = 60_000;
 const DAY_MS = 24 * 60 * MINUTE_MS;
 
+// Reminders are posted this long before a session starts.
+export const REMINDER_LEAD_MS = 60 * MINUTE_MS;
 // Accepts 24-hour ("19:30", "7") or 12-hour ("7:30 pm", "7pm") times and
 // returns minutes after midnight, or null when the input is not a valid time.
 export function parseTimeOfDay(input: string): number | null {

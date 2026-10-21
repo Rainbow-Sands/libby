@@ -55,17 +55,17 @@ Service names below match `docker-compose.yml`; `db-migrate` is the
 
 ### Core and authentication
 
-| Variable                                            | Used by                          | Description                                                                      |
-| --------------------------------------------------- | -------------------------------- | -------------------------------------------------------------------------------- |
-| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | postgres, Docker Compose         | Creates PostgreSQL and constructs container `DATABASE_URL` values                |
-| `DATABASE_URL`                                      | db-migrate, discord, worker, web | PostgreSQL connection string                                                     |
-| `DISCORD_TOKEN`                                     | discord, worker                  | Bot token; worker uses it to post completed-session links                        |
-| `DISCORD_APPLICATION_ID`                            | discord, web                     | Discord application ID for commands and OAuth                                    |
-| `DISCORD_CLIENT_SECRET`                             | web                              | Discord OAuth client secret                                                      |
-| `SESSION_SECRET`                                    | web                              | Secret used to sign login sessions                                               |
-| `ORIGIN`                                            | web, Docker Compose              | Public web origin; Compose also passes it to worker as `WEB_URL`                 |
-| `WEB_URL`                                           | worker                           | Public web origin used in completed-session links; required when running locally |
-| `BODY_SIZE_LIMIT`                                   | web                              | Maximum manual-upload request size; Compose defaults it to `10G`                 |
+| Variable                                            | Used by                          | Description                                                                  |
+| --------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------- |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | postgres, Docker Compose         | Creates PostgreSQL and constructs container `DATABASE_URL` values            |
+| `DATABASE_URL`                                      | db-migrate, discord, worker, web | PostgreSQL connection string                                                 |
+| `DISCORD_TOKEN`                                     | discord, worker                  | Bot token; worker uses it to post completed-session links                    |
+| `DISCORD_APPLICATION_ID`                            | discord, web                     | Discord application ID for commands and OAuth                                |
+| `DISCORD_CLIENT_SECRET`                             | web                              | Discord OAuth client secret                                                  |
+| `SESSION_SECRET`                                    | web                              | Secret used to sign login sessions                                           |
+| `ORIGIN`                                            | web, Docker Compose              | Public web origin; Compose also passes it to discord and worker as `WEB_URL` |
+| `WEB_URL`                                           | discord, worker                  | Public web origin used in Discord links; required when running locally       |
+| `BODY_SIZE_LIMIT`                                   | web                              | Maximum manual-upload request size; Compose defaults it to `10G`             |
 
 ### Audio and processing
 

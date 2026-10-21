@@ -1,5 +1,5 @@
 {
-  "id": "aeeebe0c-6129-4f00-984c-95dec67514b4",
+  "id": "22b17b18-a3b0-4f63-a5c1-d02a14a81d5c",
   "prevId": "c7b305ed-2339-4f1e-bba8-d68bd6c101c9",
   "version": "7",
   "dialect": "postgresql",
@@ -32,6 +32,26 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "recap_rotation": {
+          "name": "recap_rotation",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "last_recapped_at": {
+          "name": "last_recapped_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "joined_at": {
+          "name": "joined_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
         }
       },
       "indexes": {},
@@ -98,29 +118,60 @@
           "primaryKey": false,
           "notNull": true
         },
+        "channel_name": {
+          "name": "channel_name",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "day_of_week": {
           "name": "day_of_week",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "minute_of_day": {
           "name": "minute_of_day",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "time_zone": {
           "name": "time_zone",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "next_session_at": {
           "name": "next_session_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
+        },
+        "recap_user_id": {
+          "name": "recap_user_id",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recap_session_at": {
+          "name": "recap_session_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recap_previous_at": {
+          "name": "recap_previous_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recap_skipped_user_ids": {
+          "name": "recap_skipped_user_ids",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
         },
         "created_at": {
           "name": "created_at",
@@ -167,6 +218,19 @@
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
+        },
+        "campaign_reminders_recap_user_id_users_id_fk": {
+          "name": "campaign_reminders_recap_user_id_users_id_fk",
+          "tableFrom": "campaign_reminders",
+          "tableTo": "users",
+          "columnsFrom": [
+            "recap_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -180,6 +244,10 @@
         "campaign_reminders_minute_of_day_check": {
           "name": "campaign_reminders_minute_of_day_check",
           "value": "\"campaign_reminders\".\"minute_of_day\" between 0 and 1439"
+        },
+        "campaign_reminders_schedule_check": {
+          "name": "campaign_reminders_schedule_check",
+          "value": "(\"campaign_reminders\".\"day_of_week\" is null) = (\"campaign_reminders\".\"minute_of_day\" is null)\n        and (\"campaign_reminders\".\"day_of_week\" is null) = (\"campaign_reminders\".\"time_zone\" is null)\n        and (\"campaign_reminders\".\"day_of_week\" is null) = (\"campaign_reminders\".\"next_session_at\" is null)"
         }
       },
       "isRLSEnabled": false

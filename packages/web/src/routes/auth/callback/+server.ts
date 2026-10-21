@@ -31,5 +31,7 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
     },
   );
 
-  throw redirect(303, "/");
+  const returnTo = cookies.get("oauth_return");
+  cookies.delete("oauth_return", { path: "/" });
+  throw redirect(303, returnTo ?? "/");
 };

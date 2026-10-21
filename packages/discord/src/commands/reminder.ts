@@ -1,35 +1,20 @@
 import {
-  LabelBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   MessageFlags,
-  ModalBuilder,
   SlashCommandBuilder,
-  StringSelectMenuBuilder,
-  TextInputBuilder,
-  TextInputStyle,
   type ChatInputCommandInteraction,
-  type ModalSubmitInteraction,
 } from "discord.js";
-import { getCampaignReminder, setCampaignReminder } from "@rainbot/db";
-import {
-  WEEKDAYS,
-  formatTimeOfDay,
-  nextSessionAfter,
-  normalizeTimeZone,
-  parseTimeOfDay,
-} from "../reminder-schedule.ts";
-import { REMINDER_LEAD_MS } from "../reminders.ts";
+import { setCampaignReminderChannel } from "@rainbot/db";
+import { WEB_URL } from "../env.ts";
 import { campaignAutocomplete } from "./autocomplete.ts";
 import { requireDmOfCampaign } from "./guard.ts";
-
-const MODAL_PREFIX = "reminder:";
-const DAY_INPUT = "day";
-const TIME_INPUT = "time";
-const TIME_ZONE_INPUT = "time-zone";
 
 export const reminder = {
   data: new SlashCommandBuilder()
     .setName("reminder")
-    .setDescription("Remind players in this channel an hour before each weekly session")
+    .setDescription("Post session reminders in this channel and set the session schedule")
     .addStringOption((option) =>
       option
         .setName("campaign")
@@ -48,111 +33,33 @@ export const reminder = {
     const meta = await requireDmOfCampaign(interaction, campaignId, "set session reminders");
     if (!meta) return;
 
-    const existing = await getCampaignReminder(campaignId);
-
-    const day = new StringSelectMenuBuilder()
-      .setCustomId(DAY_INPUT)
-      .setRequired(true)
-      .addOptions(
-        WEEKDAYS.map((name, index) => ({
-          label: name,
-          value: String(index),
-          default: existing?.dayOfWeek === index,
-        })),
-      );
-    const time = new TextInputBuilder()
-      .setCustomId(TIME_INPUT)
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder("19:30 or 7:30 pm")
-      .setRequired(true)
-      .setMaxLength(10);
-    const timeZone = new TextInputBuilder()
-      .setCustomId(TIME_ZONE_INPUT)
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder("America/New_York")
-      .setRequired(true)
-      .setMaxLength(64);
-    if (existing) {
-      time.setValue(formatTimeOfDay(existing.minuteOfDay));
-      timeZone.setValue(existing.timeZone);
-    }
-
-    const modal = new ModalBuilder()
-      .setCustomId(`${MODAL_PREFIX}${campaignId}`)
-      .setTitle("Weekly session reminder")
-      .addLabelComponents(
-        new LabelBuilder().setLabel("Session day").setStringSelectMenuComponent(day),
-        new LabelBuilder()
-          .setLabel("Session start time")
-          .setDescription("24-hour or am/pm time")
-          .setTextInputComponent(time),
-        new LabelBuilder()
-          .setLabel("Time zone")
-          .setDescription("IANA time zone name, e.g. Europe/London or America/St_Johns")
-          .setTextInputComponent(timeZone),
-      );
-
-    await interaction.showModal(modal);
-  },
-  modalSubmit: async (interaction: ModalSubmitInteraction) => {
-    if (!interaction.guildId || !interaction.channelId) {
-      await interaction.reply("This command can only be used in a server.");
-      return;
-    }
-
-    const campaignId = interaction.customId.slice(MODAL_PREFIX.length);
-    const meta = await requireDmOfCampaign(interaction, campaignId, "set session reminders");
-    if (!meta) return;
-
-    const dayOfWeek = Number(interaction.fields.getStringSelectValues(DAY_INPUT)[0]);
-    const minuteOfDay = parseTimeOfDay(interaction.fields.getTextInputValue(TIME_INPUT));
-    const timeZone = normalizeTimeZone(interaction.fields.getTextInputValue(TIME_ZONE_INPUT));
-    if (!Number.isInteger(dayOfWeek) || !WEEKDAYS[dayOfWeek]) {
-      await interaction.reply({
-        content: "Please pick a session day.",
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-    if (minuteOfDay === null) {
-      await interaction.reply({
-        content: "I couldn't read that time. Try something like `19:30` or `7:30 pm`.",
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-    if (!timeZone) {
-      await interaction.reply({
-        content:
-          "I don't recognise that time zone. Use an IANA name such as `America/New_York` " +
-          "(see https://en.wikipedia.org/wiki/List_of_tz_database_time_zones).",
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-
-    const schedule = { dayOfWeek, minuteOfDay, timeZone };
-    // The first session is the next one whose reminder is still ahead of us.
-    const nextSessionAt = nextSessionAfter(schedule, new Date(Date.now() + REMINDER_LEAD_MS));
-
+    const channel = interaction.channel;
     try {
-      await setCampaignReminder({
+      await setCampaignReminderChannel({
         campaignId,
         channelId: interaction.channelId,
-        nextSessionAt,
-        ...schedule,
+        channelName: channel && "name" in channel ? channel.name : null,
       });
     } catch (err) {
-      console.error("[reminder] failed to save reminder:", err);
-      await interaction.reply("Failed to save the reminder.");
+      console.error("[reminder] failed to save reminder channel:", err);
+      await interaction.reply("Failed to save the reminder channel.");
       return;
     }
 
-    const timestamp = Math.floor(nextSessionAt.getTime() / 1000);
-    await interaction.reply(
-      `Sessions are set for every **${WEEKDAYS[dayOfWeek]} at ${formatTimeOfDay(minuteOfDay)}** ` +
-        `(${timeZone}). I'll remind the players in this channel an hour before each one.\n` +
-        `Next session: <t:${timestamp}:F>.`,
-    );
+    const scheduleUrl = `${WEB_URL.replace(/\/$/, "")}/campaigns/${encodeURIComponent(campaignId)}/schedule`;
+    await interaction.reply({
+      content:
+        "Session reminders for this campaign will be posted in this channel. " +
+        "Set the session day and time on the web:",
+      components: [
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setStyle(ButtonStyle.Link)
+            .setLabel("Set session time")
+            .setURL(scheduleUrl),
+        ),
+      ],
+      flags: MessageFlags.Ephemeral,
+    });
   },
 };

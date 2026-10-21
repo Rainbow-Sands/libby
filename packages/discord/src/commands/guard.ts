@@ -1,11 +1,11 @@
-import type { ChatInputCommandInteraction, ModalSubmitInteraction } from "discord.js";
+import type { ChatInputCommandInteraction } from "discord.js";
 import { getCampaignMeta } from "@rainbot/db";
 
 // Validates that the interaction targets a campaign in this guild that the
 // caller is the DM of. On failure it replies with the reason and returns null;
 // on success it returns the campaign metadata.
 export async function requireDmOfCampaign(
-  interaction: ChatInputCommandInteraction | ModalSubmitInteraction,
+  interaction: ChatInputCommandInteraction,
   campaignId: string,
   action = "manage players",
 ): Promise<{ guildId: string; dmId: string | null } | null> {

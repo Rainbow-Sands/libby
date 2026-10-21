@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nextSessionAfter, normalizeTimeZone, parseTimeOfDay } from "./reminder-schedule.ts";
+import { nextSessionAfter, normalizeTimeZone, parseTimeOfDay } from "./schedule.ts";
 
 describe("parseTimeOfDay", () => {
   it("parses 24-hour and 12-hour times", () => {

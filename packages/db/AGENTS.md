@@ -9,7 +9,10 @@ Drizzle ORM schema, Postgres client, and all shared queries. See the root
 - `client.ts` — the `db` instance.
 - `domain.ts` — shared literal values and types for persisted roles and states.
 - `campaigns.ts` — campaign/member mutations.
-- `reminders.ts` — per-campaign weekly session reminder config and claiming.
+- `reminders.ts` — per-campaign reminder channel/schedule, claiming, and the
+  recap rotation (least recently recapped goes next; a skip restores the date).
+- `schedule.ts` — pure, time-zone-aware weekly schedule math shared by the bot
+  and the web app.
 - `queries.ts` — read queries used by web and workers.
   `getCampaignAccess` resolves admin/member access in one database query.
 - `recording.ts` — recording lifecycle, clip registration, and crash recovery.
