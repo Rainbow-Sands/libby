@@ -4,7 +4,13 @@ import type { SessionArtifactRef, SessionArtifactWrite } from "./artifacts.ts";
 import { db } from "./client.ts";
 import type { NotificationStatus, ProcessingRunKind, ProcessingRunStatus } from "./domain.ts";
 import { processingRuns, sessionArtifacts, sessionSegments, sessions } from "./schema.ts";
-import { JOB_QUEUES, enqueueJob, startJobQueue } from "./jobs.ts";
+import {
+  JOB_QUEUES,
+  enqueueJob,
+  enqueueJobs,
+  startJobQueue,
+  type TranscribeSegmentJob,
+} from "./jobs.ts";
 import type { SessionRecap } from "./session-notes.ts";
 import { advanceTranscriptionBarrier } from "./transcription.ts";
 
@@ -350,6 +356,7 @@ export async function reconcilePendingJobs(): Promise<void> {
         ),
       );
 
+    const transcriptionJobs: { id: string; data: TranscribeSegmentJob }[] = [];
     for (const segment of segments) {
       if (!segment.runId) continue;
       const jobId = segment.jobId ?? randomUUID();
@@ -365,18 +372,17 @@ export async function reconcilePendingJobs(): Promise<void> {
             ),
           );
       }
-      await enqueueJob(
-        tx,
-        JOB_QUEUES.transcribeSegment,
-        {
+      transcriptionJobs.push({
+        id: jobId,
+        data: {
           jobId,
           sessionId: segment.sessionId,
           runId: segment.runId,
           segmentId: segment.segmentId,
         },
-        jobId,
-      );
+      });
     }
+    await enqueueJobs(tx, JOB_QUEUES.transcribeSegment, transcriptionJobs);
 
     const runnableRuns = await tx
       .select({ id: processingRuns.id })
@@ -387,9 +393,11 @@ export async function reconcilePendingJobs(): Promise<void> {
           and(eq(processingRuns.status, "done"), eq(processingRuns.notificationStatus, "pending")),
         ),
       );
-    for (const run of runnableRuns) {
-      await enqueueJob(tx, JOB_QUEUES.advanceProcessingRun, { runId: run.id }, run.id);
-    }
+    await enqueueJobs(
+      tx,
+      JOB_QUEUES.advanceProcessingRun,
+      runnableRuns.map((run) => ({ id: run.id, data: { runId: run.id } })),
+    );
 
     const transcribingRuns = await tx
       .select({ id: processingRuns.id })

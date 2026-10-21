@@ -23,8 +23,12 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
   const requested = url.searchParams.get("asOf");
   const asOf = worldSessions.find((session) => session.id === requested) ?? null;
   const bound = asOf?.startedAt ?? null;
-  const world = await getWorldSummary(params.id, bound ? { through: bound } : {});
-  const detail = await getWorldPage(params.id, params.slug, bound, world);
+  // The page reads alongside the world it links into.
+  const worldLoad = getWorldSummary(params.id, bound ? { through: bound } : {});
+  const [world, detail] = await Promise.all([
+    worldLoad,
+    getWorldPage(params.id, params.slug, bound, worldLoad),
+  ]);
   if (!detail) throw error(404, "There is no such page in this world.");
   const player = detail.memberUserId
     ? campaign.members.find((member) => member.id === detail.memberUserId)

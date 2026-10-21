@@ -35,8 +35,10 @@ import {
 } from "./domain.ts";
 import type { SessionRecap } from "./session-notes.ts";
 import type { TranscriptSegment } from "./transcript.ts";
+import type { MentionSentence } from "./world-links.ts";
 import {
   WORLD_PAGE_KINDS,
+  type StoredWorldPageChange,
   type WorldMoment,
   type WorldPageContent,
   type WorldPageKind,
@@ -378,6 +380,9 @@ export const worldUpdates = pgTable(
     status: varchar("status", { length: 20 }).$type<WorldUpdateStatus>().notNull(),
     attempts: integer("attempts").default(0).notNull(),
     report: jsonb("report").$type<WorldUpdateReport>(),
+    // What the update changed on each page, kept so the session page never
+    // compares whole revisions. Null for updates recorded before it was kept.
+    changes: jsonb("changes").$type<StoredWorldPageChange[]>(),
     error: text("error"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -387,3 +392,33 @@ export const worldUpdates = pgTable(
     check("world_updates_status_check", oneOf(t.status, WORLD_UPDATE_STATUSES)),
   ],
 );
+
+// The sentences of each session's recap that mention a page, found by name and
+// alias. Derived data, rebuilt for a whole campaign whenever its recaps or
+// page names change; see world_mention_indexes.
+export const worldPageMentions = pgTable(
+  "world_page_mentions",
+  {
+    pageId: uuid("page_id")
+      .references(() => worldPages.id)
+      .notNull(),
+    sessionId: varchar("session_id", { length: 30 })
+      .references(() => sessions.id)
+      .notNull(),
+    sentences: jsonb("sentences").$type<MentionSentence[]>().notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.pageId, t.sessionId] }),
+    index("world_page_mentions_session_idx").on(t.sessionId),
+  ],
+);
+
+// Which recaps and page names a campaign's mentions were built from, as a
+// hash, so a page view can tell when they are stale.
+export const worldMentionIndexes = pgTable("world_mention_indexes", {
+  campaignId: uuid("campaign_id")
+    .references(() => campaigns.id)
+    .primaryKey(),
+  fingerprint: varchar("fingerprint", { length: 32 }).notNull(),
+  builtAt: timestamp("built_at").defaultNow().notNull(),
+});

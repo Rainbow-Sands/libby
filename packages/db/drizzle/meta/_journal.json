@@ -162,6 +162,13 @@
       "when": 1792556076345,
       "tag": "0022_panoramic_sleepwalker",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792559135302,
+      "tag": "0023_silky_dagger",
+      "breakpoints": true
     }
   ]
 }

@@ -57,6 +57,47 @@ export interface WorldPageState {
   content: WorldPageContent;
 }
 
+// What one session changed on a page. Only the difference is kept, since a
+// page's full content grows with every session and the session page only
+// shows what changed.
+export interface WorldPageDiff {
+  name: string;
+  holder: string | null;
+  // The page's summary, kept only for a new page that gained no facts.
+  summary: string | null;
+  added: WorldFact[];
+  superseded: WorldFact[];
+  renamedFrom: string | null;
+  status: { from: string | null; to: string | null } | null;
+}
+
+export function diffWorldPage(
+  sessionId: string,
+  content: WorldPageContent,
+  previous: WorldPageContent | null,
+): WorldPageDiff {
+  const before = new Set(previous?.facts.map((fact) => fact.id));
+  const added = content.facts.filter((fact) => !before.has(fact.id));
+  return {
+    name: content.name,
+    holder: content.holder,
+    summary: !previous && added.length === 0 ? content.summary || null : null,
+    added,
+    superseded: content.facts.filter((fact) => fact.supersededIn === sessionId),
+    renamedFrom: previous && previous.name !== content.name ? previous.name : null,
+    status:
+      previous && previous.status !== content.status
+        ? { from: previous.status, to: content.status }
+        : null,
+  };
+}
+
+// A page's change as stored with its session's world update.
+export interface StoredWorldPageChange extends WorldPageDiff {
+  pageId: string;
+  created: boolean;
+}
+
 export interface WorldUpdateReport {
   possibleDuplicates: { first: string; second: string; reason: string }[];
   nameCorrections: { heard: string; canonical: string }[];

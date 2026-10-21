@@ -43,8 +43,13 @@ skipped rather than sent late. Claiming also assigns recap duty, and
 
 - Gateway intents: `Guilds` and `GuildVoiceStates` (voice state cache is how we
   find the caller's channel and resolve usernames).
-- Each voice activation is registered in Postgres before recording, becomes one
-  ogg/opus clip via **ffmpeg**, and is uploaded to S3-compatible object storage.
+- Each voice activation becomes one ogg/opus clip via **ffmpeg** and is uploaded
+  to S3-compatible object storage. Recording starts in the receiver's "start"
+  handler, which runs on the user's first packet before that packet reaches
+  subscribers, so subscribe synchronously there: any `await` before
+  `receiver.subscribe` loses the start of what was said. The clip is registered
+  in Postgres alongside the recording, and a clip whose registration fails is
+  deleted instead of uploaded.
 - Marking an upload ready enqueues its pg-boss transcription job in the same
   transaction, so the worker can transcribe while the session is still active.
 - Session shutdown first stops new activations, then finalizes all active

@@ -32,10 +32,11 @@ const AUDIO_EXTENSIONS = new Set([
 export const load: PageServerLoad = async ({ params, locals }) => {
   if (!locals.user) throw redirect(303, "/");
 
-  const access = await getCampaignAccess(params.id, locals.user.id);
+  const [access, campaign] = await Promise.all([
+    getCampaignAccess(params.id, locals.user.id),
+    getCampaignDetail(params.id),
+  ]);
   if (!access.isMember) throw error(403, "You are not a member of this campaign.");
-
-  const campaign = await getCampaignDetail(params.id);
   if (!campaign) throw error(404, "Campaign not found.");
 
   return { campaign };

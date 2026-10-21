@@ -22,12 +22,14 @@ const chatInference = createChatInference(CHAT_INFERENCE_CONFIG);
 export const POST: RequestHandler = async ({ params, locals, request }) => {
   if (!locals.user) throw error(401, "You must be logged in.");
 
-  const session = await getSessionDetail(params.sessionId);
+  const [session, access, cast] = await Promise.all([
+    getSessionDetail(params.sessionId),
+    getCampaignAccess(params.id, locals.user.id),
+    getCampaignCast(params.id),
+  ]);
   if (!session || session.campaignId !== params.id) {
     throw error(404, "Session not found.");
   }
-
-  const access = await getCampaignAccess(session.campaignId, locals.user.id);
   if (!access.canAccess) throw error(403, "You cannot view this campaign.");
 
   if (!session.detailedRecordArtifact && !session.transcriptArtifact) {
@@ -39,7 +41,6 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
     return json({ error: "Expected a `messages` array." }, { status: 400 });
   }
 
-  const cast = await getCampaignCast(session.campaignId);
   // Sessions processed with a ledger chat over it and the full transcript.
   // Older sessions keep using their detailed record alone, as before.
   const ledger = session.ledgerArtifact

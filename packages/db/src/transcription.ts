@@ -1,7 +1,20 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, count, eq, exists, gte, inArray, isNotNull, isNull, ne, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  eq,
+  exists,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import { db, type DatabaseTransaction } from "./client.ts";
-import { JOB_QUEUES, enqueueJob, startJobQueue } from "./jobs.ts";
+import { JOB_QUEUES, enqueueJob, enqueueJobs, startJobQueue } from "./jobs.ts";
 import { evaluateTranscriptionBarrier } from "./processing-state.ts";
 import { processingRuns, sessionSegments, sessions } from "./schema.ts";
 import type { TranscriptSegment } from "./transcript.ts";
@@ -292,46 +305,51 @@ export async function startTranscriptRegeneration(
       status: "transcribing",
     });
 
-    for (const ref of refs) {
-      const jobId = randomUUID();
+    // Every clip is written and enqueued in a few statements rather than two
+    // per clip, which matters for long sessions on a distant database.
+    const segments = refs.map((ref) => ({
+      sessionId,
+      segmentId: ref.segmentId,
+      audioObjectKey: ref.audioObjectKey,
+      recordedAt: ref.timestamp,
+      userId: ref.userId,
+      username: ref.username,
+      audioStatus: "ready" as const,
+      transcriptionRunId: runId,
+      transcriptionStatus: "pending" as const,
+      transcriptionJobId: randomUUID(),
+    }));
+    for (let start = 0; start < segments.length; start += 500) {
       await tx
         .insert(sessionSegments)
-        .values({
-          sessionId,
-          segmentId: ref.segmentId,
-          audioObjectKey: ref.audioObjectKey,
-          recordedAt: ref.timestamp,
-          userId: ref.userId,
-          username: ref.username,
-          audioStatus: "ready",
-          transcriptionRunId: runId,
-          transcriptionStatus: "pending",
-          transcriptionJobId: jobId,
-        })
+        .values(segments.slice(start, start + 500))
         .onConflictDoUpdate({
           target: [sessionSegments.sessionId, sessionSegments.segmentId],
           set: {
-            audioObjectKey: ref.audioObjectKey,
-            recordedAt: ref.timestamp,
-            userId: ref.userId,
-            username: ref.username,
+            audioObjectKey: sql`excluded.audio_object_key`,
+            recordedAt: sql`excluded.recorded_at`,
+            userId: sql`excluded.user_id`,
+            // A clip without a username keeps the one it has.
+            username: sql`coalesce(excluded.username, ${sessionSegments.username})`,
             audioStatus: "ready",
             transcriptionRunId: runId,
             transcriptionStatus: "pending",
-            transcriptionJobId: jobId,
+            transcriptionJobId: sql`excluded.transcription_job_id`,
             transcript: null,
             transcribedAt: null,
             error: null,
             updatedAt: new Date(),
           },
         });
-      await enqueueJob(
-        tx,
-        JOB_QUEUES.transcribeSegment,
-        { jobId, sessionId, runId, segmentId: ref.segmentId },
-        jobId,
-      );
     }
+    await enqueueJobs(
+      tx,
+      JOB_QUEUES.transcribeSegment,
+      segments.map(({ segmentId, transcriptionJobId: jobId }) => ({
+        id: jobId,
+        data: { jobId, sessionId, runId, segmentId },
+      })),
+    );
 
     await tx
       .update(sessions)
@@ -389,14 +407,6 @@ export async function startFailedTranscriptionRetry(sessionId: string): Promise<
       throw new Error(`Session ${sessionId} has clips whose audio was never saved`);
     }
 
-    const failed = await tx
-      .select({ segmentId: sessionSegments.segmentId })
-      .from(sessionSegments)
-      .where(untranscribedSegment(sessionId));
-    if (failed.length === 0) {
-      throw new Error(`Session ${sessionId} has no failed transcriptions`);
-    }
-
     await tx.insert(processingRuns).values({
       id: runId,
       sessionId,
@@ -415,29 +425,35 @@ export async function startFailedTranscriptionRetry(sessionId: string): Promise<
         ),
       );
 
-    for (const { segmentId } of failed) {
-      const jobId = randomUUID();
-      await tx
-        .update(sessionSegments)
-        .set({
-          transcriptionRunId: runId,
-          transcriptionStatus: "pending",
-          transcriptionJobId: jobId,
-          transcript: null,
-          transcribedAt: null,
-          error: null,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(eq(sessionSegments.sessionId, sessionId), eq(sessionSegments.segmentId, segmentId)),
-        );
-      await enqueueJob(
-        tx,
-        JOB_QUEUES.transcribeSegment,
-        { jobId, sessionId, runId, segmentId },
-        jobId,
-      );
+    // Each failed clip gets a fresh job id in the same statement that resets it.
+    const failed = await tx
+      .update(sessionSegments)
+      .set({
+        transcriptionRunId: runId,
+        transcriptionStatus: "pending",
+        transcriptionJobId: sql`gen_random_uuid()`,
+        transcript: null,
+        transcribedAt: null,
+        error: null,
+        updatedAt: new Date(),
+      })
+      .where(untranscribedSegment(sessionId))
+      .returning({
+        segmentId: sessionSegments.segmentId,
+        jobId: sessionSegments.transcriptionJobId,
+      });
+    // Throwing rolls back the run inserted above.
+    if (failed.length === 0) {
+      throw new Error(`Session ${sessionId} has no failed transcriptions`);
     }
+    await enqueueJobs(
+      tx,
+      JOB_QUEUES.transcribeSegment,
+      failed.map(({ segmentId, jobId }) => ({
+        id: jobId!,
+        data: { jobId: jobId!, sessionId, runId, segmentId },
+      })),
+    );
 
     await tx
       .update(sessions)

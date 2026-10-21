@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "./client.ts";
 import {
   RECOVERABLE_SESSION_STATUSES,
@@ -100,35 +100,37 @@ export async function hasOpenRecordingForGuild(guildId: string): Promise<boolean
   return row !== undefined;
 }
 
+// One statement, because recording only starts once the clip is registered.
+// The share lock on the session stands in for a row lock: a concurrent close
+// waits for the insert, and a registration after a close sees the new status
+// and inserts nothing.
 export async function registerRecordingSegment(
   sessionId: string,
   runId: string,
   ref: AudioSegmentRef,
 ): Promise<void> {
-  await db.transaction(async (tx) => {
-    const [session] = await tx
-      .select({ status: sessions.status, activeRunId: sessions.activeRunId })
-      .from(sessions)
-      .where(eq(sessions.id, sessionId))
-      .for("update");
-    if (!session || session.status !== "recording" || session.activeRunId !== runId) {
-      throw new Error(`Session ${sessionId} is no longer accepting audio segments`);
-    }
-
-    await tx
-      .insert(sessionSegments)
-      .values({
-        sessionId,
-        segmentId: ref.segmentId,
-        audioObjectKey: ref.audioObjectKey,
-        recordedAt: ref.timestamp,
-        userId: ref.userId,
-        username: ref.username,
-        audioStatus: "recording",
-        transcriptionRunId: runId,
-      })
-      .onConflictDoNothing();
-  });
+  const [row] = await db.execute<{ accepting: boolean }>(sql`
+    with accepting as (
+      select 1 from ${sessions}
+      where ${sessions.id} = ${sessionId}
+        and ${sessions.status} = 'recording'
+        and ${sessions.activeRunId} = ${runId}
+      for share
+    ), registered as (
+      insert into ${sessionSegments} (
+        session_id, segment_id, audio_object_key, recorded_at, user_id, username,
+        audio_status, transcription_run_id
+      )
+      select ${sessionId}, ${ref.segmentId}, ${ref.audioObjectKey}, ${ref.timestamp},
+        ${ref.userId}, ${ref.username ?? null}, 'recording', ${runId}::uuid
+      from accepting
+      on conflict do nothing
+    )
+    select exists (select 1 from accepting) as accepting
+  `);
+  if (!row?.accepting) {
+    throw new Error(`Session ${sessionId} is no longer accepting audio segments`);
+  }
 }
 
 export async function markSegmentReady(

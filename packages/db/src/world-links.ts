@@ -137,29 +137,44 @@ function markdownLines(markdown: string): string[] {
     .filter(Boolean);
 }
 
-// Every sentence of a markdown recap that mentions one of the names, in
-// order, with each mention marked.
-export function mentionSentences(markdown: string, names: string[]): MentionSentence[] {
-  const matcher = nameMatcher([{ slug: "", names }]);
-  if (!matcher || !markdown) return [];
+// Every sentence of a markdown recap that mentions each page, in order and
+// keyed by slug, with that page's mentions marked. Overlapping names go to
+// the longest, so "the Hollowmere Archive" mentions the archive, not the town.
+export function mentionsBySlug(
+  markdown: string,
+  targets: LinkTarget[],
+): Map<string, MentionSentence[]> {
+  const result = new Map<string, MentionSentence[]>();
+  const matcher = markdown ? nameMatcher(targets) : null;
+  if (!matcher) return result;
   const segmenter = new Intl.Segmenter("en", { granularity: "sentence" });
 
-  const result: MentionSentence[] = [];
   for (const line of markdownLines(markdown)) {
     for (const { segment } of segmenter.segment(line)) {
       const sentence = segment.trim();
-      const parts: MentionSentence = [];
-      let last = 0;
-      for (const match of findNames(sentence, matcher)) {
-        if (match.index > last)
-          parts.push({ text: sentence.slice(last, match.index), mention: false });
-        parts.push({ text: match.text, mention: true });
-        last = match.index + match.text.length;
+      const matches = [...findNames(sentence, matcher)];
+      for (const slug of new Set(matches.map((match) => match.slug))) {
+        const parts: MentionSentence = [];
+        let last = 0;
+        for (const match of matches) {
+          if (match.slug !== slug) continue;
+          if (match.index > last) {
+            parts.push({ text: sentence.slice(last, match.index), mention: false });
+          }
+          parts.push({ text: match.text, mention: true });
+          last = match.index + match.text.length;
+        }
+        if (last < sentence.length) parts.push({ text: sentence.slice(last), mention: false });
+        const sentences = result.get(slug) ?? [];
+        sentences.push(parts);
+        result.set(slug, sentences);
       }
-      if (parts.length === 0) continue;
-      if (last < sentence.length) parts.push({ text: sentence.slice(last), mention: false });
-      result.push(parts);
     }
   }
   return result;
+}
+
+// Every sentence of a markdown recap that mentions one of the names.
+export function mentionSentences(markdown: string, names: string[]): MentionSentence[] {
+  return mentionsBySlug(markdown, [{ slug: "page", names }]).get("page") ?? [];
 }

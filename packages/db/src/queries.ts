@@ -1,4 +1,4 @@
-import { and, desc, eq, lt, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, lt, or, sql } from "drizzle-orm";
 import { db } from "./client.ts";
 import type { SessionArtifactKind, SessionArtifactRef } from "./artifacts.ts";
 import type { CampaignAccessRole, CampaignMemberRole, SessionStatus } from "./domain.ts";
@@ -21,26 +21,22 @@ export async function listCampaigns() {
 }
 
 export async function getCampaignsForUser(userId: string) {
-  if (await isAdmin(userId)) {
-    return db
-      .select({
-        id: campaigns.id,
-        name: campaigns.name,
-        role: sql<CampaignAccessRole>`'admin'`,
-      })
-      .from(campaigns)
-      .orderBy(campaigns.name);
-  }
-
+  // Admins see every campaign; everyone else sees the ones they belong to.
+  const admin = sql<boolean>`exists (
+    select 1 from ${users} where ${users.id} = ${userId} and ${users.isAdmin} = true
+  )`;
   return db
     .select({
       id: campaigns.id,
       name: campaigns.name,
-      role: campaignMembers.role,
+      role: sql<CampaignAccessRole>`case when ${admin} then 'admin' else ${campaignMembers.role} end`,
     })
-    .from(campaignMembers)
-    .innerJoin(campaigns, eq(campaignMembers.campaignId, campaigns.id))
-    .where(eq(campaignMembers.userId, userId))
+    .from(campaigns)
+    .leftJoin(
+      campaignMembers,
+      and(eq(campaignMembers.campaignId, campaigns.id), eq(campaignMembers.userId, userId)),
+    )
+    .where(or(admin, isNotNull(campaignMembers.userId)))
     .orderBy(campaigns.name);
 }
 
@@ -93,18 +89,19 @@ export interface CampaignMember {
 export async function getCampaignMeta(
   campaignId: string,
 ): Promise<{ guildId: string; dmId: string | null } | null> {
-  const [campaign] = await db
-    .select({ guildId: campaigns.guildId })
-    .from(campaigns)
-    .where(eq(campaigns.id, campaignId))
-    .limit(1);
+  const [[campaign], [dm]] = await Promise.all([
+    db
+      .select({ guildId: campaigns.guildId })
+      .from(campaigns)
+      .where(eq(campaigns.id, campaignId))
+      .limit(1),
+    db
+      .select({ userId: campaignMembers.userId })
+      .from(campaignMembers)
+      .where(and(eq(campaignMembers.campaignId, campaignId), eq(campaignMembers.role, "dm")))
+      .limit(1),
+  ]);
   if (!campaign) return null;
-
-  const [dm] = await db
-    .select({ userId: campaignMembers.userId })
-    .from(campaignMembers)
-    .where(and(eq(campaignMembers.campaignId, campaignId), eq(campaignMembers.role, "dm")))
-    .limit(1);
 
   return { guildId: campaign.guildId, dmId: dm?.userId ?? null };
 }
@@ -150,31 +147,31 @@ export interface CampaignDetail {
 }
 
 export async function getCampaignDetail(campaignId: string): Promise<CampaignDetail | null> {
-  const [campaign] = await db.select().from(campaigns).where(eq(campaigns.id, campaignId)).limit(1);
+  const [[campaign], members, sessionRows] = await Promise.all([
+    db.select().from(campaigns).where(eq(campaigns.id, campaignId)).limit(1),
+    db
+      .select({
+        id: users.id,
+        username: users.username,
+        role: campaignMembers.role,
+        characterName: campaignMembers.characterName,
+      })
+      .from(campaignMembers)
+      .innerJoin(users, eq(campaignMembers.userId, users.id))
+      .where(eq(campaignMembers.campaignId, campaignId)),
+    db
+      .select({
+        id: sessions.id,
+        title: sessions.title,
+        status: sessions.status,
+        startedAt: sessions.startedAt,
+        endedAt: sessions.endedAt,
+      })
+      .from(sessions)
+      .where(eq(sessions.campaignId, campaignId))
+      .orderBy(desc(sessions.startedAt)),
+  ]);
   if (!campaign) return null;
-
-  const members = await db
-    .select({
-      id: users.id,
-      username: users.username,
-      role: campaignMembers.role,
-      characterName: campaignMembers.characterName,
-    })
-    .from(campaignMembers)
-    .innerJoin(users, eq(campaignMembers.userId, users.id))
-    .where(eq(campaignMembers.campaignId, campaignId));
-
-  const sessionRows = await db
-    .select({
-      id: sessions.id,
-      title: sessions.title,
-      status: sessions.status,
-      startedAt: sessions.startedAt,
-      endedAt: sessions.endedAt,
-    })
-    .from(sessions)
-    .where(eq(sessions.campaignId, campaignId))
-    .orderBy(desc(sessions.startedAt));
 
   return {
     id: campaign.id,
@@ -200,26 +197,28 @@ export interface SessionDetail {
 }
 
 export async function getSessionDetail(sessionId: string): Promise<SessionDetail | null> {
-  const [session] = await db
-    .select({
-      id: sessions.id,
-      campaignId: sessions.campaignId,
-      title: sessions.title,
-      status: sessions.status,
-      startedAt: sessions.startedAt,
-      endedAt: sessions.endedAt,
-      recap: sessions.recap,
-      recapSections: sessions.recapSections,
-    })
-    .from(sessions)
-    .where(eq(sessions.id, sessionId))
-    .limit(1);
+  const [[session], artifacts] = await Promise.all([
+    db
+      .select({
+        id: sessions.id,
+        campaignId: sessions.campaignId,
+        title: sessions.title,
+        status: sessions.status,
+        startedAt: sessions.startedAt,
+        endedAt: sessions.endedAt,
+        recap: sessions.recap,
+        recapSections: sessions.recapSections,
+      })
+      .from(sessions)
+      .where(eq(sessions.id, sessionId))
+      .limit(1),
+    db
+      .select()
+      .from(sessionArtifacts)
+      .where(and(eq(sessionArtifacts.sessionId, sessionId), eq(sessionArtifacts.isCurrent, true))),
+  ]);
   if (!session) return null;
 
-  const artifacts = await db
-    .select()
-    .from(sessionArtifacts)
-    .where(and(eq(sessionArtifacts.sessionId, sessionId), eq(sessionArtifacts.isCurrent, true)));
   const toRef = (kind: SessionArtifactKind): SessionArtifactRef | null => {
     const artifact = artifacts.find((candidate) => candidate.kind === kind);
     return artifact
@@ -260,13 +259,11 @@ export interface PreviousSessionNotes {
 export async function getPreviousSessionNotes(
   sessionId: string,
 ): Promise<PreviousSessionNotes | null> {
-  const [current] = await db
+  const current = db
     .select({ campaignId: sessions.campaignId, startedAt: sessions.startedAt })
     .from(sessions)
     .where(eq(sessions.id, sessionId))
-    .limit(1);
-  if (!current) return null;
-
+    .as("current_session");
   const [previous] = await db
     .select({
       title: sessions.title,
@@ -275,13 +272,11 @@ export async function getPreviousSessionNotes(
       recapSections: sessions.recapSections,
     })
     .from(sessions)
-    .where(
-      and(
-        eq(sessions.campaignId, current.campaignId),
-        eq(sessions.status, "done"),
-        lt(sessions.startedAt, current.startedAt),
-      ),
+    .innerJoin(
+      current,
+      and(eq(sessions.campaignId, current.campaignId), lt(sessions.startedAt, current.startedAt)),
     )
+    .where(eq(sessions.status, "done"))
     .orderBy(desc(sessions.startedAt))
     .limit(1);
   return previous ?? null;
