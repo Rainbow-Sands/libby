@@ -100,7 +100,9 @@ by campaign, so repeating it is harmless). The worker starts an ordinary
 inference regeneration for the oldest `done` session without
 `recap_sections`, then re-checks every minute, waiting while any session in
 the campaign is processing. Oldest first matters because each recap reads the
-previous session's open threads. A session whose regeneration fails becomes
+previous session's open threads. It also waits until the world has applied
+every earlier session, since each ledger and recap reads the world as it stood
+when its session began. A session whose regeneration fails becomes
 `failed` and is skipped. Once no session needs a recap, the backfill enqueues
 the world update chain, so the same command builds a campaign's world from
 its whole history.

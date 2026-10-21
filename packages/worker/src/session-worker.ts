@@ -275,6 +275,11 @@ async function backfillCampaignStep(payload: BackfillCampaignRecapsJob): Promise
     await enqueueWorldUpdate(payload);
     return;
   }
+  if (step.kind === "world") {
+    // The world chain may have stopped at a session that needed a recap;
+    // the queue keeps one per campaign, so this never runs two.
+    await enqueueWorldUpdate(payload);
+  }
   if (step.kind === "next") {
     try {
       await startInferenceRegeneration(step.sessionId);
