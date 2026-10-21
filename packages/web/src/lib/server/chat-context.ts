@@ -2,6 +2,7 @@ import {
   formatTranscriptForInference,
   type CampaignCastMember,
   type SessionDetail,
+  type SessionLedger,
   type Transcript,
 } from "@rainbot/db";
 
@@ -13,7 +14,9 @@ export const SESSION_CHAT_SYSTEM = `You are Libby, a spirit librarian who dwells
 
 Rules:
 - Answer only from the session material provided below.
-- The detailed record is the canonical, loss-minimized account of the session. A raw transcript is supplied only as a fallback for sessions that do not yet have a detailed record.
+- The transcript is the complete record of what was said. Its "[h:mm:ss]" markers are elapsed time; mention one when it helps the reader find a moment.
+- The session ledger is a structured extraction of the transcript with canonical name spellings. Prefer its spellings, but trust the transcript when they disagree.
+- Older sessions have a detailed record instead of a ledger and transcript; treat it as the canonical account.
 - If the material does not cover the question, say so plainly instead of inventing lore, events, or dialogue.
 - Refer to players and their characters as named in the session material's cast legend and record.
 - Keep answers concise and grounded in what actually happened at the table.
@@ -25,6 +28,7 @@ Rules:
  */
 type SessionChatMaterial = SessionDetail & {
   detailedRecord: string | null;
+  ledger: SessionLedger | null;
   transcript: Transcript | null;
 };
 
@@ -40,14 +44,14 @@ export function buildSessionContext(
   if (session.recap) {
     parts.push("", "Recap:", session.recap);
   }
+  if (session.ledger) {
+    parts.push("", "Session ledger:", JSON.stringify(session.ledger, null, 2));
+  }
   if (session.detailedRecord) {
     parts.push("", "Detailed record:", session.detailedRecord);
-  } else if (session.transcript) {
-    parts.push(
-      "",
-      "Raw transcript fallback:",
-      formatTranscriptForInference(session.transcript, cast),
-    );
+  }
+  if (session.transcript) {
+    parts.push("", "Transcript:", formatTranscriptForInference(session.transcript, cast));
   }
 
   return parts.join("\n");

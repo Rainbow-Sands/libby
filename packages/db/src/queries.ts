@@ -1,14 +1,22 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, lt, sql } from "drizzle-orm";
 import { db } from "./client.ts";
 import type { SessionArtifactKind, SessionArtifactRef } from "./artifacts.ts";
 import type { CampaignAccessRole, CampaignMemberRole, SessionStatus } from "./domain.ts";
 import { campaigns, campaignMembers, sessionArtifacts, sessions, users } from "./schema.ts";
+import type { SessionRecap } from "./session-notes.ts";
 
 export async function getCampaignsForGuild(guildId: string) {
   return db
     .select({ id: campaigns.id, name: campaigns.name })
     .from(campaigns)
     .where(eq(campaigns.guildId, guildId))
+    .orderBy(campaigns.name);
+}
+
+export async function listCampaigns() {
+  return db
+    .select({ id: campaigns.id, name: campaigns.name })
+    .from(campaigns)
     .orderBy(campaigns.name);
 }
 
@@ -186,7 +194,9 @@ export interface SessionDetail {
   endedAt: Date | null;
   transcriptArtifact: SessionArtifactRef | null;
   detailedRecordArtifact: SessionArtifactRef | null;
+  ledgerArtifact: SessionArtifactRef | null;
   recap: string | null;
+  recapSections: SessionRecap | null;
 }
 
 export async function getSessionDetail(sessionId: string): Promise<SessionDetail | null> {
@@ -199,6 +209,7 @@ export async function getSessionDetail(sessionId: string): Promise<SessionDetail
       startedAt: sessions.startedAt,
       endedAt: sessions.endedAt,
       recap: sessions.recap,
+      recapSections: sessions.recapSections,
     })
     .from(sessions)
     .where(eq(sessions.id, sessionId))
@@ -226,12 +237,54 @@ export async function getSessionDetail(sessionId: string): Promise<SessionDetail
   };
   const transcriptArtifact = toRef("transcript");
   const detailedRecordArtifact = toRef("detailed_record");
+  const ledgerArtifact = toRef("session_ledger");
 
   return {
     ...session,
     transcriptArtifact,
     detailedRecordArtifact,
+    ledgerArtifact,
   };
+}
+
+export interface PreviousSessionNotes {
+  title: string | null;
+  startedAt: Date;
+  recap: string | null;
+  recapSections: SessionRecap | null;
+}
+
+// The most recent finished session in the same campaign that started before
+// this one: its open threads and "where we left off" give the next session's
+// inference the continuity a single transcript lacks.
+export async function getPreviousSessionNotes(
+  sessionId: string,
+): Promise<PreviousSessionNotes | null> {
+  const [current] = await db
+    .select({ campaignId: sessions.campaignId, startedAt: sessions.startedAt })
+    .from(sessions)
+    .where(eq(sessions.id, sessionId))
+    .limit(1);
+  if (!current) return null;
+
+  const [previous] = await db
+    .select({
+      title: sessions.title,
+      startedAt: sessions.startedAt,
+      recap: sessions.recap,
+      recapSections: sessions.recapSections,
+    })
+    .from(sessions)
+    .where(
+      and(
+        eq(sessions.campaignId, current.campaignId),
+        eq(sessions.status, "done"),
+        lt(sessions.startedAt, current.startedAt),
+      ),
+    )
+    .orderBy(desc(sessions.startedAt))
+    .limit(1);
+  return previous ?? null;
 }
 
 export async function getSessionStatus(sessionId: string): Promise<SessionStatus | null> {

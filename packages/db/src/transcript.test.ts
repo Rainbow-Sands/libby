@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatTranscriptForDisplay,
   formatTranscriptForInference,
+  transcriptTableStats,
   type Transcript,
   type TranscriptSegment,
 } from "./transcript.ts";
@@ -147,7 +148,7 @@ describe("formatTranscriptForInference", () => {
     expect(result).not.toContain("[background noise]");
   });
 
-  it("preserves utterance boundaries while omitting timestamps", () => {
+  it("preserves utterance boundaries with minute markers instead of timestamps", () => {
     const segment = makeSegment({
       whisper: {
         segments: [
@@ -159,7 +160,7 @@ describe("formatTranscriptForInference", () => {
 
     const result = formatTranscriptForInference(transcriptOf(segment), []);
 
-    expect(result).toBe("Alice: first part\nAlice: second part\n");
+    expect(result).toBe("[0:00:00]\nAlice: first part\nAlice: second part\n");
     expect(result).not.toContain(segment.timestamp);
   });
 
@@ -237,6 +238,29 @@ describe("formatTranscriptForInference", () => {
     expect(result).toContain("Bob: the only real line");
   });
 
+  it("opens each new elapsed minute with a marker", () => {
+    const early = makeSegment({
+      timestamp: "2026-01-01T00:00:00.000Z",
+      whisper: {
+        segments: [
+          { start: 0, text: "opening", no_speech_prob: 0.1 },
+          { start: 30, text: "same minute", no_speech_prob: 0.1 },
+        ],
+      },
+    });
+    const late = makeSegment({
+      segmentId: "late",
+      timestamp: "2026-01-01T01:02:10.000Z",
+      whisper: { segments: [{ start: 5, text: "much later", no_speech_prob: 0.1 }] },
+    });
+
+    const result = formatTranscriptForInference(transcriptOf(early, late), []);
+
+    expect(result).toBe(
+      "[0:00:00]\nAlice: opening\nAlice: same minute\n[1:02:00]\nAlice: much later\n",
+    );
+  });
+
   it("prepends the cast legend, derived from the finer-grained utterances", () => {
     const segment = makeSegment({
       userId: "user-a",
@@ -251,5 +275,35 @@ describe("formatTranscriptForInference", () => {
     expect(result).toContain("Cast — the players and the characters they play:");
     expect(result).toContain("- Alice plays Thorin");
     expect(result.indexOf("Cast —")).toBeLessThan(result.indexOf("Alice: hello"));
+  });
+});
+
+describe("transcriptTableStats", () => {
+  it("measures duration and words per speaker, most talkative first", () => {
+    const alice = makeSegment({
+      userId: "user-a",
+      username: "Alice",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      whisper: { segments: [{ start: 0, text: "one two", no_speech_prob: 0.1 }] },
+    });
+    const bob = makeSegment({
+      segmentId: "b",
+      userId: "user-b",
+      username: "Bob",
+      timestamp: "2026-01-01T00:10:00.000Z",
+      whisper: { segments: [{ start: 0, text: "three four five", no_speech_prob: 0.1 }] },
+    });
+
+    expect(
+      transcriptTableStats(transcriptOf(alice, bob), [
+        { userId: "user-a", username: "Alice", characterName: "Thorin" },
+      ]),
+    ).toEqual({
+      durationSeconds: 600,
+      speakers: [
+        { userId: "user-b", name: "Bob", characterName: null, words: 3 },
+        { userId: "user-a", name: "Alice", characterName: "Thorin", words: 2 },
+      ],
+    });
   });
 });

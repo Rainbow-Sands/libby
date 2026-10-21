@@ -31,6 +31,7 @@ import {
   type SessionStatus,
   type TranscriptionStatus,
 } from "./domain.ts";
+import type { SessionRecap } from "./session-notes.ts";
 import type { TranscriptSegment } from "./transcript.ts";
 
 function oneOf(column: SQLWrapper, values: readonly string[]) {
@@ -96,7 +97,10 @@ export const sessions = pgTable(
     sessionDir: text("session_dir").notNull(),
     activeRunId: uuid("active_run_id"),
     status: varchar("status", { length: 20 }).$type<SessionStatus>().notNull().default("recording"),
+    // Markdown rendering of recapSections, or a free-form recap from before
+    // recaps were sectioned.
     recap: text("recap"),
+    recapSections: jsonb("recap_sections").$type<SessionRecap>(),
     startedAt: timestamp("started_at").defaultNow().notNull(),
     endedAt: timestamp("ended_at"),
   },
@@ -123,6 +127,7 @@ export const processingRuns = pgTable(
     // A run's own outputs are resolved through sessionArtifacts.generatedByRunId.
     sourceTranscriptArtifactId: uuid("source_transcript_artifact_id"),
     recap: text("recap"),
+    recapSections: jsonb("recap_sections").$type<SessionRecap>(),
     title: text("title"),
     notificationChannelId: varchar("notification_channel_id", { length: 20 }),
     notificationStatus: varchar("notification_status", { length: 20 }).$type<NotificationStatus>(),

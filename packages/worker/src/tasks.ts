@@ -1,16 +1,24 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { APICallError } from "ai";
+import { APICallError, NoObjectGeneratedError, type FlexibleSchema } from "ai";
 import { UnrecoverableTaskError } from "./errors.ts";
 import { SUMMARIZATION_CONFIG, TRANSCRIPTION_MODEL, TRANSCRIPTION_URL } from "./env.ts";
 import { TITLE_SYSTEM } from "./prompts.ts";
 import { stripCodeFence, normalizeTitle } from "./text.ts";
-import { createDetailedRecord, createRecap } from "./record-pipeline.ts";
-import { createSummarizationInference } from "./summarization-inference.ts";
+import { createRecap, createSessionLedger, type SessionMaterial } from "./record-pipeline.ts";
+import {
+  createStructuredSummarizationInference,
+  createSummarizationInference,
+} from "./summarization-inference.ts";
 import {
   formatTranscriptForInference,
   getCampaignCast,
+  getPreviousSessionNotes,
+  transcriptTableStats,
   type AudioSegmentRef,
+  type CampaignCastMember,
+  type SessionLedger,
+  type SessionRecap,
   type Transcript,
   type TranscriptSegment,
 } from "@rainbot/db";
@@ -23,6 +31,8 @@ interface WhisperResponse {
 const NO_SPEECH_THRESHOLD = 0.6;
 const LOGPROB_THRESHOLD = -1;
 const completeSummarization = createSummarizationInference(SUMMARIZATION_CONFIG);
+const completeStructuredSummarization =
+  createStructuredSummarizationInference(SUMMARIZATION_CONFIG);
 
 function audioMimeType(audioPath: string): string {
   switch (path.extname(audioPath).toLowerCase()) {
@@ -123,40 +133,96 @@ export async function transcribeSegment(
 
 // ── Post-session pipeline ─────────────────────────────────────────────────────
 
+function rejectionError(error: unknown): UnrecoverableTaskError | null {
+  if (APICallError.isInstance(error) && !error.isRetryable) {
+    return new UnrecoverableTaskError(
+      `Summarization provider rejected the request${error.statusCode ? ` (${error.statusCode})` : ""}: ${error.message}`,
+    );
+  }
+  return null;
+}
+
+const TRUNCATED_MESSAGE =
+  "Inference output reached the provider or model output limit and was truncated";
+
 async function inferenceComplete(prompt: string, system: string): Promise<string> {
   try {
     const data = await completeSummarization(prompt, system);
     console.log(
       `[inference] ${data.provider}/${data.model}: ${data.inputTokens ?? "?"} input tokens, ${data.outputTokens ?? "?"} output tokens`,
     );
-    if (data.finishReason === "length") {
-      throw new UnrecoverableTaskError(
-        "Inference output reached the provider or model output limit and was truncated",
-      );
-    }
+    if (data.finishReason === "length") throw new UnrecoverableTaskError(TRUNCATED_MESSAGE);
     const content = stripCodeFence(data.content.trim());
     if (!content) throw new Error("Summarization provider returned an empty response");
     return content;
   } catch (error) {
-    if (APICallError.isInstance(error) && !error.isRetryable) {
-      throw new UnrecoverableTaskError(
-        `Summarization provider rejected the request${error.statusCode ? ` (${error.statusCode})` : ""}: ${error.message}`,
-      );
-    }
-    throw error;
+    throw rejectionError(error) ?? error;
   }
 }
 
-export async function summarize(transcript: Transcript, campaignId: string): Promise<string> {
-  const cast = await getCampaignCast(campaignId);
-  const formatted = formatTranscriptForInference(transcript, cast);
-  return createDetailedRecord(formatted, inferenceComplete);
+async function inferenceCompleteObject<T>(
+  prompt: string,
+  system: string,
+  schema: FlexibleSchema<T>,
+  name: string,
+): Promise<T> {
+  try {
+    const data = await completeStructuredSummarization(prompt, system, schema, name);
+    console.log(
+      `[inference] ${data.provider}/${data.model} ${name}: ${data.inputTokens ?? "?"} input tokens, ${data.outputTokens ?? "?"} output tokens`,
+    );
+    return data.object;
+  } catch (error) {
+    if (NoObjectGeneratedError.isInstance(error) && error.finishReason === "length") {
+      throw new UnrecoverableTaskError(TRUNCATED_MESSAGE);
+    }
+    throw rejectionError(error) ?? error;
+  }
+}
+
+interface SessionInferenceInput {
+  material: SessionMaterial;
+  cast: CampaignCastMember[];
+}
+
+async function sessionMaterial(
+  transcript: Transcript,
+  campaignId: string,
+  sessionId: string,
+): Promise<SessionInferenceInput> {
+  const [cast, previous] = await Promise.all([
+    getCampaignCast(campaignId),
+    getPreviousSessionNotes(sessionId),
+  ]);
+  return {
+    material: { transcript: formatTranscriptForInference(transcript, cast), previous },
+    cast,
+  };
+}
+
+export async function summarize(
+  transcript: Transcript,
+  campaignId: string,
+  sessionId: string,
+): Promise<SessionLedger> {
+  const { material } = await sessionMaterial(transcript, campaignId, sessionId);
+  return createSessionLedger(material, inferenceCompleteObject);
 }
 
 export async function generateTitle(recapText: string): Promise<string> {
   return normalizeTitle(await inferenceComplete(recapText, TITLE_SYSTEM));
 }
 
-export async function recap(summary: string): Promise<string> {
-  return createRecap(summary, inferenceComplete);
+export async function recap(
+  transcript: Transcript,
+  ledger: SessionLedger,
+  campaignId: string,
+  sessionId: string,
+): Promise<{ markdown: string; recap: SessionRecap }> {
+  const input = await sessionMaterial(transcript, campaignId, sessionId);
+  const { sections, markdown } = await createRecap(input.material, ledger, inferenceCompleteObject);
+  return {
+    markdown,
+    recap: { version: 1, sections, stats: transcriptTableStats(transcript, input.cast) },
+  };
 }

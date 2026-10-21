@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
-import { createDetailedRecord, createRecap } from "./record-pipeline.ts";
-import { DETAILED_RECORD_SYSTEM, RECAP_SYSTEM } from "./prompts.ts";
+import type { RecapSections, SessionLedger } from "@rainbot/db";
+import { createRecap, createSessionLedger, type CompleteObject } from "./record-pipeline.ts";
+import { RECAP_SYSTEM, SESSION_LEDGER_SYSTEM } from "./prompts.ts";
 import { loadSummarizationConfig } from "./summarization-inference.ts";
 
 test("loads a local summarization profile", () => {
@@ -48,20 +49,68 @@ test("requires an explicit base URL for local summarization", () => {
   expect(() => loadSummarizationConfig({})).toThrowError(/SUMMARIZATION_BASE_URL/);
 });
 
-test("detailed record and recap each make one complete inference call", async () => {
-  const calls: { prompt: string; system: string }[] = [];
-  const complete = async (prompt: string, system: string): Promise<string> => {
-    calls.push({ prompt, system });
-    return calls.length === 1 ? "# Session\nDetailed record" : "# Recap\nShort recap";
+test("ledger and recap each make one structured call with the earlier session's notes", async () => {
+  const calls: { prompt: string; system: string; name: string }[] = [];
+  const ledger: SessionLedger = {
+    events: [{ at: "0:01:00", summary: "The party reached Hollowmere." }],
+    entities: [],
+    loot: [],
+    threads: [],
+    quotes: [],
+    rulings: [],
+    uncertainties: [],
+    leftOff: "At the cellar door.",
+  };
+  const sections: RecapSections = {
+    recap: "# Recap\nThe party reached **Hollowmere**.",
+    leftOff: "At the cellar door.",
+    openThreads: [{ title: "The Missing Keeper", status: "open", note: "Untouched.", at: null }],
+    loot: [],
+    epicMoments: [1, 2, 3, 4].map((n) => ({
+      description: `Moment ${n}`,
+      quote: null,
+      speaker: null,
+      at: n === 1 ? "1:02" : null,
+    })),
+    newFaces: [],
+    rulings: [],
+  };
+  const complete: CompleteObject = async <T>(
+    prompt: string,
+    system: string,
+    _schema: unknown,
+    name: string,
+  ) => {
+    calls.push({ prompt, system, name });
+    return (name === "session_ledger" ? ledger : sections) as T;
+  };
+  const material = {
+    transcript: "[0:00:00]\nAlice: hello",
+    previous: {
+      title: "The Salt Road",
+      startedAt: new Date("2026-10-10T00:00:00Z"),
+      recap: null,
+      recapSections: {
+        version: 1 as const,
+        sections: { ...sections, epicMoments: [] },
+        stats: { durationSeconds: 0, speakers: [] },
+      },
+    },
   };
 
-  const record = await createDetailedRecord("complete transcript", complete);
-  const recap = await createRecap(record, complete);
+  expect(await createSessionLedger(material, complete)).toBe(ledger);
+  const recap = await createRecap(material, ledger, complete);
 
-  expect(record).toBe("Detailed record");
-  expect(recap).toBe("Short recap");
-  expect(calls).toEqual([
-    { prompt: "complete transcript", system: DETAILED_RECORD_SYSTEM },
-    { prompt: "Detailed record", system: RECAP_SYSTEM },
+  expect(calls.map((call) => [call.system, call.name])).toEqual([
+    [SESSION_LEDGER_SYSTEM, "session_ledger"],
+    [RECAP_SYSTEM, "session_recap"],
   ]);
+  expect(calls[0].prompt).toContain("Unresolved threads:\n- The Missing Keeper: Untouched.");
+  expect(calls[1].prompt).toContain('"leftOff": "At the cellar door."');
+  expect(calls[1].prompt).toContain("Alice: hello");
+  expect(recap.sections.recap).toBe("The party reached **Hollowmere**.");
+  expect(recap.sections.epicMoments).toHaveLength(3);
+  expect(recap.sections.epicMoments[0].at).toBe("0:01:02");
+  expect(recap.markdown).toContain("## Where we left off\n\nAt the cellar door.");
+  expect(recap.markdown).toContain("- **The Missing Keeper** (Still open): Untouched.");
 });

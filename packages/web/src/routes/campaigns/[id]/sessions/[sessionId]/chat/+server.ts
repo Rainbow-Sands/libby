@@ -1,6 +1,10 @@
 import { error, json } from "@sveltejs/kit";
 import { getCampaignAccess, getCampaignCast, getSessionDetail } from "@rainbot/db";
-import { loadDetailedRecordArtifact, loadTranscriptArtifact } from "@rainbot/storage";
+import {
+  loadDetailedRecordArtifact,
+  loadSessionLedgerArtifact,
+  loadTranscriptArtifact,
+} from "@rainbot/storage";
 import {
   convertToModelMessages,
   createUIMessageStreamResponse,
@@ -27,7 +31,7 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
   if (!access.canAccess) throw error(403, "You cannot view this campaign.");
 
   if (!session.detailedRecordArtifact && !session.transcriptArtifact) {
-    throw error(409, "This session has no detailed record or transcript to chat about yet.");
+    throw error(409, "This session has no transcript to chat about yet.");
   }
 
   const { messages }: { messages: UIMessage[] } = await request.json();
@@ -36,9 +40,15 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
   }
 
   const cast = await getCampaignCast(session.campaignId);
-  const detailedRecord = session.detailedRecordArtifact
-    ? await loadDetailedRecordArtifact(session.detailedRecordArtifact)
+  // Sessions processed with a ledger chat over it and the full transcript.
+  // Older sessions keep using their detailed record alone, as before.
+  const ledger = session.ledgerArtifact
+    ? await loadSessionLedgerArtifact(session.ledgerArtifact)
     : null;
+  const detailedRecord =
+    !ledger && session.detailedRecordArtifact
+      ? await loadDetailedRecordArtifact(session.detailedRecordArtifact)
+      : null;
   const transcript =
     detailedRecord || !session.transcriptArtifact
       ? null
@@ -46,7 +56,14 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
 
   const result = streamText({
     model: chatInference.model,
-    system: buildSessionContext({ ...session, detailedRecord, transcript }, cast),
+    // The session material is identical for every question about a session,
+    // so let Anthropic cache it instead of re-reading the transcript each turn.
+    // Other providers ignore this option.
+    system: {
+      role: "system",
+      content: buildSessionContext({ ...session, detailedRecord, ledger, transcript }, cast),
+      providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+    },
     messages: await convertToModelMessages(messages),
     providerOptions: chatInference.providerOptions,
   });

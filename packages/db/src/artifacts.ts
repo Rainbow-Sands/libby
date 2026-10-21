@@ -1,4 +1,9 @@
-export const SESSION_ARTIFACT_KINDS = ["transcript", "detailed_record"] as const;
+export const SESSION_ARTIFACT_KINDS = [
+  "transcript",
+  // Markdown records written by sessions processed before the session ledger.
+  "detailed_record",
+  "session_ledger",
+] as const;
 
 export type SessionArtifactKind = (typeof SESSION_ARTIFACT_KINDS)[number];
 
