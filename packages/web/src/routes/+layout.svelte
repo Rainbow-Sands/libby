@@ -8,16 +8,18 @@
 </script>
 
 <header>
-  <a href="/" class="brand">Libby</a>
-  <nav>
-    {#if data.user}
-      <span class="who">{data.user.username}</span>
-      <a class="navlink" href="/auth/logout">Log out</a>
-    {:else}
-      <a class="navlink" href="/auth/login">Log in</a>
-    {/if}
-    <ThemeToggle />
-  </nav>
+  <div class="bar">
+    <a href="/" class="brand">Libby</a>
+    <nav>
+      {#if data.user}
+        <span class="who">{data.user.username}</span>
+        <a class="navlink" href="/auth/logout">Log out</a>
+      {:else}
+        <a class="navlink" href="/auth/login">Log in</a>
+      {/if}
+      <ThemeToggle />
+    </nav>
+  </div>
 </header>
 
 <main>
@@ -26,13 +28,20 @@
 
 <style>
   header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.85rem 1.5rem;
     background: var(--surface);
     border-bottom: 3px double var(--accent);
     box-shadow: 0 2px 10px var(--shadow);
+  }
+  /* Lines up with main's content edges. */
+  .bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.5rem;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 0.85rem 1.5rem;
   }
   .brand {
     font-family: var(--font-display);
@@ -62,8 +71,8 @@
     text-transform: uppercase;
   }
   main {
-    max-width: 820px;
+    max-width: 1040px;
     margin: 0 auto;
-    padding: 2.5rem 1.5rem 4rem;
+    padding: 1.75rem 1.5rem 4rem;
   }
 </style>

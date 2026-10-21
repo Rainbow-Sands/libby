@@ -19,180 +19,226 @@
     ].filter((tile) => tile.count > 0),
   );
 
+  // The newest sessions show first; the rest wait behind "Show all".
+  const RECENT_SESSIONS = 12;
+  let showAll = $state(false);
+  const sessions = $derived(
+    data.campaign.sessions.map((session, index) => ({
+      ...session,
+      number: data.campaign.sessions.length - index,
+    })),
+  );
+  const shownSessions = $derived(showAll ? sessions : sessions.slice(0, RECENT_SESSIONS));
+  const firstSession = $derived(data.campaign.sessions.at(-1));
+  const sessionsSince = $derived(
+    firstSession
+      ? `${sessions.length} ${sessions.length === 1 ? "session" : "sessions"} since ${formatMonth(firstSession.startedAt)}`
+      : "",
+  );
+
   function formatDate(d: Date | string): string {
     return new Date(d).toLocaleDateString("en-CA", {
       year: "numeric",
-      month: "long",
+      month: "short",
       day: "numeric",
     });
+  }
+
+  function formatMonth(d: Date | string): string {
+    return new Date(d).toLocaleDateString("en-CA", { year: "numeric", month: "long" });
   }
 </script>
 
 <svelte:head><title>{data.campaign.name}</title></svelte:head>
 
-<p><a href="/">← All campaigns</a></p>
-
 <div class="panel">
   <p class="eyebrow">Campaign</p>
   <h1>{data.campaign.name}</h1>
+  {#if dm || firstSession}
+    <p class="byline">
+      {#if dm}Run by <span>{dm.username}</span>{/if}
+      {#if dm && firstSession}·{/if}
+      {#if firstSession}{sessionsSince}{/if}
+    </p>
+  {/if}
   <TaperedRule />
   {#if data.campaign.description}
     <p>{data.campaign.description}</p>
   {/if}
 
-  <h2>Dungeon Master</h2>
-  <p class="lead">{dm ? dm.username : "—"}</p>
+  <div class="with-rail">
+    <section class="sessions" aria-labelledby="sessions-heading">
+      <div class="sessions-head">
+        <h2 id="sessions-heading">
+          Sessions{#if sessions.length}&nbsp;<span>{sessions.length}</span>{/if}
+        </h2>
+        {#if data.canIngest}
+          <a class="btn quiet" href="/campaigns/{data.campaign.id}/ingest"
+            ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>Ingest
+            audio</a
+          >
+        {/if}
+      </div>
+      {#if sessions.length === 0}
+        <p class="empty">No sessions recorded yet.</p>
+      {:else}
+        <ol>
+          {#each shownSessions as session (session.id)}
+            <li>
+              <a href="/campaigns/{data.campaign.id}/sessions/{session.id}">
+                <span class="number">{session.number}</span>
+                <span class="session-title">{session.title ?? "Untitled session"}</span>
+                {#if session.status !== "done"}
+                  <span class="status status-{session.status}">{session.status}</span>
+                {/if}
+                <span class="session-date">{formatDate(session.startedAt)}</span>
+              </a>
+            </li>
+          {/each}
+        </ol>
+        {#if !showAll && sessions.length > RECENT_SESSIONS}
+          <button class="btn quiet show-all" type="button" onclick={() => (showAll = true)}
+            >Show all {sessions.length} sessions</button
+          >
+        {/if}
+      {/if}
+    </section>
 
-  <h2>Party</h2>
-  {#if players.length === 0}
-    <p class="empty">No players yet.</p>
-  {:else}
-    <ul class="party">
-      {#each players as player (player.id)}
-        {@const page = data.characterPages[player.id]}
-        <li>
-          {#if player.characterName}
-            <WorldAvatar
-              src={avatarHref(data.campaign.id, page?.avatarId ?? null)}
-              name={player.characterName}
-              kind="character"
-              size="sm"
-            />
-            {#if page}
-              <a class="character" href={worldPageHref(data.campaign.id, page.slug)}
-                >{player.characterName}</a
-              >
-            {:else}
-              <span class="character">{player.characterName}</span>
-            {/if}
-            <span class="muted">· {player.username}</span>
-          {:else}
-            {player.username}
+    <aside class="rail" aria-label="Campaign details">
+      <section class="box">
+        <h2>Party</h2>
+        {#if players.length === 0}
+          <p class="empty">No players yet.</p>
+        {:else}
+          <ul class="party">
+            {#each players as player (player.id)}
+              {@const page = data.characterPages[player.id]}
+              <li>
+                <WorldAvatar
+                  src={avatarHref(data.campaign.id, page?.avatarId ?? null)}
+                  name={player.characterName ?? player.username}
+                  kind="character"
+                  size="md"
+                />
+                <span class="who">
+                  {#if page && player.characterName}
+                    <a class="character" href={worldPageHref(data.campaign.id, page.slug)}
+                      >{player.characterName}</a
+                    >
+                  {:else}
+                    <span class="character">{player.characterName ?? player.username}</span>
+                  {/if}
+                  {#if player.characterName}<span class="muted">{player.username}</span>{/if}
+                </span>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </section>
+
+      <section class="box">
+        <div class="box-head">
+          <h2>World</h2>
+          {#if data.world.total > 0}
+            <a href="/campaigns/{data.campaign.id}/world">Explore →</a>
           {/if}
-        </li>
-      {/each}
-    </ul>
-  {/if}
+        </div>
+        {#if data.world.total === 0}
+          <p class="empty">
+            The world wiki fills in from the session recaps. Its first pages appear after the next
+            session finishes.
+          </p>
+        {:else}
+          <div class="world">
+            {#each tiles as tile (tile.label)}
+              <a class="tile" href="/campaigns/{data.campaign.id}/world?kind={tile.kind}">
+                <b>{tile.count}</b><span>{tile.label}</span>
+              </a>
+            {/each}
+          </div>
+        {/if}
+      </section>
 
-  <h2>World</h2>
-  {#if data.world.total === 0}
-    <p class="empty">
-      The world wiki fills in from the session recaps. Its first pages appear after the next
-      session finishes.
-    </p>
-  {:else}
-    <div class="world">
-      {#each tiles as tile (tile.label)}
-        <a class="tile" href="/campaigns/{data.campaign.id}/world?kind={tile.kind}">
-          <b>{tile.count}</b><span>{tile.label}</span>
-        </a>
-      {/each}
-    </div>
-    <p><a href="/campaigns/{data.campaign.id}/world">Explore the world →</a></p>
-  {/if}
-
-  <h2>Sessions</h2>
-  {#if data.canIngest}
-    <p><a class="button" href="/campaigns/{data.campaign.id}/ingest">Ingest audio session</a></p>
-  {/if}
-  {#if data.campaign.sessions.length === 0}
-    <p class="empty">No sessions recorded yet.</p>
-  {:else}
-    <ul class="sessions">
-      {#each data.campaign.sessions as session (session.id)}
-        <li>
-          <a href="/campaigns/{data.campaign.id}/sessions/{session.id}">
-            <span class="session-title">{session.title ?? formatDate(session.startedAt)}</span>
-            {#if session.title}
-              <span class="session-date">{formatDate(session.startedAt)}</span>
-            {/if}
-          </a>
-          <span class="status status-{session.status}">{session.status}</span>
-        </li>
-      {/each}
-    </ul>
-  {/if}
+      {#if data.canSchedule}
+        <section class="box">
+          <h2>Schedule</h2>
+          <p class="muted schedule-note">Session reminders and the recap rotation.</p>
+          <a class="btn quiet schedule" href="/campaigns/{data.campaign.id}/schedule">Edit schedule</a>
+        </section>
+      {/if}
+    </aside>
+  </div>
 </div>
 
 <style>
-  .lead {
-    font-size: 1.2rem;
-  }
-  .party {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-  .party li {
-    display: inline-flex;
-    gap: 0.45rem;
-    align-items: center;
-    background: var(--surface-sunken);
-    border: 1px solid var(--edge);
-    border-radius: 999px;
-    padding: 0.3rem 0.9rem;
-  }
-  .party li:has(:global(.av)) {
-    padding-left: 0.3rem;
-  }
-  .character {
-    font-weight: 600;
-  }
-  .world {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
-    gap: 0.6rem;
-    margin-bottom: 0.75rem;
-  }
-  .tile {
-    display: grid;
-    padding: 0.55rem 0.8rem;
-    color: var(--ink);
-    background: var(--surface-sunken);
-    border: 1px solid var(--edge);
-    border-radius: 4px;
-  }
-  .tile:hover {
-    text-decoration: none;
-    border-color: var(--gold);
-  }
-  .tile b {
-    font-family: var(--font-display);
-    font-size: 1.3rem;
-    color: var(--accent);
-  }
-  .tile span {
-    font-size: 0.88rem;
+  .byline {
+    margin: 0.2rem 0 0;
     color: var(--ink-soft);
   }
-  .sessions {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: grid;
-    gap: 0.5rem;
+  .byline span {
+    color: var(--ink);
   }
-  .sessions li {
+  h2 {
+    margin: 0;
+    font-size: 1rem;
+  }
+  h2 span {
+    font-weight: 400;
+    color: var(--ink-soft);
+  }
+  .sessions-head {
     display: flex;
+    gap: 0.75rem;
     align-items: center;
     justify-content: space-between;
-    background: var(--surface-sunken);
-    border: 1px solid var(--edge);
-    border-radius: 4px;
-    padding: 0.65rem 1rem;
+    margin-bottom: 0.5rem;
   }
-  .sessions a {
+  .btn.quiet svg {
+    width: 0.9rem;
+    height: 0.9rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+  .sessions ol {
+    display: grid;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .sessions li a {
+    display: grid;
+    grid-template-columns: 2.5rem minmax(0, 1fr) auto auto;
+    gap: 0.9rem;
+    align-items: center;
+    padding: 0.55rem 0.8rem;
+    color: var(--ink);
+    border: 1px solid transparent;
+    border-radius: 6px;
+  }
+  .sessions li a:hover {
+    color: var(--ink);
+    text-decoration: none;
+    background: var(--surface-sunken);
+    border-color: var(--edge);
+  }
+  .number {
     font-family: var(--font-display);
-    display: flex;
-    flex-direction: column;
-    gap: 0.15rem;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    color: var(--gold);
+  }
+  .session-title {
+    overflow: hidden;
+    font-family: var(--font-display);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .session-date {
-    font-family: var(--font-body, inherit);
-    font-size: 0.78rem;
+    grid-column: 4;
+    font-size: 0.92rem;
+    white-space: nowrap;
     color: var(--ink-soft);
   }
   .status {
@@ -200,25 +246,95 @@
     font-size: 0.62rem;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: var(--ink-soft);
-    border: 1px solid var(--edge);
+    color: var(--warn);
+    background: var(--warn-soft);
     border-radius: 999px;
     padding: 0.12rem 0.55rem;
   }
-  .status-done {
-    color: #2f6b34;
-    border-color: #2f6b34;
-  }
   .status-failed {
     color: var(--accent-bright);
-    border-color: var(--accent-bright);
+    background: color-mix(in srgb, var(--accent-bright) 14%, transparent);
   }
-  .button {
-    display: inline-block;
-    background: var(--accent);
-    color: var(--surface);
-    border-radius: 4px;
-    padding: 0.5rem 0.8rem;
+  .show-all {
+    margin-top: 0.6rem;
+  }
+  .party {
+    display: grid;
+    gap: 0.7rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .party li {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+  }
+  .who {
+    display: grid;
+    min-width: 0;
+    line-height: 1.3;
+  }
+  .who .muted {
+    font-size: 0.92rem;
+  }
+  .character {
+    font-weight: 600;
+  }
+  .box-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .box-head a {
+    font-size: 0.95rem;
+  }
+  .box .empty,
+  .schedule-note {
+    margin: 0;
+    font-size: 0.95rem;
+  }
+  .schedule {
+    justify-self: start;
+  }
+  .world {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+  .tile {
+    display: grid;
+    padding: 0.45rem 0.75rem;
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--edge);
+    border-radius: 6px;
+  }
+  .tile:hover {
+    color: var(--ink);
+    text-decoration: none;
+    border-color: var(--gold);
+  }
+  .tile b {
     font-family: var(--font-display);
+    font-size: 1.25rem;
+    line-height: 1.3;
+    color: var(--accent);
+  }
+  .tile span {
+    font-size: 0.88rem;
+    color: var(--ink-soft);
+  }
+  @media (max-width: 560px) {
+    .sessions li a {
+      grid-template-columns: 2rem minmax(0, 1fr) auto;
+      gap: 0.2rem 0.7rem;
+    }
+    .session-title {
+      white-space: normal;
+    }
+    .session-date {
+      grid-column: 2 / -1;
+    }
   }
 </style>

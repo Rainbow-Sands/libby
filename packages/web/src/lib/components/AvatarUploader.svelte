@@ -189,8 +189,16 @@
 
 <div class="slot">
   <WorldAvatar src={avatarHref(campaignId, avatarId)} {name} {kind} size="lg" />
-  <button class="small" class:invite={!avatarId} type="button" onclick={open}
-    >{avatarId ? "Change avatar" : "Upload avatar"}</button
+  <button
+    class="camera"
+    class:invite={!avatarId}
+    type="button"
+    onclick={open}
+    aria-label={avatarId ? "Change avatar" : "Upload avatar"}
+    title={avatarId ? "Change avatar" : "Upload avatar"}
+    ><svg viewBox="0 0 24 24" aria-hidden="true"
+      ><path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></svg
+    ></button
   >
 </div>
 
@@ -214,7 +222,7 @@
         <span>Zoom</span>
         <input type="range" min="1" max="4" step="0.01" bind:value={zoom} onchange={clampOffset} />
       </label>
-      <p class="hint">Drag the picture to position it in the circle.</p>
+      <p class="hint">Drag the picture to position it in the frame.</p>
     {:else}
       <label class="pick">
         <input type="file" accept={ACCEPT.join(",")} onchange={choose} />
@@ -244,9 +252,41 @@
 
 <style>
   .slot {
+    position: relative;
+    flex: 0 0 auto;
+  }
+  .camera {
+    position: absolute;
+    right: -0.5rem;
+    bottom: -0.5rem;
     display: grid;
-    justify-items: center;
-    gap: 0.35rem;
+    place-items: center;
+    width: 2.1rem;
+    height: 2.1rem;
+    padding: 0;
+    color: var(--ink);
+    cursor: pointer;
+    background: var(--surface);
+    border: 1px solid var(--edge);
+    border-radius: 10px;
+    box-shadow: 0 2px 6px var(--shadow);
+  }
+  .camera:hover {
+    border-color: var(--gold);
+  }
+  .camera.invite {
+    color: var(--info);
+    background: var(--info-soft);
+    border-color: color-mix(in srgb, var(--info) 45%, var(--edge));
+  }
+  .camera svg {
+    width: 1rem;
+    height: 1rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
   .small {
     padding: 0.15rem 0.5rem;
@@ -266,11 +306,6 @@
   .small:disabled {
     cursor: not-allowed;
     opacity: 0.6;
-  }
-  .small.invite {
-    color: var(--info);
-    background: var(--info-soft);
-    border-color: color-mix(in srgb, var(--info) 45%, var(--edge));
   }
   .small.primary {
     color: var(--surface);
@@ -322,14 +357,15 @@
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background: radial-gradient(circle closest-side, transparent 99%, rgba(20, 14, 8, 0.55) 100%);
   }
+  /* The avatar's rounded-square frame; the shadow dims the corners it cuts. */
   .ring::after {
     content: "";
     position: absolute;
     inset: 0;
     border: 2px solid #f6e7c4;
-    border-radius: 50%;
+    border-radius: 24%;
+    box-shadow: 0 0 0 4rem rgba(20, 14, 8, 0.55);
   }
   .zoom {
     display: flex;

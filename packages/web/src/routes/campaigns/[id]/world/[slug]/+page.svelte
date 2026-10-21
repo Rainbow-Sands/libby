@@ -1,6 +1,7 @@
 <script lang="ts">
   import { linkPageNames, type MentionSentence } from "@rainbot/db/world-links";
   import AvatarUploader from "$lib/components/AvatarUploader.svelte";
+  import Breadcrumbs from "$lib/components/Breadcrumbs.svelte";
   import LinkedText from "$lib/components/LinkedText.svelte";
   import TaperedRule from "$lib/components/TaperedRule.svelte";
   import WorldAvatar from "$lib/components/WorldAvatar.svelte";
@@ -93,7 +94,13 @@
   </a>
 {/snippet}
 
-<p><a href="/campaigns/{data.campaign.id}/world">← World</a></p>
+<Breadcrumbs
+  items={[
+    { label: data.campaign.name, href: `/campaigns/${data.campaign.id}` },
+    { label: "World", href: `/campaigns/${data.campaign.id}/world` },
+    { label: content?.name ?? detail.slug },
+  ]}
+/>
 
 {#if data.asOf && (detail.isSnapshot || !content)}
   <div class="snapshot">
@@ -240,8 +247,6 @@
       <aside class="sidebar">
         <div class="box">
           <dl>
-            <dt>Kind</dt>
-            <dd>{KIND_LABELS[detail.kind]}</dd>
             {#if content.status}
               <dt>Status</dt>
               <dd>{content.status}</dd>
@@ -260,15 +265,12 @@
                 >{sessionLabel(detail.createdInSessionId)}</a
               >
             </dd>
+            {#if content.aliases.length}
+              <dt>Also heard as</dt>
+              <dd>{content.aliases.join(", ")}</dd>
+            {/if}
           </dl>
         </div>
-
-        {#if content.aliases.length}
-          <div class="box">
-            <h4>Also heard as</h4>
-            <span>{content.aliases.join(", ")}</span>
-          </div>
-        {/if}
 
         {#if detail.related.length}
           <div class="box">
@@ -374,9 +376,10 @@
   }
   .page-head {
     display: flex;
-    gap: 1.1rem;
+    gap: 1.4rem;
     align-items: center;
-    margin-bottom: 0.5rem;
+    /* Room for the avatar's camera button, which hangs below it. */
+    margin-bottom: 1rem;
   }
   .who {
     display: grid;
@@ -408,8 +411,8 @@
   }
   .page-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 15rem;
-    gap: 1.5rem;
+    grid-template-columns: minmax(0, 1fr) 17.5rem;
+    gap: 2rem;
   }
   .main {
     display: grid;
@@ -562,11 +565,11 @@
   }
   .box {
     display: grid;
-    gap: 0.35rem;
-    padding: 0.7rem 0.85rem;
+    gap: 0.45rem;
+    padding: 0.85rem 1rem;
     background: var(--surface-sunken);
     border: 1px solid var(--edge);
-    border-radius: 4px;
+    border-radius: 6px;
   }
   dl {
     display: grid;
@@ -604,7 +607,7 @@
   .history li.current span {
     font-weight: 600;
   }
-  @media (max-width: 720px) {
+  @media (max-width: 820px) {
     .page-grid {
       grid-template-columns: 1fr;
     }

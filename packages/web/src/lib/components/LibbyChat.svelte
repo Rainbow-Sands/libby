@@ -67,8 +67,8 @@
   }
 </script>
 
+<!-- The Ask Libby tab names this section, so it has no heading of its own. -->
 <section class="chat" aria-label="Ask about this session">
-  <h2>Ask Libby</h2>
   <p class="muted hint">
     Ask questions about what happened this session. Answers come only from the recording.
   </p>
@@ -121,12 +121,10 @@
 
 <style>
   .chat {
-    margin-top: 2rem;
-    padding-top: 1.5rem;
-    border-top: 1px solid var(--edge);
+    max-width: 48rem;
   }
   .hint {
-    margin-top: -0.25rem;
+    margin: 0;
   }
   .log {
     display: flex;
@@ -216,7 +214,7 @@
   button {
     padding: 0.55rem 1.25rem;
     font-family: var(--font-display);
-    color: var(--surface);
+    color: #fbf4e3;
     background: var(--accent);
     border: none;
     border-radius: 6px;

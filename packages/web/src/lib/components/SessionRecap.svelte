@@ -93,146 +93,149 @@
   {/if}
 {/snippet}
 
-<div class="recap">
-  <!-- The Recap tab names this section, so it has no heading of its own. -->
-  <section class="rsec" aria-label="Recap">
-    <div class="prose"><LinkedMarkdown blocks={linked.recap} {world} /></div>
-  </section>
-
-  <section class="rsec">
-    <h3>Where we left off</h3>
-    <p class="left-off"><LinkedText segments={linked.leftOff} {world} /></p>
-  </section>
-
-  {#if sections.openThreads.length}
-    <section class="rsec">
-      <h3>Open threads <span class="sub">still waiting on the party</span></h3>
-      <ul class="threads">
-        {#each sections.openThreads as thread, index (index)}
-          <li>
-            <span class="pill status-{thread.status}">{STATUS_LABELS[thread.status]}</span>
-            <div>
-              <strong>{@render named(thread.title)}</strong>
-              {@render cite(thread.at)}
-              <p class="why">{thread.note}</p>
-            </div>
-          </li>
-        {/each}
-      </ul>
+<div class="recap with-rail">
+  <div class="main">
+    <!-- The Recap tab names this section, so it has no heading of its own. -->
+    <section class="rsec" aria-label="Recap">
+      <div class="prose"><LinkedMarkdown blocks={linked.recap} {world} /></div>
     </section>
-  {/if}
 
-  {#if sections.loot.length}
-    <section class="rsec">
-      <h3>Loot</h3>
-      <div class="loot-wrap">
-        <table class="loot">
-          <tbody>
-            {#each sections.loot as item, index (index)}
-              <tr>
-                <td><strong>{@render named(item.item)}</strong> {@render cite(item.at)}</td>
-                <td>{#if item.holder}{@render named(item.holder)}{:else}Unclear{/if}</td>
-                <td class="muted">{item.note}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  {/if}
-
-  {#if sections.epicMoments.length}
-    <section class="rsec">
-      <h3>Epic moments</h3>
-      <div class="epic">
-        {#each sections.epicMoments as moment, index (index)}
-          <blockquote>
-            <p><LinkedText segments={linked.moments[index]} {world} /></p>
-            <cite>
-              {#if moment.quote}
-                “{moment.quote}”{#if moment.speaker}&nbsp;· {moment.speaker}{/if}
-              {/if}
-              {@render cite(moment.at)}
-            </cite>
-          </blockquote>
-        {/each}
-      </div>
-    </section>
-  {/if}
-
-  {#if sections.newFaces.length}
-    <section class="rsec">
-      <h3>New faces &amp; places</h3>
-      <div class="chips">
-        {#each sections.newFaces as face, index (index)}
-          {@const page = pageNamed(face.name)}
-          <span class="chip" class:with-avatar={page && world}>
-            {#if page && world}
-              <WorldAvatar
-                src={avatarHref(world.campaignId, page.avatarId)}
-                name={page.name}
-                kind={page.kind}
-                size="sm"
-              />
-            {/if}
-            <span class="kind">{KIND_LABELS[face.kind]}</span>
-            {#if page && world}
-              <a href={worldPageHref(world.campaignId, page.slug, world.asOf)}>{face.name}</a>
-            {:else}
-              {face.name}
-            {/if}
-          </span>
-        {/each}
-      </div>
-    </section>
-  {/if}
-
-  {#if sections.rulings.length}
-    <section class="rsec">
-      <h3>Rulings</h3>
-      <ul class="rulings">
-        {#each sections.rulings as ruling, index (index)}
-          <li>{ruling.ruling} {@render cite(ruling.at)}</li>
-        {/each}
-      </ul>
-    </section>
-  {/if}
-
-  {#if recap.stats.speakers.length}
-    <section class="rsec">
-      <h3>At the table</h3>
-      <div class="stats">
-        <div class="stat"><b>{formatDuration(recap.stats.durationSeconds)}</b><span>recorded</span></div>
-        <div class="stat">
-          <b>{recap.stats.speakers.length} {recap.stats.speakers.length === 1 ? "voice" : "voices"}</b>
-          <span>at the table</span>
+    {#if sections.loot.length}
+      <section class="rsec">
+        <h3>Loot</h3>
+        <div class="loot-wrap">
+          <table class="loot">
+            <tbody>
+              {#each sections.loot as item, index (index)}
+                <tr>
+                  <td><strong>{@render named(item.item)}</strong> {@render cite(item.at)}</td>
+                  <td>{#if item.holder}{@render named(item.holder)}{:else}Unclear{/if}</td>
+                  <td class="muted">{item.note}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
         </div>
-      </div>
-      <div class="bar" role="img" aria-label="Share of words spoken by each person">
-        {#each recap.stats.speakers as speaker (speaker.userId)}
-          <i
-            style={`width: ${percent(speaker.words)}%; --speaker-hue: ${speakerHue(speaker.userId)}`}
-          ></i>
-        {/each}
-      </div>
-      <ul class="legend">
-        {#each recap.stats.speakers as speaker (speaker.userId)}
-          <li style={`--speaker-hue: ${speakerHue(speaker.userId)}`}>
-            <span class="dot" aria-hidden="true"></span>
-            <strong>{speaker.name}</strong>
-            {#if speaker.characterName}<span class="muted">as {speaker.characterName}</span>{/if}
-            <span class="share">{percent(speaker.words)}%</span>
-          </li>
-        {/each}
-      </ul>
+      </section>
+    {/if}
+
+    {#if sections.epicMoments.length}
+      <section class="rsec">
+        <h3>Epic moments</h3>
+        <div class="epic">
+          {#each sections.epicMoments as moment, index (index)}
+            <blockquote>
+              <p><LinkedText segments={linked.moments[index]} {world} /></p>
+              <cite>
+                {#if moment.quote}
+                  “{moment.quote}”{#if moment.speaker}&nbsp;· {moment.speaker}{/if}
+                {/if}
+                {@render cite(moment.at)}
+              </cite>
+            </blockquote>
+          {/each}
+        </div>
+      </section>
+    {/if}
+
+    {#if sections.newFaces.length}
+      <section class="rsec">
+        <h3>New faces &amp; places</h3>
+        <div class="chips">
+          {#each sections.newFaces as face, index (index)}
+            {@const page = pageNamed(face.name)}
+            <span class="chip" class:with-avatar={page && world}>
+              {#if page && world}
+                <WorldAvatar
+                  src={avatarHref(world.campaignId, page.avatarId)}
+                  name={page.name}
+                  kind={page.kind}
+                  size="sm"
+                />
+              {/if}
+              <span class="kind">{KIND_LABELS[face.kind]}</span>
+              {#if page && world}
+                <a href={worldPageHref(world.campaignId, page.slug, world.asOf)}>{face.name}</a>
+              {:else}
+                {face.name}
+              {/if}
+            </span>
+          {/each}
+        </div>
+      </section>
+    {/if}
+
+    {#if sections.rulings.length}
+      <section class="rsec">
+        <h3>Rulings</h3>
+        <ul class="rulings">
+          {#each sections.rulings as ruling, index (index)}
+            <li>{ruling.ruling} {@render cite(ruling.at)}</li>
+          {/each}
+        </ul>
+      </section>
+    {/if}
+
+    {#if recap.stats.speakers.length}
+      <section class="rsec">
+        <h3>At the table</h3>
+        <div class="stats">
+          <div class="stat"><b>{formatDuration(recap.stats.durationSeconds)}</b><span>recorded</span></div>
+          <div class="stat">
+            <b>{recap.stats.speakers.length} {recap.stats.speakers.length === 1 ? "voice" : "voices"}</b>
+            <span>at the table</span>
+          </div>
+        </div>
+        <div class="bar" role="img" aria-label="Share of words spoken by each person">
+          {#each recap.stats.speakers as speaker (speaker.userId)}
+            <i
+              style={`width: ${percent(speaker.words)}%; --speaker-hue: ${speakerHue(speaker.userId)}`}
+            ></i>
+          {/each}
+        </div>
+        <ul class="legend">
+          {#each recap.stats.speakers as speaker (speaker.userId)}
+            <li style={`--speaker-hue: ${speakerHue(speaker.userId)}`}>
+              <span class="dot" aria-hidden="true"></span>
+              <strong>{speaker.name}</strong>
+              {#if speaker.characterName}<span class="muted">as {speaker.characterName}</span>{/if}
+              <span class="share">{percent(speaker.words)}%</span>
+            </li>
+          {/each}
+        </ul>
+      </section>
+    {/if}
+  </div>
+
+  <!-- What the table needs before the next session sits beside the story. -->
+  <aside class="rail" aria-label="Where things stand">
+    <section class="box">
+      <h3>Where we left off</h3>
+      <p class="left-off"><LinkedText segments={linked.leftOff} {world} /></p>
     </section>
-  {/if}
+
+    {#if sections.openThreads.length}
+      <section class="box">
+        <h3>Open threads</h3>
+        <ul class="threads">
+          {#each sections.openThreads as thread, index (index)}
+            <li>
+              <span class="pill status-{thread.status}">{STATUS_LABELS[thread.status]}</span>
+              <span><strong>{@render named(thread.title)}</strong> {@render cite(thread.at)}</span>
+              <p class="why">{thread.note}</p>
+            </li>
+          {/each}
+        </ul>
+      </section>
+    {/if}
+  </aside>
 </div>
 
 <style>
-  .recap {
+  .main {
     display: grid;
     gap: 1rem;
+    min-width: 0;
   }
   .rsec {
     display: grid;
@@ -274,12 +277,13 @@
   .prose :global(strong) {
     color: var(--text-emphasis, var(--gold));
   }
+  .rail h3 {
+    font-size: 1rem;
+  }
   .left-off {
-    padding: 0.75rem 1rem;
+    font-size: 0.98rem;
     font-style: italic;
-    background: var(--surface-sunken);
-    border: 1px solid var(--edge);
-    border-radius: 4px;
+    line-height: 1.55;
   }
   .ts {
     padding: 0 0.35em;
@@ -305,17 +309,20 @@
     padding: 0;
     list-style: none;
   }
+  .threads {
+    gap: 0.8rem;
+  }
   .threads li {
     display: grid;
-    grid-template-columns: 6.5rem minmax(0, 1fr);
-    gap: 0.6rem;
-    align-items: start;
+    gap: 0.15rem;
+    justify-items: start;
+    line-height: 1.4;
   }
   .threads strong {
     color: var(--accent);
   }
   .why {
-    font-size: 0.95rem;
+    font-size: 0.92rem;
     color: var(--ink-soft);
   }
   .pill {
@@ -465,11 +472,5 @@
     margin-left: auto;
     font-variant-numeric: tabular-nums;
     color: var(--ink-soft);
-  }
-  @media (max-width: 640px) {
-    .threads li {
-      grid-template-columns: 1fr;
-      gap: 0.25rem;
-    }
   }
 </style>

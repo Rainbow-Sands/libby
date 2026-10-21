@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Breadcrumbs from "$lib/components/Breadcrumbs.svelte";
   import type { ActionData, PageData } from "./$types";
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -20,7 +21,12 @@
 
 <svelte:head><title>Ingest audio — {data.campaign.name}</title></svelte:head>
 
-<p><a href="/campaigns/{data.campaign.id}">← {data.campaign.name}</a></p>
+<Breadcrumbs
+  items={[
+    { label: data.campaign.name, href: `/campaigns/${data.campaign.id}` },
+    { label: "Ingest audio" },
+  ]}
+/>
 
 <div class="panel">
   <p class="eyebrow">Manual session</p>

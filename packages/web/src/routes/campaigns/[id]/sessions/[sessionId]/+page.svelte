@@ -4,6 +4,7 @@
   import { page } from "$app/state";
   import { invalidateAll } from "$app/navigation";
   import { onMount, tick } from "svelte";
+  import Breadcrumbs from "$lib/components/Breadcrumbs.svelte";
   import TaperedRule from "$lib/components/TaperedRule.svelte";
   import LibbyChat from "$lib/components/LibbyChat.svelte";
   import SessionRecap from "$lib/components/SessionRecap.svelte";
@@ -12,7 +13,8 @@
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
 
-  type SessionTab = "recap" | "world" | "transcript";
+  type SessionTab = "recap" | "world" | "transcript" | "ask";
+  type Neighbour = NonNullable<NonNullable<PageData["sequence"]>["previous"]>;
   type TranscriptTurn = NonNullable<PageData["transcriptTurns"]>[number];
   type SessionStatus = PageData["session"]["status"];
   interface LiveTranscriptSnippet extends TranscriptTurn {
@@ -27,10 +29,12 @@
   );
 
   function sessionTab(value: string | null): SessionTab {
-    return value === "transcript" || value === "world" ? value : "recap";
+    return value === "transcript" || value === "world" || value === "ask" ? value : "recap";
   }
 
   let activeTab = $derived(sessionTab(page.url.searchParams.get("tab")));
+  // Regenerating waits until the session is no longer being processed.
+  let busy = $derived(["recording", "transcribing", "summarizing"].includes(data.session.status));
 
   // Recap citations link to "?tab=transcript#at-<seconds>", an elapsed offset
   // from the first utterance, matching the markers the model cited. Highlight
@@ -151,16 +155,86 @@
   <meta name="twitter:description" content={data.preview.description}>
 </svelte:head>
 
-<p><a href="/campaigns/{data.session.campaignId}">← Campaign</a></p>
+{#if data.sequence}
+  <Breadcrumbs
+    items={[
+      { label: data.sequence.campaignName, href: `/campaigns/${data.session.campaignId}` },
+      { label: `Session ${data.sequence.number}` },
+    ]}
+  />
+{/if}
+
+{#snippet stepper(target: Neighbour | null, label: string, forward: boolean)}
+  {#if target}
+    <a
+      class="btn quiet step"
+      href="/campaigns/{data.session.campaignId}/sessions/{target.id}"
+      aria-label="{label}: Session {target.number}"
+      title={target.title ?? undefined}
+      >{#if !forward}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg
+        >{/if}S{target.number}{#if forward}<svg viewBox="0 0 24 24" aria-hidden="true"
+          ><path d="M9 6l6 6-6 6" /></svg
+        >{/if}</a
+    >
+  {/if}
+{/snippet}
 
 <div class="panel">
-  <p class="eyebrow">A Reflection in the Mirrorways</p>
-  <h1>{data.session.title ?? formatDate(data.session.startedAt)}</h1>
-  {#if data.session.title}
-    <p class="muted session-date">{formatDate(data.session.startedAt)}</p>
-  {/if}
+  <div class="title-row">
+    <div class="title">
+      <p class="eyebrow">
+        {#if data.sequence}Session {data.sequence.number} ·{/if}
+        {formatDate(data.session.startedAt)}
+      </p>
+      <h1>{data.session.title ?? formatDate(data.session.startedAt)}</h1>
+    </div>
+    <div class="actions">
+      {#if data.sequence}
+        {@render stepper(data.sequence.previous, "Previous", false)}
+        {@render stepper(data.sequence.next, "Next", true)}
+      {/if}
+      {#if data.canViewDetails && data.canRegenerate}
+        <details class="manage">
+          <summary class="btn quiet step" aria-label="Manage session" title="Manage session"
+            ><svg viewBox="0 0 24 24" aria-hidden="true"
+              ><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle
+                cx="19"
+                cy="12"
+                r="1.6"
+              /></svg
+            ></summary
+          >
+          <div class="menu">
+            {#if data.hasTranscript}
+              <form method="POST" action="?/regenerate" onsubmit={confirmRegeneration}>
+                <button type="submit" disabled={busy}>Regenerate recap and title</button>
+              </form>
+            {/if}
+            <form method="POST" action="?/regenerateTranscript" onsubmit={confirmTranscriptRegeneration}>
+              <button type="submit" disabled={busy}>Regenerate transcript</button>
+            </form>
+            {#if data.failedTranscriptions > 0}
+              <form
+                method="POST"
+                action="?/retryFailedTranscriptions"
+                onsubmit={confirmFailedTranscriptionRetry}
+              >
+                <button type="submit"
+                  >Retry {data.failedTranscriptions} failed {data.failedTranscriptions === 1
+                    ? "clip"
+                    : "clips"}</button
+                >
+              </form>
+            {/if}
+          </div>
+        </details>
+      {/if}
+    </div>
+  </div>
   <TaperedRule />
-  <p class="muted status">Status: {sessionStatus}</p>
+  {#if sessionStatus && sessionStatus !== "done"}
+    <p class="status"><span class="pill status-{sessionStatus}">{sessionStatus}</span></p>
+  {/if}
 
   {#if data.canViewDetails}
     {#if form?.message}
@@ -172,54 +246,6 @@
     {#if page.url.searchParams.has("regeneratingTranscript")}
       <p class="muted">
         Transcript regeneration is running. Refresh this page to see its progress.
-      </p>
-    {/if}
-    {#if data.canRegenerate}
-      <div class="regeneration-actions">
-        {#if data.hasTranscript}
-          <form method="POST" action="?/regenerate" onsubmit={confirmRegeneration}>
-            <button
-              class="btn regenerate"
-              type="submit"
-              disabled={["recording", "transcribing", "summarizing"].includes(data.session.status)}
-            >Regenerate inference</button>
-          </form>
-        {/if}
-        <form
-          method="POST"
-          action="?/regenerateTranscript"
-          onsubmit={confirmTranscriptRegeneration}
-        >
-          <button
-            class="btn regenerate"
-            type="submit"
-            disabled={["recording", "transcribing", "summarizing"].includes(data.session.status)}
-          >Regenerate transcript</button>
-        </form>
-        {#if data.failedTranscriptions > 0}
-          <form
-            method="POST"
-            action="?/retryFailedTranscriptions"
-            onsubmit={confirmFailedTranscriptionRetry}
-          >
-            <button class="btn regenerate" type="submit"
-              >Retry {data.failedTranscriptions} failed {data.failedTranscriptions === 1
-                ? "clip"
-                : "clips"}</button
-            >
-          </form>
-        {/if}
-      </div>
-    {/if}
-
-    {#if sessionStatus === "done"}
-      <LibbyChat
-        sessionId={data.session.id}
-        campaignId={data.session.campaignId}
-      />
-    {:else}
-      <p class="empty chat-pending">
-        Libby can answer questions once this session finishes processing.
       </p>
     {/if}
 
@@ -247,6 +273,12 @@
         aria-selected={activeTab === "transcript"}
         class:active={activeTab === "transcript"}>Transcript</a
       >
+      <a
+        role="tab"
+        href="?tab=ask"
+        aria-selected={activeTab === "ask"}
+        class:active={activeTab === "ask"}>Ask Libby</a
+      >
     </div>
 
     <div role="tabpanel" hidden={activeTab !== "recap"}>
@@ -270,6 +302,15 @@
         />
       </div>
     {/if}
+
+    <!-- Kept mounted while hidden, so a conversation survives a look at another tab. -->
+    <div role="tabpanel" hidden={activeTab !== "ask"}>
+      {#if sessionStatus === "done"}
+        <LibbyChat sessionId={data.session.id} campaignId={data.session.campaignId} />
+      {:else}
+        <p class="empty">Libby can answer questions once this session finishes processing.</p>
+      {/if}
+    </div>
 
     <div role="tabpanel" hidden={activeTab !== "transcript"}>
       {#if transcriptTurns.length}
@@ -339,32 +380,165 @@
   {:else}
     <p class="preview-description">{data.preview.description}</p>
     <p class="empty">Log in with Discord to view the complete session.</p>
-    <p><a class="button" href="/auth/login">Log in with Discord</a></p>
+    <p><a class="btn" href="/auth/login">Log in with Discord</a></p>
+  {/if}
+
+  {#if data.sequence && (data.sequence.previous || data.sequence.next)}
+    <nav class="neighbours" aria-label="Neighbouring sessions">
+      {#if data.sequence.previous}
+        {@const previous = data.sequence.previous}
+        <a href="/campaigns/{data.session.campaignId}/sessions/{previous.id}">
+          <span class="eyebrow">← Session {previous.number}</span>
+          <span class="neighbour-title">{previous.title ?? "Untitled session"}</span>
+        </a>
+      {/if}
+      {#if data.sequence.next}
+        {@const next = data.sequence.next}
+        <a class="next" href="/campaigns/{data.session.campaignId}/sessions/{next.id}">
+          <span class="eyebrow">Session {next.number} →</span>
+          <span class="neighbour-title">{next.title ?? "Untitled session"}</span>
+        </a>
+      {/if}
+    </nav>
   {/if}
 </div>
 
 <style>
-  .session-date {
-    margin-top: -0.5rem;
+  .title-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+  .title {
+    flex: 1 1 28rem;
+    min-width: 0;
+  }
+  .title .eyebrow {
+    margin: 0;
+  }
+  .title h1 {
+    margin: 0.25rem 0 0;
+  }
+  .actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .step {
+    gap: 0.3rem;
+    padding: 0.4rem 0.7rem;
+    font-size: 0.78rem;
+  }
+  .step svg {
+    width: 1rem;
+    height: 1rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .step svg circle {
+    fill: currentColor;
+    stroke: none;
+  }
+  .manage {
+    position: relative;
+  }
+  .manage summary {
+    list-style: none;
+  }
+  .manage summary::-webkit-details-marker {
+    display: none;
+  }
+  .menu {
+    position: absolute;
+    top: calc(100% + 0.35rem);
+    right: 0;
+    z-index: 20;
+    display: grid;
+    min-width: 15rem;
+    padding: 0.35rem;
+    background: var(--surface);
+    border: 1px solid var(--edge);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px var(--shadow);
+  }
+  .menu form {
+    margin: 0;
+  }
+  /* Once the buttons wrap under the title they sit at the left edge. */
+  @media (max-width: 720px) {
+    .menu {
+      right: auto;
+      left: 0;
+    }
+  }
+  .menu button {
+    width: 100%;
+    padding: 0.5rem 0.7rem;
+    font: inherit;
+    font-size: 0.98rem;
+    text-align: left;
+    color: var(--ink);
+    cursor: pointer;
+    background: none;
+    border: 0;
+    border-radius: 6px;
+  }
+  .menu button:hover:not(:disabled) {
+    background: var(--surface-sunken);
+  }
+  .menu button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
   }
   .status {
-    margin-top: -0.5rem;
+    margin: 0 0 0.75rem;
+  }
+  .pill {
+    padding: 0.12rem 0.6rem;
+    font-family: var(--font-display);
+    font-size: 0.66rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--warn);
+    background: var(--warn-soft);
+    border-radius: 999px;
+  }
+  .pill.status-failed {
+    color: var(--accent-bright);
+    background: color-mix(in srgb, var(--accent-bright) 14%, transparent);
   }
   .preview-description {
     line-height: 1.7;
   }
-  .regeneration-actions {
+  .neighbours {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.75rem;
-    margin: 0.25rem 0 1rem;
+    gap: 1rem;
+    justify-content: space-between;
+    margin-top: 2rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--edge);
   }
-  .regeneration-actions form {
-    margin: 0;
+  .neighbours a {
+    display: grid;
+    gap: 0.1rem;
+    max-width: 22rem;
+    line-height: 1.3;
   }
-  .regenerate:disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
+  .neighbours a:hover {
+    text-decoration: none;
+  }
+  .neighbours .next {
+    margin-left: auto;
+    text-align: right;
+  }
+  .neighbour-title {
+    font-family: var(--font-display);
   }
   .error {
     color: var(--accent-bright);
@@ -372,7 +546,8 @@
   .tabs {
     display: flex;
     gap: 0.5rem;
-    margin: 1.25rem 0 0.5rem;
+    flex-wrap: wrap;
+    margin: 0.5rem 0 1.5rem;
     border-bottom: 1px solid var(--edge);
   }
   .tabs a {
@@ -412,6 +587,7 @@
     border-radius: 999px;
   }
   .prose {
+    max-width: 44rem;
     line-height: 1.7;
   }
   .prose :global(p) {
@@ -545,7 +721,7 @@
     color: #fff;
     background: color-mix(in srgb, hsl(var(--speaker-hue) 48% 42%) 72%, #2b2018);
     border: 1px solid color-mix(in srgb, hsl(var(--speaker-hue) 48% 42%) 60%, var(--edge));
-    border-radius: 50%;
+    border-radius: 24%;
     box-shadow: 0 1px 3px var(--shadow);
   }
   .turn-content {

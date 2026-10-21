@@ -53,7 +53,8 @@
     width: var(--size);
     height: var(--size);
     border: 1.5px solid var(--gold);
-    border-radius: 50%;
+    /* A rounded square, at every size. */
+    border-radius: 24%;
     object-fit: cover;
     vertical-align: middle;
     background: var(--surface-sunken);

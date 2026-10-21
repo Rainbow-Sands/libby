@@ -129,6 +129,11 @@ p {
   margin: 0 0 1rem;
 }
 
+:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
 /* ── Tapered rule (the iconic stat-block divider) ─────────────────────────── */
 .tapered-rule {
   display: block;
@@ -146,9 +151,15 @@ p {
   background: var(--surface);
   border: 1px solid var(--edge);
   border-top: 4px solid var(--accent);
-  border-radius: 4px;
-  padding: 1.5rem 1.75rem;
+  border-radius: 6px;
+  padding: 1.75rem 2rem;
   box-shadow: 0 4px 14px var(--shadow);
+}
+
+@media (max-width: 560px) {
+  .panel {
+    padding: 1.25rem 1.1rem;
+  }
 }
 
 .eyebrow {
@@ -178,7 +189,7 @@ p {
   color: #fbf4e3;
   background: var(--accent);
   border: 1px solid var(--accent-bright);
-  border-radius: 3px;
+  border-radius: 6px;
   padding: 0.55rem 1.1rem;
   cursor: pointer;
   text-decoration: none;
@@ -187,4 +198,65 @@ p {
   background: var(--accent-bright);
   color: #fff;
   text-decoration: none;
+}
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+/* A secondary action: same shape, no fill. */
+.btn.quiet {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--ink);
+  background: var(--surface-sunken);
+  border-color: var(--edge);
+}
+.btn.quiet:hover {
+  color: var(--ink);
+  border-color: var(--gold);
+}
+
+/* ── Breadcrumbs ──────────────────────────────────────────────────────────── */
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0 0 0.9rem;
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.crumbs span[aria-hidden] {
+  opacity: 0.6;
+}
+
+/* ── Main column + side rail ─────────────────────────────────────────────── */
+.with-rail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 17.5rem;
+  gap: 2rem;
+  align-items: start;
+}
+.rail {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+  min-width: 0;
+}
+.box {
+  display: grid;
+  gap: 0.6rem;
+  align-content: start;
+  padding: 1rem 1.1rem;
+  background: var(--surface-sunken);
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+}
+@media (max-width: 820px) {
+  .with-rail {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

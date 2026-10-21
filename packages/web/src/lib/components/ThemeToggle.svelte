@@ -59,7 +59,7 @@
     color: var(--gold);
     background: transparent;
     border: 1px solid var(--edge);
-    border-radius: 50%;
+    border-radius: 8px;
     cursor: pointer;
     transition: color 0.15s, border-color 0.15s;
   }
