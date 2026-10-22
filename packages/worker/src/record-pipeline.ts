@@ -30,7 +30,22 @@ export interface SessionMaterial {
   world: WorldPageState[];
   // Standing notes from the players' hand edits to the world.
   corrections: string[];
+  // The world's unresolved quests, or null before the world has any pages,
+  // when open threads still come from the previous recap.
+  quests: QuestState[] | null;
 }
+
+export interface QuestState {
+  name: string;
+  aliases: string[];
+  summary: string;
+  // Sessions since one last changed the quest's page.
+  sessionsSinceChange: number;
+}
+
+// A quest nobody has touched for this many sessions is listed as dormant:
+// still on the quest board, but no longer repeated in every recap.
+export const DORMANT_AFTER_SESSIONS = 5;
 
 // Names and one line each: enough to spell names consistently and recognize
 // returning characters without spending the context on full pages.
@@ -66,12 +81,49 @@ export function formatWorldPages(world: WorldPageState[]): string {
     .join("\n\n");
 }
 
-function formatPrevious(previous: PreviousSessionNotes | null): string {
+// Open threads come from the world's quest pages rather than the previous
+// recap, so a quest resolved later, or by hand, stops being carried forward.
+function questName(quest: QuestState): string {
+  return quest.aliases.length ? `${quest.name} (also: ${quest.aliases.join(", ")})` : quest.name;
+}
+
+function formatQuests(quests: QuestState[]): string[] {
+  const active = quests.filter((quest) => quest.sessionsSinceChange < DORMANT_AFTER_SESSIONS);
+  const dormant = quests.filter((quest) => quest.sessionsSinceChange >= DORMANT_AFTER_SESSIONS);
+  return [
+    "Open quests:",
+    ...(active.length
+      ? active.map((quest) => {
+          const line = summaryLine(quest.summary);
+          const since =
+            quest.sessionsSinceChange === 0
+              ? "moved last session"
+              : `last moved ${quest.sessionsSinceChange + 1} sessions ago`;
+          return `- ${questName(quest)}${line ? `: ${line}` : ""} (${since})`;
+        })
+      : ["- None"]),
+    "",
+    `Dormant quests, untouched for ${DORMANT_AFTER_SESSIONS} or more sessions:`,
+    ...(dormant.length ? dormant.map((quest) => `- ${questName(quest)}`) : ["- None"]),
+  ];
+}
+
+function formatPrevious(
+  previous: PreviousSessionNotes | null,
+  quests: QuestState[] | null,
+): string {
   if (!previous) return "None. This is the first recorded session of the campaign.";
 
   const heading = `${previous.title ?? "Untitled session"} (${previous.startedAt.toISOString().slice(0, 10)})`;
   const sections = previous.recapSections?.sections;
-  if (!sections) return `${heading}\n\n${previous.recap ?? "No recap was written."}`;
+  if (!sections) {
+    return [
+      heading,
+      "",
+      previous.recap ?? "No recap was written.",
+      ...(quests ? ["", ...formatQuests(quests)] : []),
+    ].join("\n");
+  }
 
   const threads = sections.openThreads
     .filter((thread) => thread.status !== "resolved")
@@ -83,8 +135,9 @@ function formatPrevious(previous: PreviousSessionNotes | null): string {
     "",
     `Where they left off: ${sections.leftOff}`,
     "",
-    "Unresolved threads:",
-    ...(threads.length > 0 ? threads : ["- None"]),
+    ...(quests
+      ? formatQuests(quests)
+      : ["Unresolved threads:", ...(threads.length > 0 ? threads : ["- None"])]),
     "",
     `Names introduced: ${sections.newFaces.map((face) => face.name).join(", ") || "none"}`,
   ].join("\n");
@@ -107,7 +160,7 @@ export async function createSessionLedger(
   const prompt = [
     tagged("world_glossary", formatWorldGlossary(material.world)),
     ...correctionsBlock(material.corrections),
-    tagged("earlier_session", formatPrevious(material.previous)),
+    tagged("earlier_session", formatPrevious(material.previous, material.quests)),
     tagged("transcript", material.transcript),
   ].join("\n\n");
   return completeObject(prompt, SESSION_LEDGER_SYSTEM, sessionLedgerSchema, "session_ledger");
@@ -121,7 +174,7 @@ export async function createRecap(
   const prompt = [
     tagged("world_glossary", formatWorldGlossary(material.world)),
     ...correctionsBlock(material.corrections),
-    tagged("earlier_session", formatPrevious(material.previous)),
+    tagged("earlier_session", formatPrevious(material.previous, material.quests)),
     tagged("ledger", JSON.stringify(ledger, null, 2)),
     tagged("transcript", material.transcript),
   ].join("\n\n");

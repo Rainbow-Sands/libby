@@ -21,6 +21,7 @@ import {
   getPreviousSessionNotes,
   getWorldBeforeSession,
   listWorldCorrections,
+  listWorldSessions,
   getWorldState,
   transcriptTableStats,
   type AudioSegmentRef,
@@ -200,18 +201,40 @@ async function sessionMaterial(
   campaignId: string,
   sessionId: string,
 ): Promise<SessionInferenceInput> {
-  const [cast, previous, world, corrections] = await Promise.all([
+  const [cast, previous, world, corrections, sessions] = await Promise.all([
     getCampaignCast(campaignId),
     getPreviousSessionNotes(sessionId),
     getWorldBeforeSession(campaignId, sessionId),
     listWorldCorrections(campaignId),
+    listWorldSessions(campaignId),
   ]);
+  const position = new Map(sessions.map((session, index) => [session.id, index]));
+  const current = position.get(sessionId) ?? sessions.length;
+  const quests = world.length
+    ? world
+        .filter(
+          (page) =>
+            page.kind === "quest" &&
+            page.content.status !== "resolved" &&
+            page.content.status !== "abandoned",
+        )
+        .map((page) => ({
+          name: page.content.name,
+          aliases: page.content.aliases,
+          summary: page.content.summary,
+          sessionsSinceChange: Math.max(
+            0,
+            current - (position.get(page.revisionSessionId) ?? current) - 1,
+          ),
+        }))
+    : null;
   return {
     material: {
       transcript: formatTranscriptForInference(transcript, cast),
       previous,
       world,
       corrections,
+      quests,
     },
     cast,
   };

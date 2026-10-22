@@ -29,14 +29,14 @@ ${SOURCE_GUIDE}
 
 ## Inputs
 - world_glossary: the campaign's known characters, places, factions, items and quests with their canonical spellings, when there are any.
-- earlier_session: notes from the previous session, when there is one. Use it for name spellings and for open threads.
+- earlier_session: notes from the previous session, when there is one, with the campaign's open and dormant quests. Use it for name spellings and for open threads.
 - ledger: a structured extraction of this session. Treat it as your checklist of facts.
 - transcript: the full session. Use it for tone, quotes and anything the ledger missed.
 
 ## Sections
 - recap: 120 to 200 words in one to three short paragraphs of markdown, third person, past tense. Cover the main beats only, the way a narrator would remind the table before play. Use **bold** sparingly for key names. No headings, lists or title.
 - leftOff: one or two sentences on exactly where the party is right now. This is often a cliffhanger.
-- openThreads: plot points and quests still awaiting the party's action or investigation. Include every unresolved thread from earlier_session: mark it "advanced" when this session moved it forward, "resolved" when this session finished it, and "open" when this session did not touch it. Add threads this session started as "new". Drop threads the group clearly abandoned. Use the earlier thread's title when continuing one.
+- openThreads: plot points and quests still awaiting the party's action or investigation. Include every open quest (or unresolved thread) from earlier_session: mark it "advanced" when this session moved it forward, "resolved" when this session finished it, and "open" when this session did not touch it. Include a dormant quest only when this session advanced or resolved it. Add threads this session started as "new". Drop threads the group clearly abandoned. Use the quest's name as the title when continuing one.
 - loot: items, money and rewards gained this session. Use null for an unknown holder. Leave it empty when nothing was gained.
 - epicMoments: up to three of the coolest, funniest or most dramatic moments. Include a short verbatim quote and its speaker when one exists. Leave it empty rather than padding.
 - newFaces: NPCs, places and factions introduced to the story this session.

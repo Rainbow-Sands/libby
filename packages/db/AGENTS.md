@@ -121,7 +121,8 @@ pnpm --filter @rainbot/db db:migrate    # applies to the DB in DATABASE_URL
   session page never compares whole revisions; rows from before it existed
   are filled in the first time they are viewed. `world_page_mentions` holds
   the recap sentences naming each page. It is a cache: `world_mention_indexes`
-  stores a hash of the campaign's recaps and page names, and a page view
+  stores a hash of the campaign's recaps and page names (`mentionSource`
+  leaves out threads a recap only carried forward as "Still open"), and a page view
   rebuilds the campaign's mentions when the hash no longer matches, so renames
   and regenerated recaps need no hooks.
 - `world_edits` records each applied hand edit with a snapshot of every row

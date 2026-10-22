@@ -58,7 +58,10 @@ leak spoilers), which keeps name spellings consistent:
    nobody reads it directly.
 2. `recapping` reads the ledger, the transcript, and the previous finished
    session's notes (`getPreviousSessionNotes`) and writes the sectioned recap.
-   Open threads carry forward from session to session through those notes.
+   Once the world has pages, open threads carry forward from its unresolved
+   quest pages rather than the previous recap's list, so a quest resolved
+   later or by hand stops being repeated. Quests untouched for 5 sessions are
+   listed as dormant and only appear in a recap when the session moves them.
 3. `titling` titles the markdown rendering of the recap.
 
 The ledger and recap use AI SDK structured output with the zod schemas in
