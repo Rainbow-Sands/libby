@@ -160,10 +160,6 @@
       onkeydown={resizeByKey}
     ></button>
   {/if}
-  <div class="head">
-    <h2>Ask Libby</h2>
-    <button class="close" type="button" onclick={() => (askLibby.open = false)}>Close</button>
-  </div>
 
   {#if scoped && here.label}
     <div class="context">
@@ -248,22 +244,22 @@
   /* A column beside the page that stays in view while the page scrolls. */
   .pane {
     position: sticky;
-    top: 0;
+    top: var(--header-height, 0px);
     flex: none;
-    height: calc(100dvh - var(--header-showing, 0px));
+    height: calc(100dvh - var(--header-height, 0px));
     display: flex;
     flex-direction: column;
     background: var(--surface);
     border-left: 1px solid var(--edge);
     container-type: inline-size;
   }
+  /* Under the header, whose Ask Libby button closes it again. */
   .pane.fullscreen {
     position: fixed;
-    inset: 0;
-    z-index: 50;
+    inset: var(--header-height, 0px) 0 0 0;
+    z-index: 30;
     height: auto;
     border-left: 0;
-    padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   .grip {
@@ -288,33 +284,6 @@
       var(--gold) 5px,
       transparent 5px
     );
-  }
-  .head {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem 1rem;
-    border-bottom: 3px double var(--accent);
-  }
-  h2 {
-    margin: 0;
-    font-family: var(--font-display);
-    font-size: 1.1rem;
-    letter-spacing: 0.06em;
-    color: var(--accent);
-  }
-  .close {
-    font-family: var(--font-display);
-    font-size: 0.75rem;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    background: none;
-    border: 1px solid var(--edge);
-    border-radius: 4px;
-    padding: 0.25rem 0.6rem;
-    color: var(--ink);
-    cursor: pointer;
   }
   .context {
     display: flex;

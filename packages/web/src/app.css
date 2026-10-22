@@ -3,6 +3,10 @@
    made no explicit choice (:not([data-theme])); an explicit data-theme always
    wins, so the toggle is authoritative. */
 
+html {
+  scroll-padding-top: var(--header-height, 0px);
+}
+
 :root {
   --font-display: "Cinzel", Georgia, "Times New Roman", serif;
   --font-body: "EB Garamond", Georgia, "Times New Roman", serif;
