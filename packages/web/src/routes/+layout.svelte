@@ -1,16 +1,26 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import type { LayoutData } from "./$types";
+  import { page } from "$app/state";
+  import AskLibby from "$lib/components/AskLibby.svelte";
   import ThemeToggle from "$lib/components/ThemeToggle.svelte";
   import "../app.css";
 
   let { data, children }: { data: LayoutData; children: Snippet } = $props();
+
+  // Ask Libby belongs to a campaign, so it appears on every page inside one.
+  const campaignId = $derived(page.route.id?.startsWith("/campaigns/[id]") ? page.params.id : null);
 </script>
 
 <header>
   <div class="bar">
     <a href="/" class="brand">Libby</a>
     <nav>
+      {#if data.user && campaignId}
+        {#key campaignId}
+          <AskLibby {campaignId} />
+        {/key}
+      {/if}
       {#if data.user}
         <span class="who">{data.user.username}</span>
         <a class="navlink" href="/auth/logout">Log out</a>

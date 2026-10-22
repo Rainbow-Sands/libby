@@ -184,7 +184,7 @@ export function slugify(name: string): string {
   return slug || "page";
 }
 
-function uniqueNames(names: string[], exclude: string): string[] {
+export function uniqueNames(names: string[], exclude: string): string[] {
   const seen = new Set([nameKey(exclude)]);
   const result: string[] = [];
   for (const raw of names) {

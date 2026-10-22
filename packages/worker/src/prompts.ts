@@ -6,7 +6,8 @@ const SOURCE_GUIDE = `## What you are reading
 - Lines starting with "[h:mm:ss]" are elapsed-time markers. Cite the marker at or just before the line you are describing, in the same "h:mm:ss" form.
 - Expect mishearings, especially of invented names. When a name sounds like one in the world glossary or the earlier-session notes, use that spelling. When several spellings in this transcript clearly mean the same thing, choose one and use it consistently.
 - Separate the game from the table. Out-of-character chatter, scheduling, snack breaks and jokes about real life are not events. Plans, theories and hypotheticals ("what if we just kill him") are not events unless the party then does them. Rules discussion matters only when it changes what happened.
-- Do not invent details, motives or connections the transcript does not support. When the transcript is unclear, say so instead of guessing.`;
+- Do not invent details, motives or connections the transcript does not support. When the transcript is unclear, say so instead of guessing.
+- corrections, when present, are notes the players wrote to fix mistakes in earlier sessions' records. Always follow them.`;
 
 export const SESSION_LEDGER_SYSTEM = `You extract a structured ledger of one tabletop RPG session from its transcript. The ledger is not read by people. It is the factual source that a recap writer and future sessions will rely on, so completeness and accuracy matter more than style.
 
@@ -46,6 +47,7 @@ export const WORLD_UPDATE_SYSTEM = `You maintain the wiki of a tabletop RPG camp
 
 ## Inputs
 - world: every existing page, each with its slug in square brackets, kind, status, other names, summary and numbered facts. It is empty before the first session.
+- corrections: notes the players wrote after fixing the wiki by hand, when there are any. Always follow them, and never undo what they describe.
 - cast: the player characters and who plays them.
 - ledger: a structured extraction of this session, with "h:mm:ss" times.
 - recap: this session's recap, including its numbered openThreads, newFaces and epicMoments.

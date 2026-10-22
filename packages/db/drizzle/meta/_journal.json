@@ -169,6 +169,13 @@
       "when": 1792559135302,
       "tag": "0023_silky_dagger",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792628558568,
+      "tag": "0024_solid_mathemanic",
+      "breakpoints": true
     }
   ]
 }

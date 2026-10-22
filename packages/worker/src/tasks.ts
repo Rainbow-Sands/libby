@@ -20,6 +20,7 @@ import {
   getCampaignCast,
   getPreviousSessionNotes,
   getWorldBeforeSession,
+  listWorldCorrections,
   getWorldState,
   transcriptTableStats,
   type AudioSegmentRef,
@@ -199,13 +200,19 @@ async function sessionMaterial(
   campaignId: string,
   sessionId: string,
 ): Promise<SessionInferenceInput> {
-  const [cast, previous, world] = await Promise.all([
+  const [cast, previous, world, corrections] = await Promise.all([
     getCampaignCast(campaignId),
     getPreviousSessionNotes(sessionId),
     getWorldBeforeSession(campaignId, sessionId),
+    listWorldCorrections(campaignId),
   ]);
   return {
-    material: { transcript: formatTranscriptForInference(transcript, cast), previous, world },
+    material: {
+      transcript: formatTranscriptForInference(transcript, cast),
+      previous,
+      world,
+      corrections,
+    },
     cast,
   };
 }
@@ -244,9 +251,13 @@ export async function updateWorld(
   ledger: SessionLedger,
   recapSections: RecapSections | null,
 ): Promise<{ update: WorldUpdate; cast: CampaignCastMember[] }> {
-  const [cast, world] = await Promise.all([getCampaignCast(campaignId), getWorldState(campaignId)]);
+  const [cast, world, corrections] = await Promise.all([
+    getCampaignCast(campaignId),
+    getWorldState(campaignId),
+    listWorldCorrections(campaignId),
+  ]);
   const update = await createWorldUpdate(
-    { world, cast, ledger, recap: recapSections },
+    { world, corrections, cast, ledger, recap: recapSections },
     inferenceCompleteObject,
   );
   return { update, cast };

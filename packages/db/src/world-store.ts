@@ -47,6 +47,12 @@ import type { WorldUpdateStatus } from "./domain.ts";
 
 type Queryable = typeof db | DatabaseTransaction;
 
+// World updates and hand edits both rewrite pages from what they read, so a
+// campaign's world is changed by one of them at a time.
+export async function lockWorld(tx: DatabaseTransaction, campaignId: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`world:${campaignId}`}))`);
+}
+
 export interface WorldSession {
   id: string;
   title: string | null;
@@ -351,6 +357,7 @@ export async function recordWorldUpdate(
   cast: CampaignCastMember[],
 ): Promise<boolean> {
   return db.transaction(async (tx) => {
+    await lockWorld(tx, campaignId);
     await tx
       .insert(worldUpdates)
       .values({ sessionId, campaignId, status: "pending" })

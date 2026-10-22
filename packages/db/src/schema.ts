@@ -35,6 +35,8 @@ import {
 } from "./domain.ts";
 import type { SessionRecap } from "./session-notes.ts";
 import type { TranscriptSegment } from "./transcript.ts";
+import type { WorldEditSnapshot } from "./world-edit-store.ts";
+import type { WorldEditChange } from "./world-edits.ts";
 import type { MentionSentence } from "./world-links.ts";
 import {
   WORLD_PAGE_KINDS,
@@ -422,3 +424,44 @@ export const worldMentionIndexes = pgTable("world_mention_indexes", {
   fingerprint: varchar("fingerprint", { length: 32 }).notNull(),
   builtAt: timestamp("built_at").defaultNow().notNull(),
 });
+
+// A change to the world that someone asked Libby for and applied by hand.
+// `snapshot` holds every row the edit touched as it was before, so the edit can
+// be undone while nothing newer has touched the world.
+export const worldEdits = pgTable(
+  "world_edits",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    campaignId: uuid("campaign_id")
+      .references(() => campaigns.id)
+      .notNull(),
+    userId: varchar("user_id", { length: 20 })
+      .references(() => users.id)
+      .notNull(),
+    summary: text("summary").notNull(),
+    changes: jsonb("changes").$type<WorldEditChange[]>().notNull(),
+    snapshot: jsonb("snapshot").$type<WorldEditSnapshot>().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    undoneAt: timestamp("undone_at"),
+    undoneByUserId: varchar("undone_by_user_id", { length: 20 }).references(() => users.id),
+  },
+  (t) => [index("world_edits_campaign_idx").on(t.campaignId, t.createdAt)],
+);
+
+// Short notes from applied edits that every later recap and world update reads,
+// so the same mistake is not made again, even when the world is rebuilt.
+export const worldCorrections = pgTable(
+  "world_corrections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    campaignId: uuid("campaign_id")
+      .references(() => campaigns.id)
+      .notNull(),
+    editId: uuid("edit_id").references(() => worldEdits.id, { onDelete: "set null" }),
+    note: text("note").notNull(),
+    createdByUserId: varchar("created_by_user_id", { length: 20 }).references(() => users.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    retiredAt: timestamp("retired_at"),
+  },
+  (t) => [index("world_corrections_campaign_idx").on(t.campaignId)],
+);

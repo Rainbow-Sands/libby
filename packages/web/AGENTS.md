@@ -48,7 +48,7 @@ browser (name matching and linking for world pages).
 
 Required vars: `DATABASE_URL`, `DISCORD_APPLICATION_ID`, `DISCORD_CLIENT_SECRET`,
 `SESSION_SECRET`, and `ORIGIN` (SvelteKit needs it for CSRF/form-action origin
-checks in production). Session chat uses `CHAT_PROVIDER` (`local`, `openai`, or
+checks in production). Ask Libby uses `CHAT_PROVIDER` (`local`, `openai`, or
 `anthropic`), with separate API key, base URL, model, and reasoning settings from
 summarization. Local chat requires `CHAT_BASE_URL` and defaults to model
 `qwen3.6-35b-a3b` with a `2048`-token llama.cpp thinking budget. Cloud chat
@@ -56,7 +56,7 @@ requires `CHAT_API_KEY` and `CHAT_MODEL`; it does not require any local inferenc
 or transcription URL.
 
 The web service needs `S3_BUCKET_AUDIO` for manual ingestion and
-`S3_BUCKET_ARTIFACT` to read transcript/detailed-record tabs and session chat
+`S3_BUCKET_ARTIFACT` to read transcript/detailed-record tabs and Ask Libby
 context. It also writes world page avatars to `S3_BUCKET_ARTIFACT` and serves
 them back through `/campaigns/[id]/avatars/[avatarId]`, so its credentials need
 write access to that bucket.
@@ -70,6 +70,13 @@ write access to that bucket.
   `PageLink` (hover card on devices that hover); recap markdown is rendered
   through `linkMarkdown` + `LinkedMarkdown` instead of `{@html}` so names can
   become components.
+- Ask Libby is one conversation per campaign, opened from the header on
+  every campaign page (`AskLibby.svelte`, posting to `campaigns/[id]/chat`).
+  Each request carries the page the person is on, so "this page" resolves.
+  Its tools read pages, session notes and transcripts, and `proposeChanges`
+  previews a world edit without writing it. `WorldEditCard` shows the preview
+  and applies or undoes it through `campaigns/[id]/world/edits`. Any member
+  can apply and undo.
 - Avatars are cropped and resized in the browser (`AvatarUploader`), posted
   raw to `/campaigns/[id]/world/[slug]/avatar`, checked by magic bytes, and
   stored under a content-hash key. Any campaign member can change them.

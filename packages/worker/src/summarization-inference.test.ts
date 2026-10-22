@@ -118,6 +118,7 @@ test("ledger and recap each make one structured call with the earlier session's 
         },
       },
     ],
+    corrections: ["The Salt Road is a trade route, never a person."],
   };
 
   expect(await createSessionLedger(material, complete)).toBe(ledger);
@@ -132,6 +133,9 @@ test("ledger and recap each make one structured call with the earlier session's 
     "- Magister Venn [npc] (also heard as Magistra Ven): The former archivist of Hollowmere.",
   );
   expect(calls[1].prompt).toContain('"leftOff": "At the cellar door."');
+  for (const call of calls.slice(0, 2)) {
+    expect(call.prompt).toContain("- The Salt Road is a trade route, never a person.");
+  }
   expect(calls[1].prompt).toContain("Alice: hello");
   expect(recap.sections.recap).toBe("The party reached **Hollowmere**.");
   expect(recap.sections.epicMoments).toHaveLength(3);
@@ -192,6 +196,7 @@ test("updates the world from the ledger and recap", async () => {
           },
         },
       ],
+      corrections: ["Venn is a magister, not a magistra."],
       cast: [{ userId: "u1", username: "kit", characterName: "Ilsa" }],
       ledger: {
         events: [],
@@ -223,6 +228,7 @@ test("updates the world from the ledger and recap", async () => {
   expect(prompt).toContain("#1 Kept the archive.");
   expect(prompt).not.toContain("Drowned.");
   expect(prompt).toContain("- Ilsa, played by kit");
+  expect(prompt).toContain("<corrections>\n- Venn is a magister, not a magistra.\n</corrections>");
   expect(prompt).toContain('"index": 0');
   expect(update.pages[0].newFacts[0].at).toBe("0:02:31");
 });

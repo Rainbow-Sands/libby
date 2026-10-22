@@ -95,6 +95,7 @@ try {
         }
       : null,
     world: [],
+    corrections: [],
   };
   const base = transcriptPath.replace(/\.txt$/, "");
 
@@ -114,7 +115,7 @@ try {
   writeFileSync(`${base}.title.txt`, title, "utf8");
 
   const world = await createWorldUpdate(
-    { world: [], cast: [], ledger, recap: recap.sections },
+    { world: [], corrections: [], cast: [], ledger, recap: recap.sections },
     structured("World update"),
   );
   writeFileSync(`${base}.world.json`, JSON.stringify(world, null, 2), "utf8");
