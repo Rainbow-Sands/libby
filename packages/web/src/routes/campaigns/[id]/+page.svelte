@@ -325,7 +325,7 @@
     font-size: 0.88rem;
     color: var(--ink-soft);
   }
-  @media (max-width: 560px) {
+  @container (max-width: 560px) {
     .sessions li a {
       grid-template-columns: 2rem minmax(0, 1fr) auto;
       gap: 0.2rem 0.7rem;

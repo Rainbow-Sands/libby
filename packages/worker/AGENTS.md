@@ -78,6 +78,8 @@ update, then re-enqueues itself until none remain:
   world pages, the cast, the session ledger and the recap. It returns pages
   touched, new facts, superseded fact ids, possible duplicates, name
   corrections and who features in each epic moment.
+- The ledger, recap and world update prompts include the campaign's
+  standing correction notes (`listWorldCorrections`) from hand edits.
 - `recordWorldUpdate` recomputes the plan with `planWorldUpdate` inside its
   transaction and writes new immutable page revisions, so redelivery is safe.
 - A session without a ledger stops the chain when it still needs a recap

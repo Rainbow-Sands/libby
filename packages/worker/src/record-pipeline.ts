@@ -28,6 +28,8 @@ export interface SessionMaterial {
   previous: PreviousSessionNotes | null;
   // The world as it stood when the session began.
   world: WorldPageState[];
+  // Standing notes from the players' hand edits to the world.
+  corrections: string[];
 }
 
 // Names and one line each: enough to spell names consistently and recognize
@@ -92,12 +94,19 @@ function tagged(name: string, body: string): string {
   return `<${name}>\n${body.trim()}\n</${name}>`;
 }
 
+function correctionsBlock(corrections: string[]): string[] {
+  return corrections.length
+    ? [tagged("corrections", corrections.map((note) => `- ${note}`).join("\n"))]
+    : [];
+}
+
 export async function createSessionLedger(
   material: SessionMaterial,
   completeObject: CompleteObject,
 ): Promise<SessionLedger> {
   const prompt = [
     tagged("world_glossary", formatWorldGlossary(material.world)),
+    ...correctionsBlock(material.corrections),
     tagged("earlier_session", formatPrevious(material.previous)),
     tagged("transcript", material.transcript),
   ].join("\n\n");
@@ -111,6 +120,7 @@ export async function createRecap(
 ): Promise<{ sections: RecapSections; markdown: string }> {
   const prompt = [
     tagged("world_glossary", formatWorldGlossary(material.world)),
+    ...correctionsBlock(material.corrections),
     tagged("earlier_session", formatPrevious(material.previous)),
     tagged("ledger", JSON.stringify(ledger, null, 2)),
     tagged("transcript", material.transcript),
@@ -123,6 +133,7 @@ export async function createRecap(
 
 export interface WorldMaterial {
   world: WorldPageState[];
+  corrections: string[];
   cast: CampaignCastMember[];
   ledger: SessionLedger;
   recap: RecapSections | null;
@@ -154,6 +165,7 @@ export async function createWorldUpdate(
     : "No recap was written.";
   const prompt = [
     tagged("world", formatWorldPages(material.world)),
+    ...correctionsBlock(material.corrections),
     tagged("cast", cast.join("\n")),
     tagged("ledger", JSON.stringify(material.ledger, null, 2)),
     tagged("recap", recap),

@@ -225,3 +225,24 @@ export {
   type WorldSession,
   type WorldStep,
 } from "./world-store.ts";
+export {
+  WorldEditError,
+  applyWorldEdit,
+  getWorldPageHistory,
+  listWorldCorrections,
+  previewCampaignWorldEdit,
+  undoWorldEdit,
+  type WorldEditSnapshot,
+  type WorldPageHistory,
+} from "./world-edit-store.ts";
+export {
+  planWorldEdit,
+  previewWorldEdit,
+  worldEditChangeSchema,
+  worldEditSchema,
+  type WorldEdit,
+  type WorldEditChange,
+  type WorldEditPagePreview,
+  type WorldEditPreview,
+  type WorldEditRow,
+} from "./world-edits.ts";

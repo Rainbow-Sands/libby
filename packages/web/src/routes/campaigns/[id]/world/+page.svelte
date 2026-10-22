@@ -326,7 +326,7 @@
   .card.stale {
     border-style: dashed;
   }
-  @media (max-width: 680px) {
+  @container (max-width: 680px) {
     .board {
       grid-template-columns: 1fr;
     }

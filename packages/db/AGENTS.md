@@ -27,6 +27,12 @@ Drizzle ORM schema, Postgres client, and all shared queries. See the root
 - `world.ts` — the world wiki's page kinds and content shape, the zod schema
   for a session's world update, and `planWorldUpdate`, the pure function
   that turns one update into page revisions.
+- `world-edits.ts` — hand edits to the world: the zod schema for a change
+  set Libby proposes, and `planWorldEdit`, the pure function that applies it
+  to the affected pages' whole history, plus the preview the card shows.
+- `world-edit-store.ts` — loads what an edit touches, applies it in one
+  transaction with a snapshot for undo, undoes it while nothing newer has
+  written to the world, and lists the standing correction notes.
 - `world-links.ts` — name matching and text linking. Free of database
   imports and exported as `@rainbot/db/world-links` so browser code can use it.
 - `world-store.ts` — world reads (snapshots as of a session, page detail,
@@ -118,6 +124,12 @@ pnpm --filter @rainbot/db db:migrate    # applies to the DB in DATABASE_URL
   stores a hash of the campaign's recaps and page names, and a page view
   rebuilds the campaign's mentions when the hash no longer matches, so renames
   and regenerated recaps need no hooks.
+- `world_edits` records each applied hand edit with a snapshot of every row
+  it touched. Undo restores the snapshot and is refused once a world update
+  or a later edit has written. World updates and edits take the same
+  per-campaign advisory lock. `world_corrections` holds the "Libby will
+  remember" notes; ledger, recap and world update prompts include the active
+  ones, so a rebuilt world follows them too.
 - `users.is_admin` grants application-wide visibility into every campaign and
   is managed manually.
 - A ready audio segment and its `transcribe-segment` job are committed in the

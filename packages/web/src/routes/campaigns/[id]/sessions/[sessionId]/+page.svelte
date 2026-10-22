@@ -6,14 +6,13 @@
   import { onMount, tick } from "svelte";
   import Breadcrumbs from "$lib/components/Breadcrumbs.svelte";
   import TaperedRule from "$lib/components/TaperedRule.svelte";
-  import LibbyChat from "$lib/components/LibbyChat.svelte";
   import SessionRecap from "$lib/components/SessionRecap.svelte";
   import WorldChanges from "$lib/components/WorldChanges.svelte";
   import { speakerHue } from "$lib/speakers";
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
 
-  type SessionTab = "recap" | "world" | "transcript" | "ask";
+  type SessionTab = "recap" | "world" | "transcript";
   type Neighbour = NonNullable<NonNullable<PageData["sequence"]>["previous"]>;
   type TranscriptTurn = NonNullable<PageData["transcriptTurns"]>[number];
   type SessionStatus = PageData["session"]["status"];
@@ -29,7 +28,7 @@
   );
 
   function sessionTab(value: string | null): SessionTab {
-    return value === "transcript" || value === "world" || value === "ask" ? value : "recap";
+    return value === "transcript" || value === "world" ? value : "recap";
   }
 
   let activeTab = $derived(sessionTab(page.url.searchParams.get("tab")));
@@ -273,12 +272,6 @@
         aria-selected={activeTab === "transcript"}
         class:active={activeTab === "transcript"}>Transcript</a
       >
-      <a
-        role="tab"
-        href="?tab=ask"
-        aria-selected={activeTab === "ask"}
-        class:active={activeTab === "ask"}>Ask Libby</a
-      >
     </div>
 
     <div role="tabpanel" hidden={activeTab !== "recap"}>
@@ -302,15 +295,6 @@
         />
       </div>
     {/if}
-
-    <!-- Kept mounted while hidden, so a conversation survives a look at another tab. -->
-    <div role="tabpanel" hidden={activeTab !== "ask"}>
-      {#if sessionStatus === "done"}
-        <LibbyChat sessionId={data.session.id} campaignId={data.session.campaignId} />
-      {:else}
-        <p class="empty">Libby can answer questions once this session finishes processing.</p>
-      {/if}
-    </div>
 
     <div role="tabpanel" hidden={activeTab !== "transcript"}>
       {#if transcriptTurns.length}
@@ -470,7 +454,7 @@
     margin: 0;
   }
   /* Once the buttons wrap under the title they sit at the left edge. */
-  @media (max-width: 720px) {
+  @container (max-width: 720px) {
     .menu {
       right: auto;
       left: 0;
@@ -566,7 +550,7 @@
     color: var(--gold);
     border-bottom-color: var(--gold);
   }
-  @media (max-width: 520px) {
+  @container (max-width: 520px) {
     .tabs {
       gap: 0;
     }
@@ -762,7 +746,7 @@
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
-  @media (max-width: 640px) {
+  @container (max-width: 640px) {
     .transcript-header {
       flex-direction: column;
       gap: 0.8rem;
