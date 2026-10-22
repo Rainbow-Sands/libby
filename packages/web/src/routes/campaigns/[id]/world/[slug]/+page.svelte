@@ -607,12 +607,12 @@
   .history li.current span {
     font-weight: 600;
   }
-  @media (max-width: 820px) {
+  @container (max-width: 820px) {
     .page-grid {
       grid-template-columns: 1fr;
     }
   }
-  @media (max-width: 520px) {
+  @container (max-width: 520px) {
     .page-head {
       gap: 0.8rem;
     }

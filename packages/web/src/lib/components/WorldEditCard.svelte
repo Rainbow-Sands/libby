@@ -313,7 +313,7 @@
     padding: 0.5rem 0.85rem;
     color: var(--accent-bright);
   }
-  @media (max-width: 30rem) {
+  @container (max-width: 30rem) {
     .diff {
       grid-template-columns: minmax(0, 1fr);
     }

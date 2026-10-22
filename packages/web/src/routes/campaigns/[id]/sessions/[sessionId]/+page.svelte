@@ -454,7 +454,7 @@
     margin: 0;
   }
   /* Once the buttons wrap under the title they sit at the left edge. */
-  @media (max-width: 720px) {
+  @container (max-width: 720px) {
     .menu {
       right: auto;
       left: 0;
@@ -550,7 +550,7 @@
     color: var(--gold);
     border-bottom-color: var(--gold);
   }
-  @media (max-width: 520px) {
+  @container (max-width: 520px) {
     .tabs {
       gap: 0;
     }
@@ -746,7 +746,7 @@
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
-  @media (max-width: 640px) {
+  @container (max-width: 640px) {
     .transcript-header {
       flex-direction: column;
       gap: 0.8rem;

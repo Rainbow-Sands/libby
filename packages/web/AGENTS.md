@@ -72,6 +72,10 @@ write access to that bucket.
   become components.
 - Ask Libby is one conversation per campaign, opened from the header on
   every campaign page (`AskLibby.svelte`, posting to `campaigns/[id]/chat`).
+  It opens as a resizable pane beside the page, or full screen when the
+  window can't fit the pane and a 360px page. The page column in
+  `+layout.svelte` is a size container, so page layouts use `@container`
+  width queries, not `@media`, and adapt to the room the pane leaves.
   Each request carries the page the person is on, so "this page" resolves.
   Its tools read pages, session notes and transcripts, and `proposeChanges`
   previews a world edit without writing it. `WorldEditCard` shows the preview

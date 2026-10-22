@@ -3,6 +3,7 @@
   import type { LayoutData } from "./$types";
   import { page } from "$app/state";
   import AskLibby from "$lib/components/AskLibby.svelte";
+  import { askLibby } from "$lib/ask-libby.svelte";
   import ThemeToggle from "$lib/components/ThemeToggle.svelte";
   import "../app.css";
 
@@ -12,14 +13,21 @@
   const campaignId = $derived(page.route.id?.startsWith("/campaigns/[id]") ? page.params.id : null);
 </script>
 
+<!-- The page column is a size container, so pages lay themselves out by the
+     width they get, which shrinks while Ask Libby's pane is open beside them. -->
+<div class="app">
+<div class="column">
 <header>
   <div class="bar">
     <a href="/" class="brand">Libby</a>
     <nav>
       {#if data.user && campaignId}
-        {#key campaignId}
-          <AskLibby {campaignId} />
-        {/key}
+        <button
+          class="ask"
+          type="button"
+          aria-expanded={askLibby.open}
+          onclick={() => (askLibby.open = !askLibby.open)}>Ask Libby</button
+        >
       {/if}
       {#if data.user}
         <span class="who">{data.user.username}</span>
@@ -35,8 +43,46 @@
 <main>
   {@render children()}
 </main>
+</div>
+{#if data.user && campaignId}
+  {#key campaignId}
+    <AskLibby {campaignId} />
+  {/key}
+{/if}
+</div>
 
 <style>
+  .app {
+    display: flex;
+    align-items: flex-start;
+  }
+  .column {
+    flex: 1;
+    min-width: 0;
+    container-type: inline-size;
+  }
+  .ask {
+    font-family: var(--font-display);
+    font-size: 0.85rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--surface);
+    background: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    padding: 0.3rem 0.75rem;
+    cursor: pointer;
+  }
+  .ask:hover {
+    background: var(--accent-bright);
+  }
+  .ask[aria-expanded="true"] {
+    box-shadow: 0 0 0 2px var(--gold);
+  }
+  .ask:focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
+  }
   header {
     background: var(--surface);
     border-bottom: 3px double var(--accent);

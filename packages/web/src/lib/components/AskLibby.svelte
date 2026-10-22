@@ -6,6 +6,7 @@
   import { DefaultChatTransport, getToolName, isToolUIPart, type UIMessage } from "ai";
   import WorldEditCard from "./WorldEditCard.svelte";
   import { KIND_LABELS } from "$lib/world";
+  import { askLibby, saveWidth, PANE_MIN } from "$lib/ask-libby.svelte";
   import type { ProposedWorldEdit } from "$lib/world-edit";
   import type { WorldPageKind } from "@rainbot/db";
 
@@ -20,8 +21,13 @@
     | { kind: "page"; slug: string }
     | { kind: "session"; sessionId: string };
 
-  let open = $state(false);
+  // Beside the page when the window can spare the pane and still leave the
+  // page this much room; full screen otherwise.
+  const PAGE_MIN = 360;
   let input = $state("");
+  let viewport = $state(1280);
+  const fullscreen = $derived(viewport < PANE_MIN + PAGE_MIN);
+  const paneWidth = $derived(Math.min(askLibby.width, viewport - PAGE_MIN));
   // Cleared by the chip's ✕ until the person moves to another page.
   let scoped = $state(true);
   let inputEl = $state<HTMLInputElement | null>(null);
@@ -99,10 +105,27 @@
     return done ? did : `${doing}…`;
   }
 
-  async function show() {
-    open = true;
-    await tick();
-    inputEl?.focus();
+  $effect(() => {
+    if (!askLibby.open) return;
+    void tick().then(() => inputEl?.focus());
+  });
+
+  // Dragging the pane's left edge resizes it.
+  function startResize(event: PointerEvent) {
+    const handle = event.currentTarget as HTMLElement;
+    handle.setPointerCapture(event.pointerId);
+    const move = (moveEvent: PointerEvent) => saveWidth(viewport - moveEvent.clientX);
+    const stop = () => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", stop);
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", stop);
+  }
+
+  function resizeByKey(event: KeyboardEvent) {
+    if (event.key === "ArrowLeft") saveWidth(askLibby.width + 24);
+    if (event.key === "ArrowRight") saveWidth(askLibby.width - 24);
   }
 
   function submit(event: SubmitEvent) {
@@ -114,21 +137,32 @@
   }
 
   function onkeydown(event: KeyboardEvent) {
-    if (event.key === "Escape" && open) open = false;
+    if (event.key === "Escape" && askLibby.open) askLibby.open = false;
   }
 </script>
 
-<svelte:window {onkeydown} />
-
-<button class="launcher" type="button" aria-expanded={open} onclick={() => (open ? (open = false) : show())}>
-  Ask Libby
-</button>
+<svelte:window {onkeydown} bind:innerWidth={viewport} />
 
 <!-- Kept mounted while closed, so the conversation survives. -->
-<aside class="drawer" hidden={!open} aria-label="Ask Libby">
+<aside
+  class="pane"
+  class:fullscreen
+  hidden={!askLibby.open}
+  aria-label="Ask Libby"
+  style:width={fullscreen ? null : `${paneWidth}px`}
+>
+  {#if !fullscreen}
+    <button
+      class="grip"
+      type="button"
+      aria-label="Resize Ask Libby with the arrow keys or by dragging"
+      onpointerdown={startResize}
+      onkeydown={resizeByKey}
+    ></button>
+  {/if}
   <div class="head">
     <h2>Ask Libby</h2>
-    <button class="close" type="button" onclick={() => (open = false)}>Close</button>
+    <button class="close" type="button" onclick={() => (askLibby.open = false)}>Close</button>
   </div>
 
   {#if scoped && here.label}
@@ -208,38 +242,52 @@
 </aside>
 
 <style>
-  .launcher {
-    font-family: var(--font-display);
-    font-size: 0.85rem;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: var(--surface);
-    background: var(--accent);
-    border: 1px solid var(--accent);
-    border-radius: 4px;
-    padding: 0.35rem 0.8rem;
-    cursor: pointer;
+  .pane[hidden] {
+    display: none;
   }
-  .launcher:hover {
-    background: var(--accent-bright);
-  }
-  .drawer {
-    position: fixed;
+  /* A column beside the page that stays in view while the page scrolls. */
+  .pane {
+    position: sticky;
     top: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 50;
-    width: min(28rem, 100vw);
+    flex: none;
+    height: 100dvh;
     display: flex;
     flex-direction: column;
     background: var(--surface);
     border-left: 1px solid var(--edge);
-    box-shadow: -8px 0 24px var(--shadow);
+    container-type: inline-size;
+  }
+  .pane.fullscreen {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    height: auto;
+    border-left: 0;
     padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
-  .drawer[hidden] {
-    display: none;
+  .grip {
+    padding: 0;
+    border: 0;
+    background: none;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -4px;
+    width: 8px;
+    cursor: col-resize;
+    z-index: 1;
+  }
+  .grip:hover,
+  .grip:focus-visible {
+    outline: none;
+    background: linear-gradient(
+      to right,
+      transparent 3px,
+      var(--gold) 3px,
+      var(--gold) 5px,
+      transparent 5px
+    );
   }
   .head {
     display: flex;
