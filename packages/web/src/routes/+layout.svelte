@@ -14,13 +14,15 @@
 
   // The header stays on screen, so Ask Libby's pane and in-page jumps start
   // below it.
-  let headerHeight = $state(0);
+  // The border box, unrounded, so the pane lines up exactly with its edge.
+  let headerBox = $state<ResizeObserverSize[]>();
+  const headerHeight = $derived(headerBox?.[0]?.blockSize ?? 0);
   $effect(() => {
     document.documentElement.style.setProperty("--header-height", `${headerHeight}px`);
   });
 </script>
 
-<header bind:clientHeight={headerHeight}>
+<header bind:borderBoxSize={headerBox}>
   <div class="bar">
     <a href="/" class="brand">Libby</a>
     <nav>
