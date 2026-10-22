@@ -11,13 +11,17 @@
 
   // Ask Libby belongs to a campaign, so it appears on every page inside one.
   const campaignId = $derived(page.route.id?.startsWith("/campaigns/[id]") ? page.params.id : null);
+
+  // Ask Libby's pane sits under the header and fills the rest of the window,
+  // growing into the header's space as the header scrolls away.
+  let headerHeight = $state(0);
+  let scrollY = $state(0);
+  const headerShowing = $derived(Math.max(0, headerHeight - scrollY));
 </script>
 
-<!-- The page column is a size container, so pages lay themselves out by the
-     width they get, which shrinks while Ask Libby's pane is open beside them. -->
-<div class="app">
-<div class="column">
-<header>
+<svelte:window bind:scrollY />
+
+<header bind:clientHeight={headerHeight}>
   <div class="bar">
     <a href="/" class="brand">Libby</a>
     <nav>
@@ -40,10 +44,12 @@
   </div>
 </header>
 
-<main>
+<!-- The page column is a size container, so pages lay themselves out by the
+     width they get, which shrinks while Ask Libby's pane is open beside them. -->
+<div class="app" style:--header-showing="{headerShowing}px">
+<main class="column">
   {@render children()}
 </main>
-</div>
 {#if data.user && campaignId}
   {#key campaignId}
     <AskLibby {campaignId} />

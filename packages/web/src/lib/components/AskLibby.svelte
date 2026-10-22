@@ -250,7 +250,7 @@
     position: sticky;
     top: 0;
     flex: none;
-    height: 100dvh;
+    height: calc(100dvh - var(--header-showing, 0px));
     display: flex;
     flex-direction: column;
     background: var(--surface);
