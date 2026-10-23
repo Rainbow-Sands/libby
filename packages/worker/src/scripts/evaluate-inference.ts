@@ -96,6 +96,7 @@ try {
       : null,
     world: [],
     corrections: [],
+    quests: null,
   };
   const base = transcriptPath.replace(/\.txt$/, "");
 

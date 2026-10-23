@@ -26,7 +26,7 @@ import {
   worldPages,
   worldUpdates,
 } from "./schema.ts";
-import type { RecapSections } from "./session-notes.ts";
+import { renderRecapMarkdown, type RecapSections, type SessionRecap } from "./session-notes.ts";
 import { mentionsBySlug, nameKey, type LinkTarget, type MentionSentence } from "./world-links.ts";
 import {
   PERSON_KINDS,
@@ -501,6 +501,20 @@ function mentionTargets(world: WorldPageSummary[]): LinkTarget[] {
   }));
 }
 
+// The part of a recap that is about its own session. Threads a recap only
+// carried forward untouched ("Still open") are left out, so a page is not
+// "mentioned in" every session after the one that last moved it.
+export function mentionSource(recap: string | null, sections: SessionRecap | null): string {
+  if (!sections) return recap ?? "";
+  return renderRecapMarkdown({
+    ...sections.sections,
+    openThreads: sections.sections.openThreads.filter((thread) => thread.status !== "open"),
+  });
+}
+
+// Bumped when mentionSource changes, so every campaign's mentions rebuild.
+const MENTION_SOURCE_VERSION = "2";
+
 // A hash of everything a campaign's mentions are built from: each session's
 // recap and each page revision's names. Postgres reads the recaps, so this is
 // cheap to check on every page view.
@@ -511,7 +525,7 @@ async function mentionFingerprint(
   const [row] = await queryable
     .select({
       current: sql<string>`md5(
-        coalesce((
+        ${MENTION_SOURCE_VERSION}::text || '|' || coalesce((
           select string_agg(s.id || ':' || md5(coalesce(s.recap, '')), ',' order by s.id)
           from sessions s where s.campaign_id = ${campaignId}
         ), '') || '|' || coalesce((
@@ -549,16 +563,22 @@ async function ensureWorldMentions(campaignId: string): Promise<boolean> {
 
     const world = await getWorldSummary(campaignId, {}, tx);
     const recaps = await tx
-      .select({ sessionId: sessions.id, recap: sessions.recap })
+      .select({
+        sessionId: sessions.id,
+        recap: sessions.recap,
+        recapSections: sessions.recapSections,
+      })
       .from(sessions)
       .where(and(eq(sessions.campaignId, campaignId), isNotNull(sessions.recap)));
     const targets = mentionTargets(world);
     const pageIds = new Map(world.map((page) => [page.slug, page.id]));
     const rows = recaps.flatMap((row) =>
-      [...mentionsBySlug(row.recap ?? "", targets)].flatMap(([slug, sentences]) => {
-        const pageId = pageIds.get(slug);
-        return pageId ? [{ pageId, sessionId: row.sessionId, sentences }] : [];
-      }),
+      [...mentionsBySlug(mentionSource(row.recap, row.recapSections), targets)].flatMap(
+        ([slug, sentences]) => {
+          const pageId = pageIds.get(slug);
+          return pageId ? [{ pageId, sessionId: row.sessionId, sentences }] : [];
+        },
+      ),
     );
 
     await tx

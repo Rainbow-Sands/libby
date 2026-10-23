@@ -119,6 +119,7 @@ test("ledger and recap each make one structured call with the earlier session's 
       },
     ],
     corrections: ["The Salt Road is a trade route, never a person."],
+    quests: null,
   };
 
   expect(await createSessionLedger(material, complete)).toBe(ledger);
@@ -142,6 +143,44 @@ test("ledger and recap each make one structured call with the earlier session's 
   expect(recap.sections.epicMoments[0].at).toBe("0:01:02");
   expect(recap.markdown).toContain("## Where we left off\n\nAt the cellar door.");
   expect(recap.markdown).toContain("- **The Missing Keeper** (Still open): Untouched.");
+});
+
+test("open threads come from the world's quests once it has some", async () => {
+  const prompts: string[] = [];
+  const complete: CompleteObject = async <T>(prompt: string) => {
+    prompts.push(prompt);
+    return {} as T;
+  };
+  await createSessionLedger(
+    {
+      transcript: "Alice: hello",
+      previous: {
+        title: "The Salt Road",
+        startedAt: new Date("2026-10-10T00:00:00Z"),
+        recap: "They sailed.",
+        recapSections: null,
+      },
+      world: [],
+      corrections: [],
+      quests: [
+        {
+          name: "Find the Keeper",
+          aliases: ["The Missing Keeper"],
+          summary: "The lighthouse keeper vanished. Nobody has seen him.",
+          sessionsSinceChange: 0,
+        },
+        { name: "Lasting Strength damage", aliases: [], summary: "", sessionsSinceChange: 9 },
+      ],
+    },
+    complete,
+  );
+  expect(prompts[0]).toContain(
+    "Open quests:\n- Find the Keeper (also: The Missing Keeper): The lighthouse keeper vanished. (moved last session)",
+  );
+  expect(prompts[0]).toContain(
+    "Dormant quests, untouched for 5 or more sessions:\n- Lasting Strength damage",
+  );
+  expect(prompts[0]).not.toContain("Unresolved threads:");
 });
 
 test("updates the world from the ledger and recap", async () => {

@@ -7,6 +7,7 @@ import {
   type WorldUpdate,
 } from "./world.ts";
 import { linkPageNames, mentionSentences, mentionsBySlug, summaryLine } from "./world-links.ts";
+import { mentionSource } from "./world-store.ts";
 
 function entry(overrides: Partial<WorldUpdate["pages"][number]>): WorldUpdate["pages"][number] {
   return {
@@ -414,4 +415,26 @@ test("an NPC who turns out to be a player character keeps their page", () => {
     noRecap,
   );
   expect(plan.pages.map((page) => page.slug)).toEqual(["magister-venn"]);
+});
+
+test("mentions leave out threads a recap only carried forward", () => {
+  const source = mentionSource("ignored", {
+    version: 1,
+    stats: { durationSeconds: 0, speakers: [] },
+    sections: {
+      recap: "The party met **Ireena**.",
+      leftOff: "At the church.",
+      openThreads: [
+        { title: "Lasting Strength damage", status: "open", note: "Untouched.", at: null },
+        { title: "Escort Ireena", status: "advanced", note: "They set out.", at: null },
+      ],
+      loot: [],
+      epicMoments: [],
+      newFaces: [],
+      rulings: [],
+    },
+  });
+  expect(source).toContain("Escort Ireena");
+  expect(source).not.toContain("Lasting Strength damage");
+  expect(mentionSource("Just prose.", null)).toBe("Just prose.");
 });
