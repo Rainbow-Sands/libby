@@ -126,7 +126,7 @@ function formatPrevious(
   }
 
   const threads = sections.openThreads
-    .filter((thread) => thread.status !== "resolved")
+    .filter((thread) => thread.status !== "resolved" && thread.status !== "abandoned")
     .map((thread) => `- ${thread.title}: ${thread.note}`);
   return [
     heading,
