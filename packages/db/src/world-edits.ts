@@ -112,6 +112,8 @@ export interface PlannedEdit {
 const clone = <T>(value: T): T => structuredClone(value);
 const latest = (target: EditPage) => target.revisions.at(-1)!.content;
 const factTexts = (content: WorldPageContent) => content.facts.map((f) => f.text);
+// What a page shows as its other names: names and references together.
+const otherNames = (content: WorldPageContent) => [...content.aliases, ...content.references];
 
 // Applies an edit's changes in order to a copy of the world. Errors name the
 // change that could not be applied, so the model can correct its proposal.
@@ -169,18 +171,25 @@ export function planWorldEdit(world: EditWorld, changes: WorldEditChange[]): Pla
       case "setKind":
         target.kind = change.kind;
         return;
-      case "addAlias":
+      case "addAlias": {
+        // A person naming it makes a reference a name again.
+        const key = nameKey(change.alias);
         for (const content of all) {
           content.aliases = uniqueNames([...content.aliases, change.alias], content.name);
+          content.references = content.references.filter((ref) => nameKey(ref) !== key);
         }
         return;
+      }
       case "removeAlias": {
         const key = nameKey(change.alias);
-        if (!all.some((content) => content.aliases.some((alias) => nameKey(alias) === key))) {
+        const named = (content: WorldPageContent) =>
+          [...content.aliases, ...content.references].some((alias) => nameKey(alias) === key);
+        if (!all.some(named)) {
           return void errors.push(`${label}: ${now.name} has no other name "${change.alias}".`);
         }
         for (const content of all) {
           content.aliases = content.aliases.filter((alias) => nameKey(alias) !== key);
+          content.references = content.references.filter((ref) => nameKey(ref) !== key);
         }
         return;
       }
@@ -238,6 +247,7 @@ export function planWorldEdit(world: EditWorld, changes: WorldEditChange[]): Pla
               version: 1,
               name: latest(into).name,
               aliases: [],
+              references: [],
               status: from?.status ?? null,
               summary: from?.summary ?? "",
               facts: [],
@@ -250,6 +260,10 @@ export function planWorldEdit(world: EditWorld, changes: WorldEditChange[]): Pla
                 ...from.facts.map((f): WorldFact => ({ ...f, id: f.id + offset })),
               ];
               base.aliases = uniqueNames([...base.aliases, from.name, ...from.aliases], base.name);
+              base.references = uniqueNames(
+                [...base.references, ...from.references],
+                base.name,
+              ).filter((ref) => !base.aliases.some((alias) => nameKey(alias) === nameKey(ref)));
               base.related = [...new Set([...base.related, ...from.related])].filter(
                 (slug) => slug !== target.slug && slug !== into.slug,
               );
@@ -309,6 +323,9 @@ export function planWorldEdit(world: EditWorld, changes: WorldEditChange[]): Pla
           revision.content.aliases = revision.content.aliases.filter(
             (alias) => !movedNames.has(nameKey(alias)) && nameKey(alias) !== nameKey(name),
           );
+          revision.content.references = revision.content.references.filter(
+            (ref) => !movedNames.has(nameKey(ref)) && nameKey(ref) !== nameKey(name),
+          );
           if (!moved.length) continue;
           revisions.push({
             sessionId: revision.sessionId,
@@ -316,6 +333,7 @@ export function planWorldEdit(world: EditWorld, changes: WorldEditChange[]): Pla
               version: 1,
               name,
               aliases: uniqueNames(change.aliases, name),
+              references: [],
               status: null,
               summary: change.summary.trim(),
               facts: moved.map((f) => ({ ...f, id: renumber.get(f.id)! })),
@@ -331,6 +349,7 @@ export function planWorldEdit(world: EditWorld, changes: WorldEditChange[]): Pla
               version: 1,
               name,
               aliases: uniqueNames(change.aliases, name),
+              references: [],
               status: null,
               summary: change.summary.trim(),
               facts: [],
@@ -429,7 +448,7 @@ export function previewWorldEdit(
         mergedInto: null,
         fromSessionId: after.createdInSessionId,
         rows: [
-          listDiff("Other names", [], now.aliases),
+          listDiff("Other names", [], otherNames(now)),
           listDiff(
             "Facts",
             [],
@@ -464,7 +483,7 @@ export function previewWorldEdit(
     const rows = [
       valueDiff("Name", was.name, now.name),
       valueDiff("Kind", before.kind, after.kind),
-      listDiff("Other names", was.aliases, now.aliases),
+      listDiff("Other names", otherNames(was), otherNames(now)),
       listDiff("Facts", factTexts(was), factTexts(now)),
       valueDiff("Status", was.status, now.status),
       valueDiff("Holder", was.holder, now.holder),

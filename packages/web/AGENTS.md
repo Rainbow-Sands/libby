@@ -66,7 +66,10 @@ write access to that bucket.
 - `/campaigns/[id]/world` lists pages by kind (quests as a board);
   `/campaigns/[id]/world/[slug]?asOf=<sessionId>` shows a page as it stood
   after that session.
-- Session recaps link names to pages as of that session. Running text uses
+- Session recaps link only the phrases the linking model stored for them
+  (`getSessionRecapLinks`, `recapFieldLinker`); an unlinked recap shows no
+  links. Page summaries and facts use strict name matching (`linkPageNames`).
+  Running text uses
   `PageLink` (hover card on devices that hover); recap markdown is rendered
   through `linkMarkdown` + `LinkedMarkdown` instead of `{@html}` so names can
   become components.

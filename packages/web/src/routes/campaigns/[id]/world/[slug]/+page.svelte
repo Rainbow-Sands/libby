@@ -265,9 +265,9 @@
                 >{sessionLabel(detail.createdInSessionId)}</a
               >
             </dd>
-            {#if content.aliases.length}
+            {#if content.aliases.length || content.references.length}
               <dt>Also heard as</dt>
-              <dd>{content.aliases.join(", ")}</dd>
+              <dd>{[...content.aliases, ...content.references].join(", ")}</dd>
             {/if}
           </dl>
         </div>

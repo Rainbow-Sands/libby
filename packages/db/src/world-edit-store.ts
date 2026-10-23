@@ -5,10 +5,10 @@ import {
   worldCorrections,
   worldEdits,
   worldPageAvatars,
-  worldPageMentions,
   worldPageMoments,
   worldPageRevisions,
   worldPages,
+  worldRecapLinks,
   worldUpdates,
 } from "./schema.ts";
 import { nameKey } from "./world-links.ts";
@@ -38,6 +38,9 @@ export interface WorldEditSnapshot {
   moments: { pageId: string; sessionId: string; position: number; moment: WorldMoment }[];
   avatars: { id: string; pageId: string }[];
   links: { revisionId: string; related: string[] }[];
+  // Recap links a merge moved to the page it kept. Missing from edits saved
+  // before recaps were linked by the model.
+  recapLinks?: { id: string; pageId: string }[];
   createdPageIds: string[];
   // The campaign's newest world update time when the edit was applied, read
   // from the same column it is compared with so clocks never mix.
@@ -247,6 +250,7 @@ export async function applyWorldEdit(
       ),
     );
 
+    const recapLinks: { id: string; pageId: string }[] = [];
     for (const page of planned.pages.filter((p) => p.removed && p.id !== null)) {
       const intoId = ids.get(page.mergedInto!)!;
       const fromId = page.id!;
@@ -257,7 +261,12 @@ export async function applyWorldEdit(
         select ${intoId}, session_id, position, moment from ${worldPageMoments} where page_id = ${fromId}
         on conflict do nothing`);
       await tx.delete(worldPageMoments).where(eq(worldPageMoments.pageId, fromId));
-      await tx.delete(worldPageMentions).where(eq(worldPageMentions.pageId, fromId));
+      const moved = await tx
+        .update(worldRecapLinks)
+        .set({ pageId: intoId })
+        .where(eq(worldRecapLinks.pageId, fromId))
+        .returning({ id: worldRecapLinks.id });
+      recapLinks.push(...moved.map((link) => ({ id: link.id, pageId: fromId })));
       await tx
         .update(worldPageAvatars)
         .set({ pageId: intoId })
@@ -282,6 +291,7 @@ export async function applyWorldEdit(
       revisions,
       moments,
       avatars,
+      recapLinks,
       links: world.links
         .filter((link) => planned.links.has(link.revisionId))
         .map((link) => ({ revisionId: link.revisionId, related: link.related })),
@@ -346,7 +356,6 @@ export async function undoWorldEdit(
     const touched = [...snapshot.pages.map((page) => page.id), ...snapshot.createdPageIds];
     if (touched.length) {
       await tx.delete(worldPageMoments).where(inArray(worldPageMoments.pageId, touched));
-      await tx.delete(worldPageMentions).where(inArray(worldPageMentions.pageId, touched));
       await tx.delete(worldPageRevisions).where(inArray(worldPageRevisions.pageId, touched));
     }
     if (snapshot.pages.length) {
@@ -384,7 +393,25 @@ export async function undoWorldEdit(
     if (snapshot.createdPageIds.length) {
       await tx.delete(worldPages).where(inArray(worldPages.id, snapshot.createdPageIds));
     }
-    if (snapshot.revisions.length) await tx.insert(worldPageRevisions).values(snapshot.revisions);
+    if (snapshot.recapLinks?.length) {
+      const values = sql.join(
+        snapshot.recapLinks.map((link) => sql`(${link.id}::uuid, ${link.pageId}::uuid)`),
+        sql`, `,
+      );
+      await tx.execute(sql`
+        update ${worldRecapLinks} as l set page_id = v.page_id
+        from (values ${values}) as v(id, page_id)
+        where l.id = v.id`);
+    }
+    if (snapshot.revisions.length) {
+      await tx.insert(worldPageRevisions).values(
+        snapshot.revisions.map((revision) => ({
+          ...revision,
+          // Saved before pages had references.
+          content: { ...revision.content, references: revision.content.references ?? [] },
+        })),
+      );
+    }
     if (snapshot.moments.length) await tx.insert(worldPageMoments).values(snapshot.moments);
     await setRelated(tx, snapshot.links);
 

@@ -14,6 +14,8 @@ conventions.
 - `scripts/evaluate-inference.ts` — standalone ledger/recap/title pipeline harness.
 - `scripts/backfill-recaps.ts` — queues a campaign recap backfill, which then
   builds the campaign's world.
+- `scripts/link-recaps.ts` — queues recap linking, optionally after sorting
+  stored other names into names and references.
 
 ## Durable state
 
@@ -89,6 +91,37 @@ update, then re-enqueues itself until none remain:
   backfill (the backfill resumes the world when it finishes) and is skipped
   otherwise. A failed update is retried three times a minute apart, then
   marked failed so the world moves on.
+
+### Recap links
+
+Recaps are linked to world pages by a model that reads each sentence, not by
+matching names, so "her children" about someone else stays plain. When the
+world chain finishes, it enqueues `link-campaign-recaps` (a `stately` queue
+keyed by campaign). Each job links the oldest recap whose session the world
+has handled and whose current text has no links, then re-enqueues itself:
+
+- `RECAP_LINKS_SYSTEM` gets the world as that session left it and every
+  linkable field of the recap (`recapLinkFields`), and returns field, exact
+  phrase, occurrence and page slug. `createRecapLinks` drops any link whose
+  phrase is not in that field that many times or whose page does not exist.
+- `recordRecapLinks` writes nothing if the recap changed meanwhile. A
+  regenerated recap gets linked again on the next chain.
+- An unrecoverable failure is recorded and not retried until the recap
+  changes; other errors use pg-boss retries.
+
+Page summaries and facts have no model links; they link only capitalized
+names, matching case, that exactly one page owns.
+
+Run this once after deploying recap links, and with `--relink` to link every
+recap again:
+
+```sh
+pnpm --filter @rainbot/worker link:recaps --all --sort-names --dry-run   # preview
+docker compose exec worker node packages/worker/src/scripts/link-recaps.ts --all --sort-names
+```
+
+`--sort-names` first asks the model which stored other names are really
+references and moves them on every revision.
 
 ### Recap backfill
 

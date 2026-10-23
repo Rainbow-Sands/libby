@@ -1,44 +1,55 @@
 <script lang="ts">
   import type { SessionRecap } from "@rainbot/db";
-  import { linkPageNames, nameKey } from "@rainbot/db/world-links";
+  import {
+    recapFieldLinker,
+    type LinkedText as Segments,
+    type RecapLink,
+  } from "@rainbot/db/world-links";
   import LinkedMarkdown from "./LinkedMarkdown.svelte";
   import LinkedText from "./LinkedText.svelte";
-  import PageLink from "./PageLink.svelte";
   import WorldAvatar from "./WorldAvatar.svelte";
   import { linkMarkdown } from "$lib/linked-markdown";
   import { speakerHue } from "$lib/speakers";
   import { avatarHref, worldPageHref, type WorldLinkPage, type WorldLinks } from "$lib/world";
 
-  let { recap, world = null }: { recap: SessionRecap; world?: WorldLinks | null } = $props();
+  let {
+    recap,
+    world = null,
+    links = [],
+  }: { recap: SessionRecap; world?: WorldLinks | null; links?: RecapLink[] } = $props();
 
   const sections = $derived(recap.sections);
 
-  // Names in running text link to their pages, first mention only, in reading
-  // order. Titled entries (threads, loot, new faces) link when their whole name
-  // matches a page.
+  // Only phrases the linking model tied to a page link, so a name that means
+  // someone else here stays plain. Running text links each page's first
+  // mention, in reading order; titled entries (threads, loot, new faces) link
+  // whatever they name.
+  const byField = $derived.by(() => {
+    const fields = new Map<string, RecapLink[]>();
+    for (const link of world ? links : []) {
+      fields.set(link.field, [...(fields.get(link.field) ?? []), link]);
+    }
+    return fields;
+  });
   const linked = $derived.by(() => {
-    const targets = world?.pages.map((page) => ({ slug: page.slug, names: page.names })) ?? [];
     const seen = new Set<string>();
+    const linker = (field: string) => recapFieldLinker(byField.get(field) ?? [], seen);
     return {
-      recap: linkMarkdown(sections.recap, targets, seen),
-      leftOff: linkPageNames(sections.leftOff, targets, seen),
-      moments: sections.epicMoments.map((moment) =>
-        linkPageNames(moment.description, targets, seen),
+      recap: linkMarkdown(sections.recap, linker("recap")),
+      leftOff: linker("leftOff")(sections.leftOff),
+      moments: sections.epicMoments.map((moment, index) =>
+        linker(`epicMoments.${index}`)(moment.description),
       ),
     };
   });
-  const byName = $derived.by(() => {
-    const pages = new Map<string, WorldLinkPage>();
-    for (const page of world?.pages ?? []) {
-      for (const name of page.names) {
-        const key = nameKey(name);
-        if (key && !pages.has(key)) pages.set(key, page);
-      }
-    }
-    return pages;
-  });
-  function pageNamed(name: string | null): WorldLinkPage | undefined {
-    return name ? byName.get(nameKey(name)) : undefined;
+  function linkField(field: string, text: string): Segments {
+    return recapFieldLinker(byField.get(field) ?? [])(text);
+  }
+  const bySlug = $derived(new Map(world?.pages.map((page) => [page.slug, page])));
+  // The page a new face is, when the linking model tied its name to one.
+  function facePage(index: number): WorldLinkPage | undefined {
+    const slug = byField.get(`newFaces.${index}`)?.[0]?.slug;
+    return slug ? bySlug.get(slug) : undefined;
   }
   const totalWords = $derived(recap.stats.speakers.reduce((sum, s) => sum + s.words, 0));
 
@@ -78,13 +89,8 @@
   }
 </script>
 
-{#snippet named(name: string)}
-  {@const page = pageNamed(name)}
-  {#if page && world}
-    <PageLink campaignId={world.campaignId} asOf={world.asOf} {page} text={name} />
-  {:else}
-    {name}
-  {/if}
+{#snippet named(field: string, text: string)}
+  <LinkedText segments={linkField(field, text)} {world} />
 {/snippet}
 
 {#snippet cite(at: string | null)}
@@ -109,8 +115,10 @@
             <tbody>
               {#each sections.loot as item, index (index)}
                 <tr>
-                  <td><strong>{@render named(item.item)}</strong> {@render cite(item.at)}</td>
-                  <td>{#if item.holder}{@render named(item.holder)}{:else}Unclear{/if}</td>
+                  <td><strong>{@render named(`loot.${index}.item`, item.item)}</strong> {@render cite(item.at)}</td>
+                  <td>
+                    {#if item.holder}{@render named(`loot.${index}.holder`, item.holder)}{:else}Unclear{/if}
+                  </td>
                   <td class="muted">{item.note}</td>
                 </tr>
               {/each}
@@ -144,7 +152,7 @@
         <h3>New faces &amp; places</h3>
         <div class="chips">
           {#each sections.newFaces as face, index (index)}
-            {@const page = pageNamed(face.name)}
+            {@const page = facePage(index)}
             <span class="chip" class:with-avatar={page && world}>
               {#if page && world}
                 <WorldAvatar
@@ -222,7 +230,10 @@
           {#each sections.openThreads as thread, index (index)}
             <li class:abandoned={thread.status === "abandoned"}>
               <span class="pill status-{thread.status}">{STATUS_LABELS[thread.status]}</span>
-              <span><strong>{@render named(thread.title)}</strong> {@render cite(thread.at)}</span>
+              <span
+                ><strong>{@render named(`openThreads.${index}`, thread.title)}</strong>
+                {@render cite(thread.at)}</span
+              >
               <p class="why">{thread.note}</p>
             </li>
           {/each}

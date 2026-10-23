@@ -3,10 +3,11 @@ import path from "node:path";
 import { APICallError, NoObjectGeneratedError, type FlexibleSchema } from "ai";
 import { UnrecoverableTaskError } from "./errors.ts";
 import { SUMMARIZATION_CONFIG, TRANSCRIPTION_MODEL, TRANSCRIPTION_URL } from "./env.ts";
-import { TITLE_SYSTEM } from "./prompts.ts";
+import { ALIAS_REFERENCES_SYSTEM, TITLE_SYSTEM } from "./prompts.ts";
 import { stripCodeFence, normalizeTitle } from "./text.ts";
 import {
   createRecap,
+  createRecapLinks,
   createSessionLedger,
   createWorldUpdate,
   type SessionMaterial,
@@ -16,6 +17,7 @@ import {
   createSummarizationInference,
 } from "./summarization-inference.ts";
 import {
+  aliasReferencesSchema,
   formatTranscriptForInference,
   getCampaignCast,
   getPreviousSessionNotes,
@@ -23,14 +25,17 @@ import {
   listWorldCorrections,
   listWorldSessions,
   getWorldState,
+  getWorldSummary,
   transcriptTableStats,
   type AudioSegmentRef,
   type CampaignCastMember,
+  type RecapLink,
   type RecapSections,
   type SessionLedger,
   type SessionRecap,
   type Transcript,
   type TranscriptSegment,
+  type WorldPageSummary,
   type WorldUpdate,
 } from "@rainbot/db";
 
@@ -284,4 +289,44 @@ export async function updateWorld(
     inferenceCompleteObject,
   );
   return { update, cast };
+}
+
+// Links a recap against the world as its session left it, so later pages and
+// later names never appear in an older session.
+export async function linkRecap(
+  campaignId: string,
+  startedAt: Date,
+  sections: RecapSections,
+): Promise<{ links: RecapLink[]; pageIds: Map<string, string> }> {
+  const world = await getWorldSummary(campaignId, { through: startedAt });
+  const links = await createRecapLinks({ world, recap: sections }, inferenceCompleteObject);
+  return { links, pageIds: new Map(world.map((page) => [page.slug, page.id])) };
+}
+
+// Which other names of the given pages are references, by page slug. Only
+// names a page really has come back.
+export async function findAliasReferences(
+  world: WorldPageSummary[],
+): Promise<Map<string, string[]>> {
+  const named = world.filter((page) => page.content.aliases.length);
+  if (!named.length) return new Map();
+  const prompt = named
+    .map(
+      (page) =>
+        `- [${page.slug}] ${page.content.name} (${page.kind}): ${page.content.aliases.join(" | ")}`,
+    )
+    .join("\n");
+  const answer = await inferenceCompleteObject(
+    prompt,
+    ALIAS_REFERENCES_SYSTEM,
+    aliasReferencesSchema,
+    "alias_references",
+  );
+  const result = new Map<string, string[]>();
+  for (const entry of answer.pages) {
+    const aliases = named.find((page) => page.slug === entry.page)?.content.aliases ?? [];
+    const references = entry.references.filter((reference) => aliases.includes(reference));
+    if (references.length) result.set(entry.page, references);
+  }
+  return result;
 }

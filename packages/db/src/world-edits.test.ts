@@ -13,6 +13,7 @@ function content(overrides: Partial<WorldPageContent>): WorldPageContent {
     version: 1,
     name: "Someone",
     aliases: [],
+    references: [],
     status: null,
     summary: "",
     facts: [],
@@ -226,4 +227,32 @@ test("status, holder and new facts only change the page as it stands now", () =>
     text: "Drunk at the feast.",
     sessionId: "s5",
   });
+});
+
+test("naming a reference makes it a name, and removing one drops it", () => {
+  const children: EditPage = {
+    id: "p9",
+    slug: "theodore-and-myrtle",
+    kind: "npc",
+    createdInSessionId: "s1",
+    removed: false,
+    mergedInto: null,
+    revisions: [
+      {
+        sessionId: "s1",
+        content: content({
+          name: "Theodore and Myrtle",
+          references: ["the children", "the twins"],
+        }),
+      },
+    ],
+  };
+  const planned = planWorldEdit({ ...world, pages: [...world.pages, children] }, [
+    { op: "addAlias", page: "theodore-and-myrtle", alias: "the twins" },
+    { op: "removeAlias", page: "theodore-and-myrtle", alias: "the children" },
+  ]);
+  expect(planned.errors).toEqual([]);
+  const after = planned.pages.find((p) => p.slug === "theodore-and-myrtle")!.revisions[0].content;
+  expect(after.aliases).toEqual(["the twins"]);
+  expect(after.references).toEqual([]);
 });

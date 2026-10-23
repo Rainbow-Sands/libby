@@ -6,6 +6,7 @@ import {
   getCampaignAccess,
   getCampaignCast,
   getSessionDetail,
+  getSessionRecapLinks,
   getSessionWorldChanges,
   getWorldSummary,
   isAdmin,
@@ -37,17 +38,18 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
   // returned unless the session and access checks pass.
   const user = locals.user;
   const tab = url.searchParams.get("tab");
-  const [session, access, worldPages, worldChanges, worldChangeCount, cast] = await Promise.all([
-    getSessionDetail(params.sessionId),
-    user ? getCampaignAccess(params.id, user.id) : null,
-    // Only the recap tab links names to pages.
-    user && tab !== "transcript" && tab !== "world"
-      ? getWorldSummary(params.id, { throughSession: params.sessionId })
-      : [],
-    user && tab === "world" ? getSessionWorldChanges(params.sessionId) : null,
-    user ? countSessionWorldChanges(params.sessionId) : null,
-    user && tab === "transcript" ? getCampaignCast(params.id) : null,
-  ]);
+  const recapTab = tab !== "transcript" && tab !== "world";
+  const [session, access, worldPages, recapLinks, worldChanges, worldChangeCount, cast] =
+    await Promise.all([
+      getSessionDetail(params.sessionId),
+      user ? getCampaignAccess(params.id, user.id) : null,
+      // Only the recap tab links names to pages.
+      user && recapTab ? getWorldSummary(params.id, { throughSession: params.sessionId }) : [],
+      user && recapTab ? getSessionRecapLinks(params.sessionId) : [],
+      user && tab === "world" ? getSessionWorldChanges(params.sessionId) : null,
+      user ? countSessionWorldChanges(params.sessionId) : null,
+      user && tab === "transcript" ? getCampaignCast(params.id) : null,
+    ]);
   if (!session || session.campaignId !== params.id) {
     throw error(404, "Session not found.");
   }
@@ -71,6 +73,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
       },
       transcriptTurns: null,
       world: null,
+      recapLinks: [],
       worldChanges: null,
       worldChangeCount: null,
       hasTranscript: Boolean(session.transcriptArtifact),
@@ -98,6 +101,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
       asOf: session.id,
       pages: toWorldLinkPages(worldPages),
     },
+    recapLinks,
     worldChanges,
     worldChangeCount,
     hasTranscript: Boolean(session.transcriptArtifact),

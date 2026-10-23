@@ -46,7 +46,7 @@ ${SOURCE_GUIDE}
 export const WORLD_UPDATE_SYSTEM = `You maintain the wiki of a tabletop RPG campaign's world. After each session you update it from that session's ledger and recap. Players browse the wiki between sessions to remember who is who, and future sessions rely on it for name spellings and continuity.
 
 ## Inputs
-- world: every existing page, each with its slug in square brackets, kind, status, other names, summary and numbered facts. It is empty before the first session.
+- world: every existing page, each with its slug in square brackets, kind, status, other names, references, summary and numbered facts. It is empty before the first session.
 - corrections: notes the players wrote after fixing the wiki by hand, when there are any. Always follow them, and never undo what they describe.
 - cast: the player characters and who plays them.
 - ledger: a structured extraction of this session, with "h:mm:ss" times.
@@ -61,12 +61,37 @@ export const WORLD_UPDATE_SYSTEM = `You maintain the wiki of a tabletop RPG camp
 - summary: two or three sentences describing the page as of the end of this session, written from all of its facts. Present tense, no session numbers.
 - related: names of other pages closely tied to this one, such as an NPC's faction, a quest's people and places, or where an item was found.
 - Use canonical spellings throughout. When the ledger lists other spellings in heardAs, add them to aliases and report them in nameCorrections.
+- aliases are other names that could mean nothing else in this campaign: spellings, mishearings, nicknames, and titles only one thing has ever held, such as "the Glass Abbess". references are descriptions that mean this page only in context and could mean someone or something else, such as "the children", "the Captain", "the old woman" or "her husband". When in doubt, use references. Pages list existing references under "Referred to as"; never move one back into aliases.
 - Every one of the recap's openThreads and newFaces belongs to exactly one page: a quest page for each open thread (the existing quest when the thread continues one, even under different wording), and the matching page for each new face. List their indexes in that page's openThreads and newFaces. Loot gets a page only when it is a notable item, not coin or supplies.
 
 ## Other output
 - possibleDuplicates: pairs of existing or new pages that may be the same thing under two names, with the reason. A person decides whether to merge them, so report them instead of merging.
 - epicMoments: for each of the recap's epic moments, by index, the names of the characters and NPCs who feature in it.
 - Do not invent details the ledger and recap do not support.`;
+
+export const RECAP_LINKS_SYSTEM = `You link a tabletop RPG session's recap to the campaign's world wiki. Each link turns a phrase of the recap into a link to a wiki page, so a phrase must only be linked when, in its sentence, it clearly means that page.
+
+## Inputs
+- pages: the wiki as of the end of this session. Each page has its slug in square brackets, kind, names, the descriptions it has been referred to by, and one line about it.
+- recap: the parts of the recap that can hold links, each with a field id. The "recap" field is markdown; the rest are plain text.
+
+## Rules
+- Read each sentence and decide who or what each name or description in it means. Link it only when you are sure it is that page.
+- Names usually mean their page. A description, such as "the children" or "the Captain", links only when this sentence is about that page. The same words about someone else stay unlinked: in "Lady Wachter said her children vanished", "children" means her own children, not the page of other children.
+- phrase is the exact text from the field, character for character, without markdown characters such as ** around it. Keep it short: the name or description itself, without possessives ("Ireena", not "Ireena's") or surrounding words.
+- occurrence counts which time that exact phrase appears in the field: 1 for the first time, 2 for the second, and so on, counting every appearance, linked or not.
+- Link every mention that meets these rules, not only the first.
+- Never link pronouns. Never link a page to text about something else of the same kind.
+- page is the slug in square brackets. Only use slugs from pages.
+- When unsure, leave the phrase unlinked. A missing link is better than a wrong one.`;
+
+export const ALIAS_REFERENCES_SYSTEM = `You tidy a tabletop RPG campaign's world wiki. Each page lists other names, and some of them are not names at all but descriptions that only mean the page in context. Libby links every other name to its page wherever it appears, so a description like "the children" wrongly links every mention of anybody's children.
+
+For each page, pick out the other names that are references:
+- A reference means this page only in context and could mean someone or something else: "the children", "the Captain", "the old woman", "her husband", "the tavern", "the Burgomaster" when the town could have another.
+- Keep as names anything that could mean nothing else in this campaign: spellings, mishearings, nicknames, full names, and titles that only this page has ever held, such as "the Glass Abbess" or "the Devil".
+- When in doubt, call it a reference. A missing link is better than a wrong one.
+- Copy each reference exactly as listed. List only pages that have at least one reference.`;
 
 export const TITLE_SYSTEM = `I am going to give you a recap of a DnD session. Your goal is to write a short, evocative title for the session — the kind of name a chapter in a fantasy novel might have.
 The title should capture the most memorable moment or theme of the session.

@@ -1,5 +1,5 @@
 import { marked, type Token, type Tokens } from "marked";
-import { linkPageNames, type LinkTarget, type LinkedText } from "@rainbot/db/world-links";
+import type { LinkedText } from "@rainbot/db/world-links";
 
 // Recap prose rendered as a tree instead of an HTML string, so names in it can
 // become PageLink components with hover cards. Only the inline formatting a
@@ -13,14 +13,17 @@ export type Inline =
 
 export type Block = { type: "paragraph"; children: Inline[] } | { type: "html"; html: string };
 
-function inline(tokens: Token[], targets: LinkTarget[], linked: Set<string>): Inline[] {
+// Links text pieces in reading order, or leaves them plain when null.
+type Linker = ((text: string) => LinkedText) | null;
+
+function inline(tokens: Token[], link: Linker): Inline[] {
   return tokens.flatMap((token): Inline[] => {
     switch (token.type) {
       case "text": {
         const text = token as Tokens.Text;
         return text.tokens?.length
-          ? inline(text.tokens, targets, linked)
-          : [{ type: "text", segments: linkPageNames(text.text, targets, linked) }];
+          ? inline(text.tokens, link)
+          : [{ type: "text", segments: link ? link(text.text) : [{ text: text.text }] }];
       }
       case "escape":
         return [{ type: "text", segments: [{ text: (token as Tokens.Escape).text }] }];
@@ -30,7 +33,7 @@ function inline(tokens: Token[], targets: LinkTarget[], linked: Set<string>): In
         return [
           {
             type: token.type,
-            children: inline((token as Tokens.Strong).tokens, targets, linked),
+            children: inline((token as Tokens.Strong).tokens, link),
           },
         ];
       case "codespan":
@@ -38,13 +41,13 @@ function inline(tokens: Token[], targets: LinkTarget[], linked: Set<string>): In
       case "br":
         return [{ type: "br" }];
       case "link": {
-        const link = token as Tokens.Link;
+        const anchor = token as Tokens.Link;
         // Model-written markdown: keep only ordinary web and in-app links, and
         // never nest a page link inside one.
-        if (!/^(https?:\/\/|\/|#|\?)/i.test(link.href)) {
-          return inline(link.tokens, targets, linked);
+        if (!/^(https?:\/\/|\/|#|\?)/i.test(anchor.href)) {
+          return inline(anchor.tokens, link);
         }
-        return [{ type: "link", href: link.href, children: inline(link.tokens, [], linked) }];
+        return [{ type: "link", href: anchor.href, children: inline(anchor.tokens, null) }];
       }
       default:
         return [{ type: "text", segments: [{ text: token.raw }] }];
@@ -52,18 +55,14 @@ function inline(tokens: Token[], targets: LinkTarget[], linked: Set<string>): In
   });
 }
 
-export function linkMarkdown(
-  markdown: string,
-  targets: LinkTarget[],
-  linked: Set<string> = new Set(),
-): Block[] {
+export function linkMarkdown(markdown: string, link: Linker): Block[] {
   return marked.lexer(markdown).flatMap((token): Block[] => {
     if (token.type === "space") return [];
     if (token.type === "paragraph") {
       return [
         {
           type: "paragraph",
-          children: inline((token as Tokens.Paragraph).tokens, targets, linked),
+          children: inline((token as Tokens.Paragraph).tokens, link),
         },
       ];
     }

@@ -18,6 +18,7 @@ import { SESSION_ARTIFACT_KINDS, type SessionArtifactKind } from "./artifacts.ts
 import {
   AUDIO_STATUSES,
   WORLD_UPDATE_STATUSES,
+  RECAP_LINK_STATUSES,
   CAMPAIGN_MEMBER_ROLES,
   NOTIFICATION_STATUSES,
   PROCESSING_RUN_KINDS,
@@ -32,6 +33,7 @@ import {
   type SessionStatus,
   type TranscriptionStatus,
   type WorldUpdateStatus,
+  type RecapLinkStatus,
 } from "./domain.ts";
 import type { SessionRecap } from "./session-notes.ts";
 import type { TranscriptSegment } from "./transcript.ts";
@@ -395,35 +397,56 @@ export const worldUpdates = pgTable(
   ],
 );
 
-// The sentences of each session's recap that mention a page, found by name and
-// alias. Derived data, rebuilt for a whole campaign whenever its recaps or
-// page names change; see world_mention_indexes.
-export const worldPageMentions = pgTable(
-  "world_page_mentions",
+// Whether a session's recap has been linked to the world, and from which
+// version of the recap. A recap regenerated since no longer matches recap_hash,
+// so its links stop showing until it is linked again.
+export const worldRecapLinkRuns = pgTable(
+  "world_recap_link_runs",
   {
-    pageId: uuid("page_id")
-      .references(() => worldPages.id)
-      .notNull(),
     sessionId: varchar("session_id", { length: 30 })
       .references(() => sessions.id)
+      .primaryKey(),
+    campaignId: uuid("campaign_id")
+      .references(() => campaigns.id)
       .notNull(),
-    sentences: jsonb("sentences").$type<MentionSentence[]>().notNull(),
+    // md5 of sessions.recap_sections as Postgres prints it.
+    recapHash: varchar("recap_hash", { length: 32 }).notNull(),
+    status: varchar("status", { length: 20 }).$type<RecapLinkStatus>().notNull(),
+    error: text("error"),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (t) => [
-    primaryKey({ columns: [t.pageId, t.sessionId] }),
-    index("world_page_mentions_session_idx").on(t.sessionId),
+    index("world_recap_link_runs_campaign_idx").on(t.campaignId),
+    check("world_recap_link_runs_status_check", oneOf(t.status, RECAP_LINK_STATUSES)),
   ],
 );
 
-// Which recaps and page names a campaign's mentions were built from, as a
-// hash, so a page view can tell when they are stale.
-export const worldMentionIndexes = pgTable("world_mention_indexes", {
-  campaignId: uuid("campaign_id")
-    .references(() => campaigns.id)
-    .primaryKey(),
-  fingerprint: varchar("fingerprint", { length: 32 }).notNull(),
-  builtAt: timestamp("built_at").defaultNow().notNull(),
-});
+// One phrase of a session's recap that means a page, as the linking model read
+// it. `sentence` is the recap sentence holding it, for the page's "Mentioned
+// in" list, or null when the phrase is not about this session.
+export const worldRecapLinks = pgTable(
+  "world_recap_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: varchar("session_id", { length: 30 })
+      .references(() => sessions.id)
+      .notNull(),
+    // Removed with the page: a rebuilt world has new pages to link instead.
+    pageId: uuid("page_id")
+      .references(() => worldPages.id, { onDelete: "cascade" })
+      .notNull(),
+    field: varchar("field", { length: 40 }).notNull(),
+    phrase: text("phrase").notNull(),
+    occurrence: integer("occurrence").notNull(),
+    // Reading order within the recap.
+    position: integer("position").notNull(),
+    sentence: jsonb("sentence").$type<MentionSentence>(),
+  },
+  (t) => [
+    index("world_recap_links_session_idx").on(t.sessionId),
+    index("world_recap_links_page_idx").on(t.pageId),
+  ],
+);
 
 // A change to the world that someone asked Libby for and applied by hand.
 // `snapshot` holds every row the edit touched as it was before, so the edit can
