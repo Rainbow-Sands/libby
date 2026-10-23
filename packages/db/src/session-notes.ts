@@ -15,7 +15,7 @@ const at = z
 export const ENTITY_KINDS = ["character", "npc", "location", "faction", "item", "other"] as const;
 // "open" is a thread carried forward from an earlier session that this session
 // did not touch; it stays listed until the party resolves it.
-export const THREAD_STATUSES = ["new", "advanced", "resolved", "open"] as const;
+export const THREAD_STATUSES = ["new", "advanced", "resolved", "abandoned", "open"] as const;
 
 export const sessionLedgerSchema = z.object({
   events: z
@@ -56,12 +56,12 @@ export const sessionLedgerSchema = z.object({
         title: z
           .string()
           .describe("Short name, reusing an earlier thread's title when continuing it"),
-        status: z.enum(["new", "advanced", "resolved"]),
+        status: z.enum(["new", "advanced", "resolved", "abandoned"]),
         note: z.string().describe("What changed this session"),
         at,
       }),
     )
-    .describe("Quests, mysteries and promises touched or opened this session"),
+    .describe("Quests, mysteries and promises touched, opened or given up this session"),
   quotes: z.array(
     z.object({
       speaker: z.string().describe("Character name when in character, otherwise the player"),
@@ -155,6 +155,7 @@ const THREAD_LABELS: Record<(typeof THREAD_STATUSES)[number], string> = {
   new: "New",
   advanced: "Advanced",
   resolved: "Resolved",
+  abandoned: "Abandoned",
   open: "Still open",
 };
 
