@@ -2,11 +2,17 @@ import { expect, test } from "vitest";
 import type { RecapSections, SessionLedger } from "@rainbot/db";
 import {
   createRecap,
+  createRecapLinks,
   createSessionLedger,
   createWorldUpdate,
   type CompleteObject,
 } from "./record-pipeline.ts";
-import { RECAP_SYSTEM, SESSION_LEDGER_SYSTEM, WORLD_UPDATE_SYSTEM } from "./prompts.ts";
+import {
+  RECAP_LINKS_SYSTEM,
+  RECAP_SYSTEM,
+  SESSION_LEDGER_SYSTEM,
+  WORLD_UPDATE_SYSTEM,
+} from "./prompts.ts";
 import { loadSummarizationConfig } from "./summarization-inference.ts";
 
 test("loads a local summarization profile", () => {
@@ -110,6 +116,7 @@ test("ledger and recap each make one structured call with the earlier session's 
           version: 1 as const,
           name: "Magister Venn",
           aliases: ["Magistra Ven"],
+          references: [],
           status: "alive",
           summary: "The former archivist of Hollowmere. He fled before the party arrived.",
           facts: [],
@@ -199,6 +206,7 @@ test("updates the world from the ledger and recap", async () => {
           name: "Magister Venn",
           kind: "npc",
           aliases: [],
+          references: [],
           status: null,
           newFacts: [{ text: "Sold the lantern.", at: "2:31" }],
           supersededFacts: [],
@@ -224,6 +232,7 @@ test("updates the world from the ledger and recap", async () => {
             version: 1,
             name: "Magister Venn",
             aliases: [],
+            references: ["the archivist"],
             status: "alive",
             summary: "The former archivist.",
             facts: [
@@ -264,10 +273,88 @@ test("updates the world from the ledger and recap", async () => {
   const { prompt, system, name } = call!;
   expect([system, name]).toEqual([WORLD_UPDATE_SYSTEM, "world_update"]);
   expect(prompt).toContain("[magister-venn] Magister Venn (npc, alive)");
+  expect(prompt).toContain("Referred to as: the archivist");
   expect(prompt).toContain("#1 Kept the archive.");
   expect(prompt).not.toContain("Drowned.");
   expect(prompt).toContain("- Ilsa, played by kit");
   expect(prompt).toContain("<corrections>\n- Venn is a magister, not a magistra.\n</corrections>");
   expect(prompt).toContain('"index": 0');
   expect(update.pages[0].newFacts[0].at).toBe("0:02:31");
+});
+
+function linkPage(slug: string, name: string, references: string[] = []) {
+  return {
+    id: slug,
+    slug,
+    kind: "npc" as const,
+    avatarId: null,
+    memberUserId: null,
+    createdInSessionId: "s1",
+    revisionSessionId: "s1",
+    content: {
+      version: 1 as const,
+      name,
+      aliases: [],
+      references,
+      status: null,
+      summary: "Hid in the mill. Afraid.",
+      holder: null,
+      related: [],
+    },
+  };
+}
+
+test("recap links keep only phrases really in the recap, for pages that exist, in reading order", async () => {
+  let call: { prompt: string; system: string; name: string } | null = null;
+  const complete: CompleteObject = async <T>(
+    prompt: string,
+    system: string,
+    _: unknown,
+    name: string,
+  ) => {
+    call = { prompt, system, name };
+    return {
+      links: [
+        { field: "leftOff", phrase: "Theodore", occurrence: 1, page: "theodore-and-myrtle" },
+        { field: "recap", phrase: "The children", occurrence: 1, page: "theodore-and-myrtle" },
+        { field: "recap", phrase: "The children", occurrence: 1, page: "theodore-and-myrtle" },
+        { field: "recap", phrase: "Wachter", occurrence: 1, page: "lady-wachter" },
+        { field: "recap", phrase: "children", occurrence: 5, page: "theodore-and-myrtle" },
+        { field: "recap", phrase: "Myrtle", occurrence: 1, page: "nobody" },
+        { field: "rulings.0", phrase: "Myrtle", occurrence: 1, page: "theodore-and-myrtle" },
+      ],
+    } as T;
+  };
+  const links = await createRecapLinks(
+    {
+      world: [
+        linkPage("theodore-and-myrtle", "Theodore and Myrtle", ["the children"]),
+        linkPage("lady-wachter", "Lady Wachter"),
+      ],
+      recap: {
+        recap:
+          "Lady **Wachter** said her children vanished. The children, Theodore and Myrtle, hid.",
+        leftOff: "Theodore waits.",
+        openThreads: [],
+        loot: [],
+        epicMoments: [],
+        newFaces: [],
+        rulings: [{ ruling: "Myrtle can hide.", at: null }],
+      },
+    },
+    complete,
+  );
+
+  expect(call).not.toBeNull();
+  const { prompt, system, name } = call!;
+  expect([system, name]).toEqual([RECAP_LINKS_SYSTEM, "recap_links"]);
+  expect(prompt).toContain(
+    "- [theodore-and-myrtle] Theodore and Myrtle (npc; referred to as the children): Hid in the mill.",
+  );
+  expect(prompt).not.toContain("rulings");
+  expect(links).toEqual([
+    { field: "recap", phrase: "Wachter", occurrence: 1, slug: "lady-wachter" },
+    { field: "recap", phrase: "The children", occurrence: 1, slug: "theodore-and-myrtle" },
+    { field: "leftOff", phrase: "Theodore", occurrence: 1, slug: "theodore-and-myrtle" },
+  ]);
 });

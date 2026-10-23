@@ -176,6 +176,20 @@
       "when": 1792628558568,
       "tag": "0024_solid_mathemanic",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792796978925,
+      "tag": "0025_recap_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792796979834,
+      "tag": "0026_drop_name_mentions",
+      "breakpoints": true
     }
   ]
 }

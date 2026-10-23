@@ -111,7 +111,10 @@ pnpm --filter @rainbot/db db:migrate    # applies to the DB in DATABASE_URL
   avatar, the player whose character it is). Its content lives in immutable
   `world_page_revisions`, one per page per session that changed it, holding
   the whole `WorldPageContent` (facts with session citations, aliases,
-  summary). The page "as of session N" is its newest revision from a session
+  references, summary). Aliases are names that mean only that page;
+  references ("the children", "the Captain") mean it only in context, so they
+  are shown but never linked or used to match a session's pages. A name two
+  pages share matches neither. The page "as of session N" is its newest revision from a session
   that started at or before N. `world_updates` records each session's update
   and its report (possible duplicates, name corrections); sessions are applied
   oldest first. `world_page_moments` copies recap epic moments onto the pages
@@ -119,12 +122,13 @@ pnpm --filter @rainbot/db db:migrate    # applies to the DB in DATABASE_URL
   avatar; removing one only clears `world_pages.avatar_id`.
   `world_updates.changes` keeps what each update changed per page, so the
   session page never compares whole revisions; rows from before it existed
-  are filled in the first time they are viewed. `world_page_mentions` holds
-  the recap sentences naming each page. It is a cache: `world_mention_indexes`
-  stores a hash of the campaign's recaps and page names (`mentionSource`
-  leaves out threads a recap only carried forward as "Still open"), and a page view
-  rebuilds the campaign's mentions when the hash no longer matches, so renames
-  and regenerated recaps need no hooks.
+  are filled in the first time they are viewed. `world_recap_links` holds the
+  phrases of each recap the linking model tied to a page, with the sentence
+  for the page's "Mentioned in" list (null for threads a recap only carried
+  forward and for loot holders). `world_recap_link_runs` records which version
+  of the recap (`md5(recap_sections::text)`) was linked; links of a recap that
+  changed since are ignored until it is linked again. Merges move links to the
+  page kept, and undo moves them back.
 - `world_edits` records each applied hand edit with a snapshot of every row
   it touched. Undo restores the snapshot and is refused once a world update
   or a later edit has written. World updates and edits take the same

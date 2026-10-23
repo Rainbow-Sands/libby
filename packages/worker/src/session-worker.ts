@@ -5,10 +5,14 @@ import {
   JOB_QUEUES,
   claimAggregationIfReady,
   enqueueCampaignBackfill,
+  enqueueRecapLinks,
   enqueueWorldUpdate,
   markWorldUpdateSkipped,
   nextBackfillStep,
+  nextRecapLinkStep,
   nextWorldStep,
+  recordRecapLinkFailure,
+  recordRecapLinks,
   recordWorldUpdate,
   recordWorldUpdateFailure,
   startInferenceRegeneration,
@@ -30,6 +34,7 @@ import {
   storeRunTitle,
   type AdvanceProcessingRunJob,
   type BackfillCampaignRecapsJob,
+  type LinkCampaignRecapsJob,
   type ProcessingRunData,
   type SessionArtifactKind,
   type SessionLedger,
@@ -49,7 +54,14 @@ import {
 } from "@rainbot/storage";
 import { UnrecoverableTaskError } from "./errors.ts";
 import { postSessionLink } from "./notify.ts";
-import { generateTitle, recap, summarize, transcribeSegment, updateWorld } from "./tasks.ts";
+import {
+  generateTitle,
+  linkRecap,
+  recap,
+  summarize,
+  transcribeSegment,
+  updateWorld,
+} from "./tasks.ts";
 
 const PROCESSING_CONCURRENCY = positiveInteger("PROCESSING_CONCURRENCY", 2);
 const TRANSCRIPTION_CONCURRENCY = positiveInteger("TRANSCRIPTION_CONCURRENCY", 4);
@@ -305,6 +317,9 @@ async function updateCampaignWorldStep(payload: UpdateCampaignWorldJob): Promise
   const step = await nextWorldStep(payload.campaignId);
   switch (step.kind) {
     case "finished":
+      // Recaps link once the world has caught up with them, including a recap
+      // regenerated after its session's world update.
+      await enqueueRecapLinks(payload);
       return;
     case "waiting":
       await enqueueWorldUpdate(payload, BACKFILL_POLL_SECONDS);
@@ -352,6 +367,46 @@ async function updateCampaignWorldStep(payload: UpdateCampaignWorldJob): Promise
   }
 }
 
+// One step of linking a campaign's recaps: link the oldest recap whose
+// session the world has handled and whose current text has no links yet, then
+// continue with the next. A failure is recorded so one bad recap cannot stall
+// the rest; it is tried again when the recap changes.
+async function linkCampaignRecapsStep(payload: LinkCampaignRecapsJob): Promise<void> {
+  const step = await nextRecapLinkStep(payload.campaignId);
+  if (step.kind === "finished") return;
+  try {
+    const { links, pageIds } = await linkRecap(
+      payload.campaignId,
+      step.startedAt,
+      step.recapSections,
+    );
+    await recordRecapLinks(
+      payload.campaignId,
+      step.sessionId,
+      step.recapHash,
+      step.recapSections,
+      links.flatMap((link) => {
+        const pageId = pageIds.get(link.slug);
+        return pageId ? [{ ...link, pageId }] : [];
+      }),
+    );
+    console.log(
+      `[links] campaign ${payload.campaignId}: linked ${step.sessionId} (${links.length} links)`,
+    );
+  } catch (error) {
+    const failure = asError(error);
+    if (!(failure instanceof UnrecoverableTaskError)) throw failure;
+    await recordRecapLinkFailure(
+      payload.campaignId,
+      step.sessionId,
+      step.recapHash,
+      errorMessage(failure),
+    );
+    console.error(`[links] session ${step.sessionId} failed:`, failure);
+  }
+  await enqueueRecapLinks(payload);
+}
+
 function abortPromise(signal: AbortSignal): Promise<void> {
   if (signal.aborted) return Promise.resolve();
   return new Promise((resolve) =>
@@ -394,6 +449,9 @@ export async function runSessionWorker(signal: AbortSignal): Promise<void> {
   });
   await boss.work<UpdateCampaignWorldJob>(JOB_QUEUES.updateCampaignWorld, async ([job]) => {
     if (job) await updateCampaignWorldStep(job.data);
+  });
+  await boss.work<LinkCampaignRecapsJob>(JOB_QUEUES.linkCampaignRecaps, async ([job]) => {
+    if (job) await linkCampaignRecapsStep(job.data);
   });
   await boss.work<TranscribeSegmentJob>(JOB_QUEUES.transcribeSegmentDead, async ([job]) => {
     if (!job) return;

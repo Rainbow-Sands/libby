@@ -37,7 +37,12 @@ export interface WorldFact {
 export interface WorldPageContent {
   version: 1;
   name: string;
+  // Other names that mean only this page: spellings, mishearings, nicknames.
   aliases: string[];
+  // Descriptions that mean this page only in context, such as "the children"
+  // or "the Captain". Shown with the other names, but never used to link text
+  // or to match a session's mentions to the page.
+  references: string[];
   // Free text for people and things ("alive", "dead", "destroyed"); one of
   // QUEST_STATUSES for quests.
   status: string | null;
@@ -129,7 +134,14 @@ export const worldUpdateSchema = z.object({
         kind: z.enum(WORLD_PAGE_KINDS),
         aliases: z
           .array(z.string())
-          .describe("Other names, titles and mishearings used for it this session"),
+          .describe(
+            "Other names used for it this session that could mean nothing else in this campaign: spellings, mishearings, nicknames, unique titles",
+          ),
+        references: z
+          .array(z.string())
+          .describe(
+            'Descriptions used for it this session that only mean it in context and could mean someone or something else, such as "the children", "the Captain" or "her husband"',
+          ),
         status: z
           .string()
           .nullable()
@@ -179,6 +191,34 @@ export const worldUpdateSchema = z.object({
 
 export type WorldUpdate = z.infer<typeof worldUpdateSchema>;
 
+// The one-time sort of names stored before pages had references: which of
+// each page's other names are really references.
+export const aliasReferencesSchema = z.object({
+  pages: z.array(
+    z.object({
+      page: z.string().describe("The page's slug"),
+      references: z
+        .array(z.string())
+        .describe("Its other names that are references, copied exactly from the list"),
+    }),
+  ),
+});
+
+// The linking model's answer: which phrases of a recap mean which pages.
+export const recapLinksSchema = z.object({
+  links: z.array(
+    z.object({
+      field: z.string().describe("The field id the phrase is in"),
+      phrase: z.string().describe("The exact text of the mention, as written in the field"),
+      occurrence: z
+        .number()
+        .int()
+        .describe("Which appearance of this exact phrase in the field it is, counting from 1"),
+      page: z.string().describe("The slug of the page it means"),
+    }),
+  ),
+});
+
 export function slugify(name: string): string {
   const slug = nameKey(name).replaceAll(" ", "-").slice(0, 80).replace(/-+$/, "");
   return slug || "page";
@@ -198,8 +238,24 @@ export function uniqueNames(names: string[], exclude: string): string[] {
 }
 
 // Every name a page answers to, for matching model output and linking text.
+// References are left out, since they could mean another page.
 export function pageNames(content: Pick<WorldPageContent, "name" | "aliases">): string[] {
   return [content.name, ...content.aliases];
+}
+
+// Adds names and references to a page's content. A reference stays one: a
+// later session listing it as a name does not make it link, so only a person
+// can turn it back into a name.
+export function addPageNames(
+  content: WorldPageContent,
+  aliases: string[],
+  references: string[],
+): void {
+  content.references = uniqueNames([...content.references, ...references], content.name);
+  const referenceKeys = new Set(content.references.map(nameKey));
+  content.aliases = uniqueNames([...content.aliases, ...aliases], content.name).filter(
+    (alias) => !referenceKeys.has(nameKey(alias)),
+  );
 }
 
 export interface PlannedPage {
@@ -218,8 +274,9 @@ export interface WorldUpdatePlan {
 
 // Turns one session's world update into new page revisions. Pure, so the
 // caller can recompute it inside the transaction that writes the result.
-// Model output names pages loosely, so every reference resolves through the
-// page's slug, name or any alias, and anything unknown becomes a new page.
+// Model output names pages loosely, so every mention resolves through the
+// page's slug, name or any alias that no other page shares, and anything
+// unknown becomes a new page.
 // The parts of a session's recap the world update refers to by index.
 export type WorldRecap = Pick<RecapSections, "epicMoments" | "openThreads" | "newFaces">;
 
@@ -239,26 +296,30 @@ export function planWorldUpdate(
   recap: WorldRecap,
 ): WorldUpdatePlan {
   const bySlug = new Map<string, PlannedPage>();
-  const byName = new Map<string, PlannedPage>();
+  // Null for a name more than one existing page answers to, which matches
+  // neither. A name this session gives a second page stays with the first.
+  const byName = new Map<string, PlannedPage | null>();
   const touched = new Set<string>();
+  const duplicates: WorldUpdateReport["possibleDuplicates"] = [];
 
-  const index = (page: PlannedPage) => {
+  const index = (page: PlannedPage, shared = false) => {
     bySlug.set(page.slug, page);
     for (const name of pageNames(page.content)) {
       const key = nameKey(name);
-      if (key && !byName.has(key)) byName.set(key, page);
+      if (!key) continue;
+      const owner = byName.get(key);
+      if (owner === undefined) byName.set(key, page);
+      else if (shared && owner !== page) byName.set(key, null);
     }
   };
   for (const page of existing) {
-    index({
-      slug: page.slug,
-      kind: page.kind,
-      content: structuredClone(page.content),
-      created: false,
-    });
+    index(
+      { slug: page.slug, kind: page.kind, content: structuredClone(page.content), created: false },
+      true,
+    );
   }
   const resolve = (ref: string | null): PlannedPage | undefined =>
-    ref ? (bySlug.get(ref) ?? byName.get(nameKey(ref))) : undefined;
+    ref ? (bySlug.get(ref) ?? byName.get(nameKey(ref)) ?? undefined) : undefined;
 
   const uniqueSlug = (name: string) => {
     const base = slugify(name);
@@ -272,23 +333,26 @@ export function planWorldUpdate(
   for (const entry of update.pages) {
     const name = entry.name.trim();
     if (!name) continue;
-    // The session page links the recap's open threads and new faces by exact
-    // name, so their wording always becomes one of the page's names.
-    const recapNames = [
-      ...entry.openThreads.map((i) => recap.openThreads[i]?.title),
-      ...entry.newFaces.map((i) => recap.newFaces[i]?.name),
-    ].filter((recapName): recapName is string => Boolean(recapName?.trim()));
+    // A quest's open thread is often worded a little differently from the
+    // quest's name, and the next session may use that wording.
+    const threadTitles = entry.openThreads
+      .map((i) => recap.openThreads[i]?.title)
+      .filter((title): title is string => Boolean(title?.trim()));
+    const faceNames = entry.newFaces
+      .map((i) => recap.newFaces[i]?.name)
+      .filter((faceName): faceName is string => Boolean(faceName?.trim()));
     // An entry only continues a page of the same kind: a quest is never the
     // person it is about, and a winery is never the wine named after it, even
     // when the model points at that page's slug or one of its aliases. Player
     // characters and NPCs count as one kind, and "other" fits anything but a
-    // quest, since the model reclassifies those between sessions.
+    // quest, since the model reclassifies those between sessions. References
+    // never match: "the Captain" of one ship is not the captain of another.
     const sameKind = (candidate: PlannedPage | undefined) =>
       candidate !== undefined && compatibleKinds(candidate.kind, entry.kind);
     let page = [
       resolve(entry.page),
       resolve(name),
-      ...[...entry.aliases, ...recapNames].map(resolve),
+      ...[...entry.aliases, ...threadTitles, ...faceNames].map(resolve),
     ].find(sameKind);
     // Names that already belong to another page stay with it.
     const ownNames = (names: string[]) =>
@@ -307,6 +371,7 @@ export function planWorldUpdate(
           version: 1,
           name,
           aliases: [],
+          references: [],
           status: null,
           summary: "",
           facts: [],
@@ -314,10 +379,22 @@ export function planWorldUpdate(
           related: [],
         },
       };
+      // A new page called what another page is referred to as may be that
+      // page; a person decides.
+      const key = nameKey(name);
+      for (const other of bySlug.values()) {
+        if (other.content.references.some((reference) => nameKey(reference) === key)) {
+          duplicates.push({
+            first: name,
+            second: other.content.name,
+            reason: `${other.content.name} is also referred to as "${name}".`,
+          });
+        }
+      }
     }
 
     const content = page.content;
-    const aliases = ownNames([...entry.aliases, ...recapNames]);
+    const aliases = ownNames([...entry.aliases, ...threadTitles]);
     // Capitalization and articles vary from mention to mention; only a
     // different spelling renames the page.
     if (nameKey(name) !== nameKey(content.name)) {
@@ -325,7 +402,7 @@ export function planWorldUpdate(
       content.name = name;
       content.aliases = uniqueNames([previous, ...content.aliases], name);
     }
-    content.aliases = uniqueNames([...content.aliases, ...aliases], content.name);
+    addPageNames(content, aliases, entry.references);
 
     const status = entry.status?.trim().toLowerCase();
     if (status) content.status = status;
@@ -380,9 +457,12 @@ export function planWorldUpdate(
     pages: [...touched].map((slug) => bySlug.get(slug)!),
     moments,
     report: {
-      possibleDuplicates: update.possibleDuplicates
-        .filter((pair) => resolve(pair.first) !== resolve(pair.second) || !resolve(pair.first))
-        .map((pair) => ({ ...pair, first: label(pair.first), second: label(pair.second) })),
+      possibleDuplicates: [
+        ...update.possibleDuplicates
+          .filter((pair) => resolve(pair.first) !== resolve(pair.second) || !resolve(pair.first))
+          .map((pair) => ({ ...pair, first: label(pair.first), second: label(pair.second) })),
+        ...duplicates,
+      ],
       nameCorrections: update.nameCorrections.filter(
         (fix) => nameKey(fix.heard) && nameKey(fix.heard) !== nameKey(fix.canonical),
       ),

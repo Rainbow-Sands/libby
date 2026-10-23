@@ -30,7 +30,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
       slug: page.slug,
       kind: page.kind,
       name: page.content.name,
-      names: pageNames(page.content),
+      // Searched, never linked, so references count too.
+      names: [...pageNames(page.content), ...page.content.references],
       line: summaryLine(page.content.summary),
       status: page.content.status,
       avatarId: page.avatarId,

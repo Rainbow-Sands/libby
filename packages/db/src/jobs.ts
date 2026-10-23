@@ -9,6 +9,7 @@ export const JOB_QUEUES = {
   advanceProcessingRunDead: "advance-processing-run-dead",
   backfillCampaignRecaps: "backfill-campaign-recaps",
   updateCampaignWorld: "update-campaign-world",
+  linkCampaignRecaps: "link-campaign-recaps",
 } as const;
 
 export interface TranscribeSegmentJob {
@@ -27,6 +28,10 @@ export interface BackfillCampaignRecapsJob {
 }
 
 export interface UpdateCampaignWorldJob {
+  campaignId: string;
+}
+
+export interface LinkCampaignRecapsJob {
   campaignId: string;
 }
 
@@ -88,6 +93,15 @@ const WORLD_QUEUE_OPTIONS = {
   expireInSeconds: 30 * 60,
 } as const satisfies QueueDefinition;
 
+// Recap linking also runs one session at a time per campaign, re-enqueueing
+// itself while recaps remain unlinked.
+const LINK_QUEUE_OPTIONS = {
+  retryLimit: 3,
+  retryDelay: 30,
+  retryBackoff: true,
+  expireInSeconds: 15 * 60,
+} as const satisfies QueueDefinition;
+
 type QueueDefinition = Omit<Queue, "name" | "policy" | "partition">;
 
 let boss: PgBoss | null = null;
@@ -131,6 +145,13 @@ async function ensureQueues(instance: PgBoss): Promise<void> {
     instance,
     JOB_QUEUES.updateCampaignWorld,
     WORLD_QUEUE_OPTIONS,
+    workerMode,
+    "stately",
+  );
+  await ensureQueue(
+    instance,
+    JOB_QUEUES.linkCampaignRecaps,
+    LINK_QUEUE_OPTIONS,
     workerMode,
     "stately",
   );
@@ -249,6 +270,17 @@ export async function enqueueWorldUpdate(
 ): Promise<string | null> {
   const instance = await startJobQueue();
   return instance.send(JOB_QUEUES.updateCampaignWorld, data, {
+    singletonKey: data.campaignId,
+    startAfter: startAfterSeconds,
+  });
+}
+
+export async function enqueueRecapLinks(
+  data: LinkCampaignRecapsJob,
+  startAfterSeconds = 0,
+): Promise<string | null> {
+  const instance = await startJobQueue();
+  return instance.send(JOB_QUEUES.linkCampaignRecaps, data, {
     singletonKey: data.campaignId,
     startAfter: startAfterSeconds,
   });

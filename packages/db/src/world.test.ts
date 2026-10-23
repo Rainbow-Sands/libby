@@ -6,8 +6,16 @@ import {
   type WorldRecap,
   type WorldUpdate,
 } from "./world.ts";
-import { linkPageNames, mentionSentences, mentionsBySlug, summaryLine } from "./world-links.ts";
-import { mentionSource } from "./world-store.ts";
+import {
+  recapFieldLinker,
+  linkPageNames,
+  recapLinkFields,
+  recapLinkIndex,
+  recapLinkSentences,
+  summaryLine,
+  type RecapLink,
+} from "./world-links.ts";
+import type { RecapSections } from "./session-notes.ts";
 
 function entry(overrides: Partial<WorldUpdate["pages"][number]>): WorldUpdate["pages"][number] {
   return {
@@ -15,6 +23,7 @@ function entry(overrides: Partial<WorldUpdate["pages"][number]>): WorldUpdate["p
     name: "Someone",
     kind: "npc",
     aliases: [],
+    references: [],
     status: null,
     newFacts: [],
     supersededFacts: [],
@@ -35,6 +44,7 @@ const venn: WorldPageState = {
     version: 1,
     name: "Magister Venn",
     aliases: ["Magistra Ven"],
+    references: [],
     status: "alive",
     summary: "The former archivist of Hollowmere.",
     facts: [
@@ -221,7 +231,7 @@ test("links the first mention of each page, longest name first", () => {
   ];
   expect(
     linkPageNames(
-      "Under Hollowmere, Venn's logbook named the glass abbess. Hollowmere slept.",
+      "Under Hollowmere, Venn's logbook named the Glass Abbess. Hollowmere slept.",
       targets,
     ),
   ).toEqual([
@@ -230,11 +240,30 @@ test("links the first mention of each page, longest name first", () => {
     { text: ", " },
     { text: "Venn", slug: "venn" },
     { text: "'s logbook named " },
-    { text: "the glass abbess", slug: "glass-abbess" },
+    { text: "the Glass Abbess", slug: "glass-abbess" },
     { text: ". Hollowmere slept." },
   ]);
   expect(linkPageNames("Hollowmeres and Vennish", targets)).toEqual([
     { text: "Hollowmeres and Vennish" },
+  ]);
+});
+
+test("only links proper names, matching their capitals, that one page owns", () => {
+  const targets = [
+    { slug: "children", names: ["Theodore and Myrtle", "the children"] },
+    { slug: "mother", names: ["Mother"] },
+    { slug: "vargas", names: ["Vargas", "the Burgomaster"] },
+    { slug: "wachter", names: ["Lady Wachter", "the Burgomaster"] },
+  ];
+  expect(
+    linkPageNames(
+      "Her children vanished, her mother said, and the Burgomaster shrugged at Mother.",
+      targets,
+    ),
+  ).toEqual([
+    { text: "Her children vanished, her mother said, and the Burgomaster shrugged at " },
+    { text: "Mother", slug: "mother" },
+    { text: "." },
   ]);
 });
 
@@ -245,68 +274,167 @@ test("linking can continue across several texts", () => {
   expect(linkPageNames("Venn returned.", targets, linked)).toEqual([{ text: "Venn returned." }]);
 });
 
-test("finds every recap sentence that mentions a page", () => {
-  const recap = [
-    "## Recap",
-    "",
-    "The party reached **Hollowmere** at dusk. Magistra Ven had already gone. Nobody slept.",
-    "",
-    "## Open threads",
-    "",
-    "- [Find Venn](https://example.test) before the tide turns.",
-    "- Venn's desk was dry; Magister Venn kept the ledgers.",
-  ].join("\n");
-  expect(mentionSentences(recap, ["Magister Venn", "Venn", "Magistra Ven"])).toEqual([
-    [
-      { text: "Magistra Ven", mention: true },
-      { text: " had already gone.", mention: false },
-    ],
-    [
-      { text: "Find ", mention: false },
-      { text: "Venn", mention: true },
-      { text: " before the tide turns.", mention: false },
-    ],
-    [
-      { text: "Venn", mention: true },
-      { text: "'s desk was dry; ", mention: false },
-      { text: "Magister Venn", mention: true },
-      { text: " kept the ledgers.", mention: false },
-    ],
+const sections: RecapSections = {
+  recap: "Lady **Wachter** said her children vanished. The children, **Theodore** and Myrtle, hid.",
+  leftOff: "The children wait at the mill.",
+  openThreads: [
+    { title: "Lasting Strength damage", status: "open", note: "Untouched.", at: null },
+    { title: "Find the children", status: "new", note: "They hid.", at: null },
+  ],
+  loot: [{ item: "Silver key", holder: "Myrtle", note: "", at: null }],
+  epicMoments: [],
+  newFaces: [{ name: "Theodore and Myrtle", kind: "npc" }],
+  rulings: [],
+};
+
+test("recap fields list every linkable part in reading order", () => {
+  expect(recapLinkFields(sections).map((field) => field.field)).toEqual([
+    "recap",
+    "leftOff",
+    "openThreads.0",
+    "openThreads.1",
+    "loot.0.item",
+    "loot.0.holder",
+    "newFaces.0",
   ]);
-  expect(mentionSentences("## Venn\n\nNothing here.", ["Venn"])).toEqual([]);
-  expect(mentionSentences("Venn left.", [])).toEqual([]);
 });
 
-test("finds mentions of every page at once, giving overlaps to the longest name", () => {
-  const mentions = mentionsBySlug(
-    "They searched the Hollowmere Archive. Hollowmere slept, as did Venn.",
-    [
-      { slug: "town", names: ["Hollowmere"] },
-      { slug: "archive", names: ["Hollowmere Archive"] },
-      { slug: "venn", names: ["Venn"] },
-    ],
+test("a link must name an occurrence the field really has", () => {
+  expect(recapLinkIndex(sections.recap, "children", 1)).toBe(26);
+  expect(recapLinkIndex(sections.recap, "children", 2)).toBe(49);
+  expect(recapLinkIndex(sections.recap, "children", 3)).toBe(-1);
+  expect(recapLinkIndex(sections.recap, "The children", 1)).toBe(45);
+  expect(recapLinkIndex(sections.recap, "Wachter", 1)).toBe(7);
+  expect(recapLinkIndex(sections.recap, "Theo", 1)).toBe(-1);
+  expect(recapLinkIndex(sections.recap, "children", 0)).toBe(-1);
+});
+
+test("links only the occurrences the model chose, counting across pieces", () => {
+  const links: RecapLink[] = [
+    { field: "recap", phrase: "Theodore", occurrence: 1, slug: "children" },
+    { field: "recap", phrase: "The children", occurrence: 1, slug: "children" },
+  ];
+  const link = recapFieldLinker(links, new Set());
+  // Markdown hands bold text over separately.
+  expect(link("Lady ")).toEqual([{ text: "Lady " }]);
+  expect(link("Wachter")).toEqual([{ text: "Wachter" }]);
+  expect(link(" said her children vanished. The children, ")).toEqual([
+    { text: " said her children vanished. " },
+    { text: "The children", slug: "children" },
+    { text: ", " },
+  ]);
+  // The page is already linked, so its second mention stays plain.
+  expect(link("Theodore")).toEqual([{ text: "Theodore" }]);
+
+  const second = recapFieldLinker([
+    { field: "recap", phrase: "children", occurrence: 2, slug: "children" },
+  ]);
+  expect(second("her children and the children")).toEqual([
+    { text: "her children and the " },
+    { text: "children", slug: "children" },
+  ]);
+});
+
+test("mention sentences quote the sentence, drop formatting and skip carried threads", () => {
+  const links: RecapLink[] = [
+    { field: "recap", phrase: "The children", occurrence: 1, slug: "children" },
+    { field: "recap", phrase: "Theodore", occurrence: 1, slug: "children" },
+    { field: "recap", phrase: "Wachter", occurrence: 1, slug: "wachter" },
+    { field: "openThreads.0", phrase: "Lasting Strength", occurrence: 1, slug: "strength" },
+    { field: "openThreads.1", phrase: "the children", occurrence: 1, slug: "children" },
+    { field: "loot.0.holder", phrase: "Myrtle", occurrence: 1, slug: "children" },
+  ];
+  const [children, theodore, wachter, carried, thread, holder] = recapLinkSentences(
+    sections,
+    links,
   );
-  expect(mentions.get("archive")).toEqual([
-    [
-      { text: "They searched the ", mention: false },
-      { text: "Hollowmere Archive", mention: true },
-      { text: ".", mention: false },
-    ],
+  expect(children).toEqual([
+    { text: "The children", mention: true },
+    { text: ", ", mention: false },
+    { text: "Theodore", mention: true },
+    { text: " and Myrtle, hid.", mention: false },
   ]);
-  expect(mentions.get("town")).toEqual([
-    [
-      { text: "Hollowmere", mention: true },
-      { text: " slept, as did Venn.", mention: false },
-    ],
+  expect(theodore).toEqual(children);
+  expect(wachter).toEqual([
+    { text: "Lady ", mention: false },
+    { text: "Wachter", mention: true },
+    { text: " said her children vanished.", mention: false },
   ]);
-  expect(mentions.get("venn")?.[0]).toEqual([
-    { text: "Hollowmere slept, as did ", mention: false },
-    { text: "Venn", mention: true },
-    { text: ".", mention: false },
+  expect(carried).toBeNull();
+  expect(thread).toEqual([
+    { text: "Find ", mention: false },
+    { text: "the children", mention: true },
+  ]);
+  expect(holder).toBeNull();
+});
+
+test("references never match a page and never become names", () => {
+  const children: WorldPageState = {
+    ...venn,
+    id: "p4",
+    slug: "theodore-and-myrtle",
+    content: {
+      ...venn.content,
+      name: "Theodore and Myrtle",
+      aliases: [],
+      references: ["the children"],
+    },
+  };
+  const plan = planWorldUpdate(
+    [children],
+    {
+      ...empty,
+      pages: [
+        entry({
+          name: "the children",
+          newFacts: [{ text: "Lady Wachter's children vanished.", at: null }],
+        }),
+        entry({
+          page: "theodore-and-myrtle",
+          name: "Theodore and Myrtle",
+          aliases: ["the children", "Theo and Myrtle"],
+          newFacts: [{ text: "Hid in the mill.", at: null }],
+        }),
+      ],
+    },
+    "s12",
+    noRecap,
+  );
+  expect(
+    plan.pages.map((page) => [page.slug, page.content.aliases, page.content.references]),
+  ).toEqual([
+    ["children", [], []],
+    ["theodore-and-myrtle", ["Theo and Myrtle"], ["the children"]],
+  ]);
+  expect(plan.report.possibleDuplicates).toEqual([
+    {
+      first: "the children",
+      second: "Theodore and Myrtle",
+      reason: 'Theodore and Myrtle is also referred to as "the children".',
+    },
   ]);
 });
 
-test("recap threads and new faces become names of the pages they belong to", () => {
+test("a name two pages share matches neither", () => {
+  const captain = (slug: string, name: string): WorldPageState => ({
+    ...venn,
+    id: slug,
+    slug,
+    content: { ...venn.content, name, aliases: ["Captain"], references: [] },
+  });
+  const plan = planWorldUpdate(
+    [captain("hale", "Captain Hale"), captain("morrow", "Captain Morrow")],
+    {
+      ...empty,
+      pages: [entry({ name: "Captain", newFacts: [{ text: "Sank.", at: null }] })],
+    },
+    "s13",
+    noRecap,
+  );
+  expect(plan.pages.map((page) => [page.slug, page.created])).toEqual([["captain", true]]);
+});
+
+test("recap threads become names of their quests, and new faces find their pages", () => {
   const plan = planWorldUpdate(
     [],
     {
@@ -328,7 +456,7 @@ test("recap threads and new faces become names of the pages they belong to", () 
 
   expect(plan.pages.map((page) => [page.content.name, page.content.aliases])).toEqual([
     ["Missing gear and amnesia", ["Missing gear and Xerxes's memory gap"]],
-    ["Madam Eva", ["Madame Eva the seer"]],
+    ["Madam Eva", []],
   ]);
 });
 
@@ -415,26 +543,4 @@ test("an NPC who turns out to be a player character keeps their page", () => {
     noRecap,
   );
   expect(plan.pages.map((page) => page.slug)).toEqual(["magister-venn"]);
-});
-
-test("mentions leave out threads a recap only carried forward", () => {
-  const source = mentionSource("ignored", {
-    version: 1,
-    stats: { durationSeconds: 0, speakers: [] },
-    sections: {
-      recap: "The party met **Ireena**.",
-      leftOff: "At the church.",
-      openThreads: [
-        { title: "Lasting Strength damage", status: "open", note: "Untouched.", at: null },
-        { title: "Escort Ireena", status: "advanced", note: "They set out.", at: null },
-      ],
-      loot: [],
-      epicMoments: [],
-      newFaces: [],
-      rulings: [],
-    },
-  });
-  expect(source).toContain("Escort Ireena");
-  expect(source).not.toContain("Lasting Strength damage");
-  expect(mentionSource("Just prose.", null)).toBe("Just prose.");
 });

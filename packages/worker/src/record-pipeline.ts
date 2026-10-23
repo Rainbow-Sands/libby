@@ -1,5 +1,8 @@
 import {
   formatElapsed,
+  recapLinkFields,
+  recapLinkIndex,
+  recapLinksSchema,
   recapSectionsSchema,
   renderRecapMarkdown,
   sessionLedgerSchema,
@@ -7,13 +10,20 @@ import {
   worldUpdateSchema,
   type CampaignCastMember,
   type PreviousSessionNotes,
+  type RecapLink,
   type RecapSections,
   type SessionLedger,
   type WorldPageState,
+  type WorldPageSummary,
   type WorldUpdate,
 } from "@rainbot/db";
 import type { FlexibleSchema } from "ai";
-import { RECAP_SYSTEM, SESSION_LEDGER_SYSTEM, WORLD_UPDATE_SYSTEM } from "./prompts.ts";
+import {
+  RECAP_LINKS_SYSTEM,
+  RECAP_SYSTEM,
+  SESSION_LEDGER_SYSTEM,
+  WORLD_UPDATE_SYSTEM,
+} from "./prompts.ts";
 
 export type CompleteObject = <T>(
   prompt: string,
@@ -71,6 +81,9 @@ export function formatWorldPages(world: WorldPageState[]): string {
         `[${page.slug}] ${content.name} (${page.kind}${content.status ? `, ${content.status}` : ""})`,
       ];
       if (content.aliases.length) lines.push(`Also: ${content.aliases.join(", ")}`);
+      if (content.references.length) {
+        lines.push(`Referred to as: ${content.references.join(", ")}`);
+      }
       if (content.holder) lines.push(`Held by: ${content.holder}`);
       if (content.summary) lines.push(`Summary: ${content.summary}`);
       for (const fact of content.facts) {
@@ -236,6 +249,65 @@ export async function createWorldUpdate(
       newFacts: page.newFacts.map((fact) => ({ ...fact, at: normalizeAt(fact.at) })),
     })),
   };
+}
+
+export interface RecapLinkMaterial {
+  // The world as the session left it.
+  world: WorldPageSummary[];
+  recap: RecapSections;
+}
+
+function formatLinkPages(world: WorldPageSummary[]): string {
+  if (world.length === 0) return "No pages.";
+  return world
+    .map((page) => {
+      const { content } = page;
+      const names = content.aliases.length ? `; also ${content.aliases.join(", ")}` : "";
+      const refs = content.references.length
+        ? `; referred to as ${content.references.join(", ")}`
+        : "";
+      const line = summaryLine(content.summary);
+      return `- [${page.slug}] ${content.name} (${page.kind}${names}${refs})${line ? `: ${line}` : ""}`;
+    })
+    .join("\n");
+}
+
+// Asks which phrases of a recap mean which pages. Only links that point at
+// text really in the recap and at a page that exists are kept, so a confused
+// answer leaves text unlinked instead of linking it wrongly. Links come back
+// in reading order.
+export async function createRecapLinks(
+  material: RecapLinkMaterial,
+  completeObject: CompleteObject,
+): Promise<RecapLink[]> {
+  const fields = recapLinkFields(material.recap);
+  if (fields.length === 0 || material.world.length === 0) return [];
+  const prompt = [
+    tagged("pages", formatLinkPages(material.world)),
+    tagged("recap", JSON.stringify(fields, null, 2)),
+  ].join("\n\n");
+  const answer = await completeObject(prompt, RECAP_LINKS_SYSTEM, recapLinksSchema, "recap_links");
+
+  const order = new Map(fields.map((entry, index) => [entry.field, index]));
+  const slugs = new Set(material.world.map((page) => page.slug));
+  const seen = new Set<string>();
+  return answer.links
+    .flatMap((link) => {
+      const field = order.get(link.field);
+      const at =
+        field === undefined ? -1 : recapLinkIndex(fields[field].text, link.phrase, link.occurrence);
+      const key = `${link.field}|${link.phrase}|${link.occurrence}`;
+      if (field === undefined || at < 0 || !slugs.has(link.page) || seen.has(key)) return [];
+      seen.add(key);
+      return [{ field, at, link }];
+    })
+    .toSorted((a, b) => a.field - b.field || a.at - b.at)
+    .map(({ link }) => ({
+      field: link.field,
+      phrase: link.phrase,
+      occurrence: link.occurrence,
+      slug: link.page,
+    }));
 }
 
 // Models sometimes cite "1:23" or "01:23:00"; store one canonical form so the

@@ -48,3 +48,6 @@ export type TranscriptionStatus = ValueOf<typeof TRANSCRIPTION_STATUSES>;
 // session with no ledger to read.
 export const WORLD_UPDATE_STATUSES = ["pending", "done", "skipped", "failed"] as const;
 export type WorldUpdateStatus = ValueOf<typeof WORLD_UPDATE_STATUSES>;
+
+export const RECAP_LINK_STATUSES = ["done", "failed"] as const;
+export type RecapLinkStatus = ValueOf<typeof RECAP_LINK_STATUSES>;

@@ -278,7 +278,11 @@
       {#if activeTab !== "recap"}
         <!-- Rendered only while open; another tab's load has no world to link. -->
       {:else if data.session.recapSections}
-        <SessionRecap recap={data.session.recapSections} world={data.world} />
+        <SessionRecap
+          recap={data.session.recapSections}
+          world={data.world}
+          links={data.recapLinks}
+        />
       {:else if data.session.recap}
         <div class="prose">{@html renderMarkdown(data.session.recap)}</div>
       {:else}

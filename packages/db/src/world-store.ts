@@ -18,18 +18,19 @@ import type { CampaignCastMember } from "./queries.ts";
 import {
   sessionArtifacts,
   sessions,
-  worldMentionIndexes,
   worldPageAvatars,
-  worldPageMentions,
+  worldRecapLinkRuns,
+  worldRecapLinks,
   worldPageMoments,
   worldPageRevisions,
   worldPages,
   worldUpdates,
 } from "./schema.ts";
-import { renderRecapMarkdown, type RecapSections, type SessionRecap } from "./session-notes.ts";
-import { mentionsBySlug, nameKey, type LinkTarget, type MentionSentence } from "./world-links.ts";
+import type { RecapSections } from "./session-notes.ts";
+import { nameKey, type MentionSentence } from "./world-links.ts";
 import {
   PERSON_KINDS,
+  addPageNames,
   pageNames,
   diffWorldPage,
   planWorldUpdate,
@@ -489,123 +490,6 @@ export interface WorldPageMention {
   sentences: MentionSentence[];
 }
 
-// A page's names for finding mentions: its name and aliases, plus the short
-// name people go by.
-function mentionTargets(world: WorldPageSummary[]): LinkTarget[] {
-  return world.map((page) => ({
-    slug: page.slug,
-    names: [
-      ...pageNames(page.content),
-      ...shortNames(page.kind, page.content.name, page.slug, world),
-    ],
-  }));
-}
-
-// The part of a recap that is about its own session. Threads a recap only
-// carried forward untouched ("Still open") are left out, so a page is not
-// "mentioned in" every session after the one that last moved it.
-export function mentionSource(recap: string | null, sections: SessionRecap | null): string {
-  if (!sections) return recap ?? "";
-  return renderRecapMarkdown({
-    ...sections.sections,
-    openThreads: sections.sections.openThreads.filter((thread) => thread.status !== "open"),
-  });
-}
-
-// Bumped when mentionSource changes, so every campaign's mentions rebuild.
-const MENTION_SOURCE_VERSION = "2";
-
-// A hash of everything a campaign's mentions are built from: each session's
-// recap and each page revision's names. Postgres reads the recaps, so this is
-// cheap to check on every page view.
-async function mentionFingerprint(
-  campaignId: string,
-  queryable: Queryable = db,
-): Promise<{ current: string; built: string | null }> {
-  const [row] = await queryable
-    .select({
-      current: sql<string>`md5(
-        ${MENTION_SOURCE_VERSION}::text || '|' || coalesce((
-          select string_agg(s.id || ':' || md5(coalesce(s.recap, '')), ',' order by s.id)
-          from sessions s where s.campaign_id = ${campaignId}
-        ), '') || '|' || coalesce((
-          select string_agg(
-            r.id::text || ':' || md5(coalesce(r.content->>'name', '') || coalesce((r.content->'aliases')::text, '')),
-            ',' order by r.id
-          )
-          from world_page_revisions r join world_pages p on p.id = r.page_id
-          where p.campaign_id = ${campaignId}
-        ), '')
-      )`,
-      built: sql<string | null>`(
-        select fingerprint from world_mention_indexes where campaign_id = ${campaignId}
-      )`,
-    })
-    .from(sql`(select 1) as fingerprint_source`);
-  return { current: row?.current ?? "", built: row?.built ?? null };
-}
-
-// Mentions are derived from the recaps as they read now, by every name the
-// page has, so they follow renames, new aliases and regenerated recaps. The
-// whole campaign is rebuilt whenever any of those changed; concurrent page
-// views wait for one rebuild. Returns whether the stored mentions were already
-// current.
-async function ensureWorldMentions(campaignId: string): Promise<boolean> {
-  const fingerprint = await mentionFingerprint(campaignId);
-  if (fingerprint.current === fingerprint.built) return true;
-
-  await db.transaction(async (tx) => {
-    await tx.execute(
-      sql`select pg_advisory_xact_lock(hashtext(${`world-mentions:${campaignId}`}))`,
-    );
-    const locked = await mentionFingerprint(campaignId, tx);
-    if (locked.current === locked.built) return;
-
-    const world = await getWorldSummary(campaignId, {}, tx);
-    const recaps = await tx
-      .select({
-        sessionId: sessions.id,
-        recap: sessions.recap,
-        recapSections: sessions.recapSections,
-      })
-      .from(sessions)
-      .where(and(eq(sessions.campaignId, campaignId), isNotNull(sessions.recap)));
-    const targets = mentionTargets(world);
-    const pageIds = new Map(world.map((page) => [page.slug, page.id]));
-    const rows = recaps.flatMap((row) =>
-      [...mentionsBySlug(mentionSource(row.recap, row.recapSections), targets)].flatMap(
-        ([slug, sentences]) => {
-          const pageId = pageIds.get(slug);
-          return pageId ? [{ pageId, sessionId: row.sessionId, sentences }] : [];
-        },
-      ),
-    );
-
-    await tx
-      .delete(worldPageMentions)
-      .where(
-        inArray(
-          worldPageMentions.pageId,
-          tx
-            .select({ id: worldPages.id })
-            .from(worldPages)
-            .where(eq(worldPages.campaignId, campaignId)),
-        ),
-      );
-    for (let start = 0; start < rows.length; start += 500) {
-      await tx.insert(worldPageMentions).values(rows.slice(start, start + 500));
-    }
-    await tx
-      .insert(worldMentionIndexes)
-      .values({ campaignId, fingerprint: locked.current })
-      .onConflictDoUpdate({
-        target: worldMentionIndexes.campaignId,
-        set: { fingerprint: locked.current, builtAt: new Date() },
-      });
-  });
-  return false;
-}
-
 // A page as it stood at the bound, the start of the session it is viewed as
 // of, or as it stands now without one. `world` is the campaign's world at the
 // same bound, for callers that already loaded it or started loading it.
@@ -618,71 +502,76 @@ export async function getWorldPage(
   const thisPage = and(eq(worldPages.campaignId, campaignId), eq(worldPages.slug, slug));
   const boundConditions = [thisPage];
   if (bound) boundConditions.push(lte(sessions.startedAt, bound));
+  // Sessions whose recap the linking model found mentioning this page, from
+  // links still matching the recap as it reads now.
   const readMentions = () =>
     db
       .select({
-        sessionId: worldPageMentions.sessionId,
+        sessionId: worldRecapLinks.sessionId,
         sessionTitle: sessions.title,
         startedAt: sessions.startedAt,
-        sentences: worldPageMentions.sentences,
+        sentence: worldRecapLinks.sentence,
       })
-      .from(worldPageMentions)
-      .innerJoin(worldPages, eq(worldPageMentions.pageId, worldPages.id))
-      .innerJoin(sessions, eq(worldPageMentions.sessionId, sessions.id))
-      .where(thisPage)
-      .orderBy(desc(sessions.startedAt));
-  // Everything is read at once. The stored mentions are read alongside the
-  // check that they are current, and read again only after a rebuild.
-  const [[page], revisions, [shown], moments, world, mentionsCurrent, storedMentions] =
-    await Promise.all([
-      db.select().from(worldPages).where(thisPage).limit(1),
-      // Every revision is listed in the history, but only the one shown is
-      // read in full; the rest are summarized by Postgres.
-      db
-        .select({
-          sessionId: worldPageRevisions.sessionId,
-          sessionTitle: sessions.title,
-          startedAt: sessions.startedAt,
-          factIds: sql<
-            number[]
-          >`jsonb_path_query_array(${worldPageRevisions.content}, '$.facts[*].id')`,
-          factsSuperseded: sql<number>`jsonb_array_length(jsonb_path_query_array(
+      .from(worldRecapLinks)
+      .innerJoin(worldPages, eq(worldRecapLinks.pageId, worldPages.id))
+      .innerJoin(sessions, eq(worldRecapLinks.sessionId, sessions.id))
+      .innerJoin(worldRecapLinkRuns, eq(worldRecapLinkRuns.sessionId, sessions.id))
+      .where(
+        and(
+          thisPage,
+          isNotNull(worldRecapLinks.sentence),
+          eq(worldRecapLinkRuns.recapHash, sql`md5(${sessions.recapSections}::text)`),
+        ),
+      )
+      .orderBy(desc(sessions.startedAt), asc(worldRecapLinks.position));
+  // Everything is read at once.
+  const [[page], revisions, [shown], moments, world, mentionRows] = await Promise.all([
+    db.select().from(worldPages).where(thisPage).limit(1),
+    // Every revision is listed in the history, but only the one shown is
+    // read in full; the rest are summarized by Postgres.
+    db
+      .select({
+        sessionId: worldPageRevisions.sessionId,
+        sessionTitle: sessions.title,
+        startedAt: sessions.startedAt,
+        factIds: sql<
+          number[]
+        >`jsonb_path_query_array(${worldPageRevisions.content}, '$.facts[*].id')`,
+        factsSuperseded: sql<number>`jsonb_array_length(jsonb_path_query_array(
             ${worldPageRevisions.content},
             '$.facts[*] ? (@.supersededIn == $session)',
             jsonb_build_object('session', ${worldPageRevisions.sessionId})
           ))`,
-        })
-        .from(worldPageRevisions)
-        .innerJoin(worldPages, eq(worldPageRevisions.pageId, worldPages.id))
-        .innerJoin(sessions, eq(worldPageRevisions.sessionId, sessions.id))
-        .where(thisPage)
-        .orderBy(asc(sessions.startedAt)),
-      // The revision shown: the newest one inside the bound.
-      db
-        .select({ sessionId: worldPageRevisions.sessionId, content: worldPageRevisions.content })
-        .from(worldPageRevisions)
-        .innerJoin(worldPages, eq(worldPageRevisions.pageId, worldPages.id))
-        .innerJoin(sessions, eq(worldPageRevisions.sessionId, sessions.id))
-        .where(and(...boundConditions))
-        .orderBy(desc(sessions.startedAt))
-        .limit(1),
-      db
-        .select({
-          sessionId: worldPageMoments.sessionId,
-          sessionTitle: sessions.title,
-          moment: worldPageMoments.moment,
-        })
-        .from(worldPageMoments)
-        .innerJoin(worldPages, eq(worldPageMoments.pageId, worldPages.id))
-        .innerJoin(sessions, eq(worldPageMoments.sessionId, sessions.id))
-        .where(and(...boundConditions))
-        .orderBy(desc(sessions.startedAt), asc(worldPageMoments.position)),
-      knownWorld ?? getWorldSummary(campaignId, bound ? { through: bound } : {}),
-      ensureWorldMentions(campaignId),
-      readMentions(),
-    ]);
+      })
+      .from(worldPageRevisions)
+      .innerJoin(worldPages, eq(worldPageRevisions.pageId, worldPages.id))
+      .innerJoin(sessions, eq(worldPageRevisions.sessionId, sessions.id))
+      .where(thisPage)
+      .orderBy(asc(sessions.startedAt)),
+    // The revision shown: the newest one inside the bound.
+    db
+      .select({ sessionId: worldPageRevisions.sessionId, content: worldPageRevisions.content })
+      .from(worldPageRevisions)
+      .innerJoin(worldPages, eq(worldPageRevisions.pageId, worldPages.id))
+      .innerJoin(sessions, eq(worldPageRevisions.sessionId, sessions.id))
+      .where(and(...boundConditions))
+      .orderBy(desc(sessions.startedAt))
+      .limit(1),
+    db
+      .select({
+        sessionId: worldPageMoments.sessionId,
+        sessionTitle: sessions.title,
+        moment: worldPageMoments.moment,
+      })
+      .from(worldPageMoments)
+      .innerJoin(worldPages, eq(worldPageMoments.pageId, worldPages.id))
+      .innerJoin(sessions, eq(worldPageMoments.sessionId, sessions.id))
+      .where(and(...boundConditions))
+      .orderBy(desc(sessions.startedAt), asc(worldPageMoments.position)),
+    knownWorld ?? getWorldSummary(campaignId, bound ? { through: bound } : {}),
+    readMentions(),
+  ]);
   if (!page) return null;
-  const mentionRows = mentionsCurrent ? storedMentions : await readMentions();
   const visible = bound ? revisions.filter((revision) => revision.startedAt <= bound) : revisions;
   const shownRevision = visible.at(-1) ?? null;
   const newest = revisions.at(-1) ?? null;
@@ -727,17 +616,29 @@ export async function getWorldPage(
     : [];
 
   const mentions: WorldPageMention[] = [];
-  let laterMentions = 0;
+  const later = new Set<string>();
   // A page viewed as of a session before it existed lists no mentions.
   for (const row of shown ? mentionRows : []) {
-    if (bound && row.startedAt > bound) laterMentions += 1;
-    else
+    if (!row.sentence) continue;
+    if (bound && row.startedAt > bound) {
+      later.add(row.sessionId);
+      continue;
+    }
+    const mention = mentions.at(-1);
+    if (mention?.sessionId === row.sessionId) {
+      // Two links in one sentence quote it once.
+      if (!mention.sentences.some((s) => JSON.stringify(s) === JSON.stringify(row.sentence))) {
+        mention.sentences.push(row.sentence);
+      }
+    } else {
       mentions.push({
         sessionId: row.sessionId,
         sessionTitle: row.sessionTitle,
-        sentences: row.sentences,
+        sentences: [row.sentence],
       });
+    }
   }
+  const laterMentions = later.size;
 
   return {
     id: page.id,
@@ -761,30 +662,6 @@ export async function getWorldPage(
     mentions,
     laterMentions,
   };
-}
-
-// People are often called by the last word of their name, "Venn" for
-// "Magister Venn", so mentions count that too unless another page shares it.
-function shortNames(
-  kind: WorldPageKind,
-  name: string,
-  slug: string,
-  world: WorldPageSummary[],
-): string[] {
-  if (!(PERSON_KINDS as readonly string[]).includes(kind)) return [];
-  const words = name.trim().split(/\s+/);
-  const short = words.at(-1) ?? "";
-  if (words.length < 2 || short.length < 4) return [];
-  const key = nameKey(short);
-  const shared = world.some(
-    (other) =>
-      other.slug !== slug &&
-      pageNames(other.content).some(
-        (otherName) =>
-          nameKey(otherName) === key || nameKey(otherName.split(/\s+/).at(-1) ?? "") === key,
-      ),
-  );
-  return shared ? [] : [short];
 }
 
 export interface WorldPageChange extends WorldPageDiff {
@@ -988,4 +865,42 @@ export async function getWorldAvatar(
     )
     .limit(1);
   return avatar ?? null;
+}
+
+// Moves other names that turned out to be references, on every revision of
+// each page, for names stored before pages had references. Returns how many
+// revisions changed.
+export async function moveAliasesToReferences(
+  campaignId: string,
+  bySlug: Map<string, string[]>,
+): Promise<number> {
+  if (bySlug.size === 0) return 0;
+  return db.transaction(async (tx) => {
+    await lockWorld(tx, campaignId);
+    const revisions = await tx
+      .select({
+        id: worldPageRevisions.id,
+        slug: worldPages.slug,
+        content: worldPageRevisions.content,
+      })
+      .from(worldPageRevisions)
+      .innerJoin(worldPages, eq(worldPageRevisions.pageId, worldPages.id))
+      .where(
+        and(eq(worldPages.campaignId, campaignId), inArray(worldPages.slug, [...bySlug.keys()])),
+      );
+    let changed = 0;
+    for (const revision of revisions) {
+      const keys = new Set((bySlug.get(revision.slug) ?? []).map(nameKey));
+      const moving = revision.content.aliases.filter((alias) => keys.has(nameKey(alias)));
+      if (!moving.length) continue;
+      const content = structuredClone(revision.content);
+      addPageNames(content, [], moving);
+      await tx
+        .update(worldPageRevisions)
+        .set({ content })
+        .where(eq(worldPageRevisions.id, revision.id));
+      changed += 1;
+    }
+    return changed;
+  });
 }

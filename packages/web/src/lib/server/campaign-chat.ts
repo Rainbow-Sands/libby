@@ -45,6 +45,7 @@ export const CAMPAIGN_CHAT_SYSTEM = `You are Libby, a spirit librarian who dwell
 - When someone points out a mistake or asks for a change, read every page involved with readPage first, then call proposeChanges with the smallest set of changes that fixes it.
 - Use rename for a wrong or misspelled name, removeAlias for a wrong other name, editFact or removeFact for a wrong fact, split when one page wrongly holds two different things, and merge when two pages are the same thing.
 - Facts are referred to by their #id from readPage.
+- "Referred to as" lists descriptions that only mean the page in context, such as "the children", and never link to it. Use addAlias only when one really means nothing else in the campaign, and removeAlias when it never meant this page.
 - Set remember to one sentence when the mistake could happen again in later sessions, such as two names that are easy to confuse or a thing recorded as the wrong kind. Leave it null for one-off updates, such as who holds an item now.
 - If proposeChanges returns problems, correct the proposal and call it again.
 - You never apply changes yourself. The person reviews your proposal on a card and applies it. After proposing, explain the fix in a sentence or two without repeating the card's details. Never say you have updated, changed or fixed anything: say what the proposal would do.
@@ -65,8 +66,9 @@ function formatIndexLine(page: WorldPageSummary): string {
   const { content } = page;
   const status = content.status ? `, ${content.status}` : "";
   const also = content.aliases.length ? `; also ${content.aliases.join(", ")}` : "";
+  const refs = content.references.length ? `; referred to as ${content.references.join(", ")}` : "";
   const line = summaryLine(content.summary);
-  return `- [${page.slug}] ${content.name} (${page.kind}${status}${also})${line ? `: ${line}` : ""}`;
+  return `- [${page.slug}] ${content.name} (${page.kind}${status}${also}${refs})${line ? `: ${line}` : ""}`;
 }
 
 export function formatPageContent(
@@ -79,6 +81,9 @@ export function formatPageContent(
     `[${slug}] ${content.name} (${kind}${content.status ? `, ${content.status}` : ""})`,
   ];
   if (content.aliases.length) lines.push(`Other names: ${content.aliases.join(", ")}`);
+  if (content.references.length) {
+    lines.push(`Referred to as: ${content.references.join(", ")}`);
+  }
   if (content.holder) lines.push(`Held by: ${content.holder}`);
   if (content.summary) lines.push(`Summary: ${content.summary}`);
   if (content.related.length) lines.push(`Related: ${content.related.join(", ")}`);
