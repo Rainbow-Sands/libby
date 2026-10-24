@@ -390,6 +390,23 @@ export async function recordWorldUpdate(
       : [];
     for (const row of created) pageIds.set(row.slug, row.id);
 
+    // Kinds only change from "other" to something specific, which is rare, so
+    // one statement per page is fine here.
+    const kinds = new Map(existing.map((page) => [page.slug, page.kind]));
+    for (const page of plan.pages) {
+      const id = pageIds.get(page.slug);
+      if (!id || !kinds.has(page.slug) || kinds.get(page.slug) === page.kind) continue;
+      await tx
+        .update(worldPages)
+        .set({
+          kind: page.kind,
+          ...(page.kind === "character"
+            ? { memberUserId: characterOwner(page.content.name, cast) }
+            : {}),
+        })
+        .where(eq(worldPages.id, id));
+    }
+
     const touchedIds = plan.pages.flatMap((page) =>
       before.has(page.slug) ? [pageIds.get(page.slug)!] : [],
     );

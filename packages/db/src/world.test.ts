@@ -608,3 +608,29 @@ test("an item's holder changes, stays when not given, and clears when nobody car
   expect(holder({})).toBe("Ismark");
   expect(holder({ holderGone: true })).toBeNull();
 });
+
+test('a page first seen as "other" takes a later specific kind, and specific kinds stay', () => {
+  const stranger: WorldPageState = { ...venn, id: "p10", slug: "the-stranger", kind: "other" };
+  const kindAfter = (page: WorldPageState, kind: WorldPageState["kind"]) =>
+    planWorldUpdate(
+      [page],
+      {
+        ...empty,
+        pages: [
+          entry({
+            page: page.slug,
+            name: page.content.name,
+            kind,
+            newFacts: [{ text: "Came back.", at: null }],
+          }),
+        ],
+      },
+      "s5",
+      noRecap,
+    ).pages.map((planned) => planned.kind);
+
+  expect(kindAfter(stranger, "npc")).toEqual(["npc"]);
+  expect(kindAfter(stranger, "other")).toEqual(["other"]);
+  expect(kindAfter(venn, "other")).toEqual(["npc"]);
+  expect(kindAfter(venn, "character")).toEqual(["npc"]);
+});

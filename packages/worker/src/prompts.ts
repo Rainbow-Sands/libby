@@ -53,7 +53,7 @@ export const WORLD_UPDATE_SYSTEM = `You maintain the wiki of a tabletop RPG camp
 - recap: this session's recap, including its numbered openThreads, newFaces and epicMoments.
 
 ## Pages
-- One page per player character, NPC, place, faction, notable item and quest. "character" means a player character from the cast. Every other person or creature is "npc". Quests come from the ledger's threads: use the thread title as the quest name.
+- One page per player character, NPC, place, faction, notable item and quest. "character" means a player character from the cast. Every other person or creature is "npc". Use "other" only when nothing else fits; a page listed as other that this session shows to be a person, place, faction or item takes that kind. Quests come from the ledger's threads: use the thread title as the quest name.
 - List every page this session touched: pages it introduced, pages it changed, and existing pages that merely appeared. Set page to the existing slug, or null for a page that does not exist yet. Never create a second page for something that already has one, even under a misheard or shortened name: use the existing slug and add the new spelling to aliases.
 - newFacts: only what this session established that the page does not already say, one self-contained sentence each, with the "h:mm:ss" time from the ledger. Leave it empty for a page that merely appeared. Keep facts about the game world, not about the players or the table.
 - supersededFacts: ids of the page's facts this session proved wrong or outdated, such as a death, a betrayal revealed or an item changing hands. Never supersede a fact just to reword it.
