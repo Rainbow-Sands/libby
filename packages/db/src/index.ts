@@ -167,6 +167,7 @@ export {
 export { nextBackfillStep, type BackfillStep } from "./backfill.ts";
 export {
   PERSON_KINDS,
+  DORMANT_AFTER_SESSIONS,
   QUEST_STATUSES,
   WORLD_PAGE_KINDS,
   addPageNames,
@@ -206,7 +207,7 @@ export {
 export {
   clearRecapLinkRuns,
   getSessionRecapLinks,
-  lastMentionedBefore,
+  lastMentioned,
   nextRecapLinkStep,
   recordRecapLinkFailure,
   recordRecapLinks,

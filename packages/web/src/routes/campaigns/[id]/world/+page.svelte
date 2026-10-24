@@ -20,15 +20,18 @@
     "item",
     "other",
   ];
-  const QUEST_COLUMNS = [
-    { status: "open", label: "Open" },
-    { status: "resolved", label: "Resolved" },
-    { status: "abandoned", label: "Abandoned" },
+  type QuestColumn = "open" | "dormant" | "resolved";
+  const QUEST_COLUMNS: { column: QuestColumn; label: string }[] = [
+    { column: "open", label: "Open" },
+    { column: "dormant", label: "Dormant" },
+    { column: "resolved", label: "Resolved" },
   ];
-  // An open quest nobody has touched for this many sessions is marked stale.
-  const STALE_AFTER = 3;
+  // Dormant and resolved quests pile up over a campaign, so those columns
+  // show their newest few until opened.
+  const COLUMN_PREVIEW = 5;
 
   let query = $state("");
+  let expanded = $state<Record<string, boolean>>({});
 
   const counts = $derived(
     new Map(KIND_ORDER.map((kind) => [kind, data.pages.filter((p) => p.kind === kind).length])),
@@ -54,18 +57,44 @@
       : data.pages.filter((p) => p.kind === activeKind).toSorted(byRecent),
   );
 
-  function questColumn(status: string | null): string {
-    return status === "resolved" || status === "abandoned" ? status : "open";
+  // The newest session that changed or mentioned the page.
+  function cameUpIn(p: IndexPage): number | null {
+    return Math.max(p.changedIn ?? 0, p.mentionedIn ?? 0) || null;
   }
 
-  function isStale(p: IndexPage): boolean {
-    return (
-      questColumn(p.status) === "open" &&
-      data.latestSession !== null &&
-      p.changedIn !== null &&
-      data.latestSession - p.changedIn >= STALE_AFTER
-    );
+  function sessionsSince(p: IndexPage): number {
+    const last = cameUpIn(p);
+    return data.latestSession !== null && last !== null ? data.latestSession - last : 0;
   }
+
+  function questColumn(p: IndexPage): QuestColumn {
+    if (p.status === "resolved") return "resolved";
+    return sessionsSince(p) >= data.dormantAfter ? "dormant" : "open";
+  }
+
+  function byCameUp(a: IndexPage, b: IndexPage): number {
+    return (cameUpIn(b) ?? 0) - (cameUpIn(a) ?? 0) || a.name.localeCompare(b.name);
+  }
+
+  function questMeta(p: IndexPage, column: QuestColumn): string {
+    const last = cameUpIn(p);
+    if (last === null) return "";
+    if (column === "resolved") return `resolved S${p.changedIn ?? last}`;
+    if (column === "dormant") {
+      const since = sessionsSince(p);
+      return `last came up S${last} · ${since} ${since === 1 ? "session" : "sessions"} ago`;
+    }
+    if (p.created && p.changedIn === last) return `new in S${last}`;
+    return (p.mentionedIn ?? 0) > (p.changedIn ?? 0)
+      ? `came up S${last} · mentioned, no change`
+      : `came up S${last}`;
+  }
+
+  const columnNotes: Record<QuestColumn, string> = $derived({
+    open: `Came up in the last ${data.dormantAfter} sessions`,
+    dormant: `Still open, but not mentioned for ${data.dormantAfter}+ sessions`,
+    resolved: "Newest first",
+  });
 
   function meta(p: IndexPage): string {
     if (p.changedIn === null) return "";
@@ -139,12 +168,21 @@
       {/if}
     {:else if activeKind === "quest"}
       <div class="board">
-        {#each QUEST_COLUMNS as column (column.status)}
-          {@const quests = rows.filter((p) => questColumn(p.status) === column.status)}
-          <section>
-            <h3>{column.label} <span>{quests.length}</span></h3>
-            {#each quests as p (p.slug)}
-              <a class="card" class:stale={isStale(p)} href={worldPageHref(data.campaign.id, p.slug)}>
+        {#each QUEST_COLUMNS as { column, label } (column)}
+          {@const quests = rows
+            .filter((p) => questColumn(p) === column)
+            .toSorted(column === "resolved" ? byRecent : byCameUp)}
+          {@const limited = column !== "open" && !expanded[column]}
+          {@const shown = limited ? quests.slice(0, COLUMN_PREVIEW) : quests}
+          <section id="quests-{column}">
+            <h3>{label} <span>{quests.length}</span></h3>
+            <p class="note">{columnNotes[column]}</p>
+            {#each shown as p (p.slug)}
+              <a
+                class="card"
+                class:dormant={column === "dormant"}
+                href={worldPageHref(data.campaign.id, p.slug)}
+              >
                 <WorldAvatar
                   src={avatarHref(data.campaign.id, p.avatarId)}
                   name={p.name}
@@ -153,15 +191,23 @@
                 />
                 <span>
                   <b>{p.name}</b>
-                  {#if p.line}<span class="sub">{p.line}</span>{/if}
-                  <span class="meta"
-                    >{meta(p)}{#if isStale(p)}&nbsp;· untouched for a while{/if}</span
-                  >
+                  {#if p.line && column === "open"}<span class="sub">{p.line}</span>{/if}
+                  <span class="meta">{questMeta(p, column)}</span>
                 </span>
               </a>
             {:else}
               <p class="empty">None.</p>
             {/each}
+            {#if column !== "open" && quests.length > COLUMN_PREVIEW}
+              <button
+                class="more"
+                type="button"
+                aria-expanded={!limited}
+                aria-controls="quests-{column}"
+                onclick={() => (expanded[column] = limited)}
+                >{limited ? `Show all ${quests.length} ${column}` : "Show fewer"}</button
+              >
+            {/if}
           </section>
         {/each}
       </div>
@@ -323,8 +369,31 @@
     display: block;
     white-space: normal;
   }
-  .card.stale {
+  .board .note {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--ink-soft);
+  }
+  .card.dormant {
+    background: transparent;
     border-style: dashed;
+  }
+  .card.dormant b {
+    color: var(--ink-soft);
+  }
+  .board .more {
+    justify-self: start;
+    padding: 0.35rem 0.75rem;
+    font: inherit;
+    font-size: 0.9rem;
+    color: var(--link);
+    cursor: pointer;
+    background: none;
+    border: 1px solid var(--edge);
+    border-radius: 6px;
+  }
+  .board .more:hover {
+    border-color: var(--gold);
   }
   @container (max-width: 680px) {
     .board {

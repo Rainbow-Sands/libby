@@ -26,6 +26,10 @@ export const PERSON_KINDS = ["character", "npc"] as const satisfies readonly Wor
 // stop moving it, which is worked out from its history rather than stored.
 export const QUEST_STATUSES = ["open", "resolved"] as const;
 
+// An open quest that has not come up for this many sessions is dormant: still
+// on the quest board, but no longer repeated in every recap.
+export const DORMANT_AFTER_SESSIONS = 5;
+
 export interface WorldFact {
   // Stable within a page, so later sessions can supersede it.
   id: number;
