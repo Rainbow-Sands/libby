@@ -3,7 +3,6 @@ import { nameKey } from "./world-links.ts";
 import {
   QUEST_STATUSES,
   WORLD_PAGE_KINDS,
-  questStatus,
   slugify,
   uniqueNames,
   type WorldFact,
@@ -111,6 +110,7 @@ export interface PlannedEdit {
   errors: string[];
 }
 
+const isQuestStatus = (status: string) => (QUEST_STATUSES as readonly string[]).includes(status);
 const clone = <T>(value: T): T => structuredClone(value);
 const latest = (target: EditPage) => target.revisions.at(-1)!.content;
 const factTexts = (content: WorldPageContent) => content.facts.map((f) => f.text);
@@ -222,17 +222,12 @@ export function planWorldEdit(world: EditWorld, changes: WorldEditChange[]): Pla
       }
       case "setStatus": {
         const status = change.status?.trim().toLowerCase() || null;
-        if (target.kind !== "quest" || status === null) {
-          now.status = status;
-          return;
-        }
-        const quest = questStatus(status);
-        if (!quest) {
+        if (target.kind === "quest" && status !== null && !isQuestStatus(status)) {
           return void errors.push(
             `${label}: a quest's status is ${QUEST_STATUSES.join(", ")}, not "${status}".`,
           );
         }
-        now.status = quest;
+        now.status = status;
         return;
       }
       case "setHolder":

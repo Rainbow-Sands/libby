@@ -34,7 +34,6 @@ import {
   pageNames,
   diffWorldPage,
   planWorldUpdate,
-  questStatus,
   type StoredWorldPageChange,
   type WorldPageDiff,
   type WorldMoment,
@@ -53,16 +52,6 @@ type Queryable = typeof db | DatabaseTransaction;
 // campaign's world is changed by one of them at a time.
 export async function lockWorld(tx: DatabaseTransaction, campaignId: string): Promise<void> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`world:${campaignId}`}))`);
-}
-
-// Quests written before their statuses were normalized can say "completed"
-// or "failed"; they read as the status they mean.
-function withQuestStatus<T extends { kind: WorldPageKind; content: { status: string | null } }>(
-  page: T,
-): T {
-  if (page.kind !== "quest") return page;
-  const status = questStatus(page.content.status) ?? page.content.status;
-  return status === page.content.status ? page : { ...page, content: { ...page.content, status } };
 }
 
 export interface WorldSession {
@@ -146,7 +135,7 @@ export async function getWorldSummary(
     .innerJoin(sessions, eq(worldPageRevisions.sessionId, sessions.id))
     .where(and(...worldBoundConditions(campaignId, bound)))
     .orderBy(worldPageRevisions.pageId, desc(sessions.startedAt));
-  return rows.map(withQuestStatus).toSorted((a, b) => a.content.name.localeCompare(b.content.name));
+  return rows.toSorted((a, b) => a.content.name.localeCompare(b.content.name));
 }
 
 // Every page of a campaign as it stood at the bound: the newest revision of
@@ -174,7 +163,7 @@ export async function getWorldState(
     .innerJoin(sessions, eq(worldPageRevisions.sessionId, sessions.id))
     .where(and(...conditions))
     .orderBy(worldPageRevisions.pageId, desc(sessions.startedAt));
-  return rows.map(withQuestStatus).toSorted((a, b) => a.content.name.localeCompare(b.content.name));
+  return rows.toSorted((a, b) => a.content.name.localeCompare(b.content.name));
 }
 
 async function sessionStart(sessionId: string): Promise<Date | null> {
@@ -658,7 +647,7 @@ export async function getWorldPage(
     avatarId: page.avatarId,
     memberUserId: page.memberUserId,
     createdInSessionId: page.createdInSessionId,
-    content: shown ? withQuestStatus({ kind: page.kind, content: shown.content }).content : null,
+    content: shown?.content ?? null,
     revisionSessionId: shown?.sessionId ?? null,
     isSnapshot,
     laterFacts,

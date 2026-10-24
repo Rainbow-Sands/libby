@@ -257,7 +257,7 @@ test("naming a reference makes it a name, and removing one drops it", () => {
   expect(after.references).toEqual([]);
 });
 
-test("a quest's status is set to one of the quest statuses", () => {
+test("a quest's status is one of the quest statuses", () => {
   const quest: EditPage = {
     ...wine,
     id: "q1",
@@ -269,8 +269,8 @@ test("a quest's status is set to one of the quest statuses", () => {
   const set = (status: string) =>
     planWorldEdit(quests, [{ op: "setStatus", page: "find-the-children", status }]);
 
-  expect(set("Done").pages[0].revisions[0].content.status).toBe("resolved");
-  expect(set("perplexing").errors).toEqual([
-    'Change 1 (setStatus): a quest\'s status is open, resolved, abandoned, not "perplexing".',
+  expect(set("Resolved").pages[0].revisions[0].content.status).toBe("resolved");
+  expect(set("completed").errors).toEqual([
+    'Change 1 (setStatus): a quest\'s status is open, resolved, abandoned, not "completed".',
   ]);
 });

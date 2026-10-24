@@ -1,7 +1,6 @@
 import { expect, test } from "vitest";
 import {
   planWorldUpdate,
-  questStatus,
   slugify,
   type WorldPageState,
   type WorldRecap,
@@ -26,6 +25,7 @@ function entry(overrides: Partial<WorldUpdate["pages"][number]>): WorldUpdate["p
     aliases: [],
     references: [],
     status: null,
+    questStatus: null,
     newFacts: [],
     supersededFacts: [],
     holder: null,
@@ -546,25 +546,23 @@ test("an NPC who turns out to be a player character keeps their page", () => {
   expect(plan.pages.map((page) => page.slug)).toEqual(["magister-venn"]);
 });
 
-test("quest statuses are read as open, resolved or abandoned however they are worded", () => {
-  expect(questStatus("Completed")).toBe("resolved");
-  expect(questStatus("in-progress")).toBe("open");
-  expect(questStatus("failed")).toBe("abandoned");
-  expect(questStatus("perplexing")).toBeNull();
-  expect(questStatus(null)).toBeNull();
-
-  const quest = (status: string) =>
-    planWorldUpdate(
-      [],
-      { ...empty, pages: [entry({ name: "Find the children", kind: "quest", status })] },
-      "s5",
-      noRecap,
-    ).pages[0].content.status;
-  expect(quest("Completed")).toBe("resolved");
-  expect(quest("perplexing")).toBeNull();
-  // Other kinds keep their own words.
-  expect(
-    planWorldUpdate([], { ...empty, pages: [entry({ status: "Completed" })] }, "s5", noRecap)
-      .pages[0].content.status,
-  ).toBe("completed");
+test("a quest takes its status from questStatus, and other pages from status", () => {
+  const plan = planWorldUpdate(
+    [],
+    {
+      ...empty,
+      pages: [
+        entry({
+          name: "Find the children",
+          kind: "quest",
+          status: "completed",
+          questStatus: "resolved",
+        }),
+        entry({ name: "Doru", status: "Undead", questStatus: "abandoned" }),
+      ],
+    },
+    "s5",
+    noRecap,
+  );
+  expect(plan.pages.map((page) => page.content.status)).toEqual(["resolved", "undead"]);
 });
