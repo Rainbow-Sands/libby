@@ -558,7 +558,7 @@ test("a quest takes its status from questStatus, and other pages from status", (
           status: "completed",
           questStatus: "resolved",
         }),
-        entry({ name: "Doru", status: "Undead", questStatus: "abandoned" }),
+        entry({ name: "Doru", status: "Undead", questStatus: "resolved" }),
       ],
     },
     "s5",

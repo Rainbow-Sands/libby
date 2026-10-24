@@ -15,7 +15,7 @@ const at = z
 export const ENTITY_KINDS = ["character", "npc", "location", "faction", "item", "other"] as const;
 // "open" is a thread carried forward from an earlier session that this session
 // did not touch; it stays listed until the party resolves it.
-export const THREAD_STATUSES = ["new", "advanced", "resolved", "abandoned", "open"] as const;
+export const THREAD_STATUSES = ["new", "advanced", "resolved", "open"] as const;
 
 export const sessionLedgerSchema = z.object({
   events: z
@@ -56,12 +56,12 @@ export const sessionLedgerSchema = z.object({
         title: z
           .string()
           .describe("Short name, reusing an earlier thread's title when continuing it"),
-        status: z.enum(["new", "advanced", "resolved", "abandoned"]),
+        status: z.enum(["new", "advanced", "resolved"]),
         note: z.string().describe("What changed this session"),
         at,
       }),
     )
-    .describe("Quests, mysteries and promises touched, opened or given up this session"),
+    .describe("Quests, mysteries and promises touched or opened this session"),
   quotes: z.array(
     z.object({
       speaker: z.string().describe("Character name when in character, otherwise the player"),
@@ -134,7 +134,22 @@ export interface SessionRecap {
 }
 
 export function parseSessionLedger(value: unknown): SessionLedger {
-  return sessionLedgerSchema.parse(value);
+  return sessionLedgerSchema.parse(withoutAbandonedThreads(value));
+}
+
+// Ledgers written while threads could be "abandoned" stay in storage as they
+// are. A thread the party gave up was still moved by that session.
+function withoutAbandonedThreads(value: unknown): unknown {
+  const threads = (value as { threads?: unknown } | null)?.threads;
+  if (!Array.isArray(threads)) return value;
+  return {
+    ...(value as object),
+    threads: threads.map((thread) =>
+      (thread as { status?: unknown } | null)?.status === "abandoned"
+        ? { ...thread, status: "advanced" }
+        : thread,
+    ),
+  };
 }
 
 export function parseElapsed(value: string | null | undefined): number | null {
@@ -155,7 +170,6 @@ const THREAD_LABELS: Record<(typeof THREAD_STATUSES)[number], string> = {
   new: "New",
   advanced: "Advanced",
   resolved: "Resolved",
-  abandoned: "Abandoned",
   open: "Still open",
 };
 

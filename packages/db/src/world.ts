@@ -22,7 +22,9 @@ export type WorldPageKind = (typeof WORLD_PAGE_KINDS)[number];
 // "character" is a player character. Every other person or creature is an NPC.
 export const PERSON_KINDS = ["character", "npc"] as const satisfies readonly WorldPageKind[];
 
-export const QUEST_STATUSES = ["open", "resolved", "abandoned"] as const;
+// A quest the party stops pursuing stays open; it goes dormant once sessions
+// stop moving it, which is worked out from its history rather than stored.
+export const QUEST_STATUSES = ["open", "resolved"] as const;
 
 export interface WorldFact {
   // Stable within a page, so later sessions can supersede it.
@@ -151,7 +153,7 @@ export const worldUpdateSchema = z.object({
         questStatus: z
           .enum(QUEST_STATUSES)
           .nullable()
-          .describe("Quests only: open, resolved or abandoned. Null keeps the current status"),
+          .describe("Quests only: open or resolved. Null keeps the current status"),
         newFacts: z
           .array(z.object({ text: z.string().describe("One self-contained sentence"), at }))
           .describe("What this session established about it that the page does not say yet"),

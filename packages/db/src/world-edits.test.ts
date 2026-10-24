@@ -271,6 +271,6 @@ test("a quest's status is one of the quest statuses", () => {
 
   expect(set("Resolved").pages[0].revisions[0].content.status).toBe("resolved");
   expect(set("completed").errors).toEqual([
-    'Change 1 (setStatus): a quest\'s status is open, resolved, abandoned, not "completed".',
+    'Change 1 (setStatus): a quest\'s status is open or resolved, not "completed".',
   ]);
 });

@@ -224,7 +224,7 @@ export function planWorldEdit(world: EditWorld, changes: WorldEditChange[]): Pla
         const status = change.status?.trim().toLowerCase() || null;
         if (target.kind === "quest" && status !== null && !isQuestStatus(status)) {
           return void errors.push(
-            `${label}: a quest's status is ${QUEST_STATUSES.join(", ")}, not "${status}".`,
+            `${label}: a quest's status is ${QUEST_STATUSES.join(" or ")}, not "${status}".`,
           );
         }
         now.status = status;
