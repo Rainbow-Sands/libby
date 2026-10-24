@@ -6,7 +6,7 @@ import {
   type EditWorld,
   type WorldEdit,
 } from "./world-edits.ts";
-import type { WorldPageContent } from "./world.ts";
+import { planWorldUpdate, type WorldPageContent } from "./world.ts";
 
 function content(overrides: Partial<WorldPageContent>): WorldPageContent {
   return {
@@ -273,4 +273,65 @@ test("a quest's status is one of the quest statuses", () => {
   expect(set("completed").errors).toEqual([
     'Change 1 (setStatus): a quest\'s status is open or resolved, not "completed".',
   ]);
+});
+
+test("names and facts a person removed stay out of later sessions", () => {
+  const edited = planWorldEdit(world, [
+    { op: "removeAlias", page: "Wizard of Wines", alias: "Wizard of Lines" },
+    { op: "removeFact", page: "Wizard of Wines", fact: 1 },
+    { op: "editFact", page: "Wizard of Wines", fact: 2, text: "The valley's only winery." },
+  ]);
+  expect(edited.errors).toEqual([]);
+  const page = edited.pages[0];
+  const now = page.revisions.at(-1)!.content;
+  expect(now.removed).toEqual({
+    names: ["Wizard of Lines"],
+    facts: ["A bottle from the pantry.", "The region's principal winery."],
+  });
+
+  const next = planWorldUpdate(
+    [{ id: "p1", slug: page.slug, kind: page.kind, content: now }],
+    {
+      pages: [
+        {
+          page: page.slug,
+          name: "Wizard of Lines",
+          kind: "item",
+          aliases: ["Wizard of Lines"],
+          references: [],
+          status: null,
+          questStatus: null,
+          newFacts: [
+            { text: "a bottle from the pantry.", at: null },
+            { text: "The region's principal winery.", at: null },
+            { text: "Stolen by the druids.", at: null },
+          ],
+          supersededFacts: [],
+          holder: null,
+          holderGone: false,
+          related: [],
+          summary: "",
+          openThreads: [],
+          newFaces: [],
+        },
+      ],
+      epicMoments: [],
+      possibleDuplicates: [],
+      nameCorrections: [],
+    },
+    "s6",
+    { epicMoments: [], openThreads: [], newFaces: [] },
+  ).pages[0].content;
+  expect(next.name).toBe("Wizard of Wines");
+  expect(next.aliases).toEqual(["Champagne de l'Estompe"]);
+  expect(next.facts.map((fact) => fact.text)).toEqual([
+    "The valley's only winery.",
+    "Stolen by the druids.",
+  ]);
+
+  const restored = planWorldEdit(
+    { ...world, pages: [{ ...page, revisions: [{ sessionId: "s5", content: now }] }] },
+    [{ op: "addAlias", page: "Wizard of Wines", alias: "Wizard of Lines" }],
+  );
+  expect(restored.pages[0].revisions[0].content.removed?.names).toEqual([]);
 });

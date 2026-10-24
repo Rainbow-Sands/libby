@@ -83,10 +83,14 @@ export function formatWorldPages(world: WorldPageState[]): string {
         lines.push(`Referred to as: ${content.references.join(", ")}`);
       }
       if (content.holder) lines.push(`Held by: ${content.holder}`);
+      if (content.removed?.names.length) {
+        lines.push(`Never called: ${content.removed.names.join(", ")}`);
+      }
       if (content.summary) lines.push(`Summary: ${content.summary}`);
       for (const fact of content.facts) {
         if (!fact.supersededIn) lines.push(`#${fact.id} ${fact.text}`);
       }
+      for (const fact of content.removed?.facts ?? []) lines.push(`Not true: ${fact}`);
       return lines.join("\n");
     })
     .join("\n\n");

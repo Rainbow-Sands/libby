@@ -4,7 +4,9 @@ import {
   QUEST_STATUSES,
   WORLD_PAGE_KINDS,
   slugify,
+  markRemoved,
   uniqueNames,
+  unmarkRemoved,
   type WorldFact,
   type WorldPageContent,
   type WorldPageKind,
@@ -167,6 +169,10 @@ export function planWorldEdit(world: EditWorld, changes: WorldEditChange[]): Pla
             change.keepOldName ? [previous, ...content.aliases] : content.aliases,
             name,
           );
+          // A dropped name stays dropped, so a later session never renames the
+          // page back to it.
+          if (!change.keepOldName) markRemoved(content, { names: [previous] });
+          unmarkRemoved(content, { names: [name] });
         }
         return;
       }
@@ -179,6 +185,7 @@ export function planWorldEdit(world: EditWorld, changes: WorldEditChange[]): Pla
         for (const content of all) {
           content.aliases = uniqueNames([...content.aliases, change.alias], content.name);
           content.references = content.references.filter((ref) => nameKey(ref) !== key);
+          unmarkRemoved(content, { names: [change.alias] });
         }
         return;
       }
@@ -192,6 +199,7 @@ export function planWorldEdit(world: EditWorld, changes: WorldEditChange[]): Pla
         for (const content of all) {
           content.aliases = content.aliases.filter((alias) => nameKey(alias) !== key);
           content.references = content.references.filter((ref) => nameKey(ref) !== key);
+          markRemoved(content, { names: [change.alias] });
         }
         return;
       }
@@ -201,16 +209,22 @@ export function planWorldEdit(world: EditWorld, changes: WorldEditChange[]): Pla
           return void errors.push(`${label}: ${now.name} has no fact #${change.fact}.`);
         }
         for (const content of all) {
+          // The old wording stays out too, or the next session that reports
+          // it would add it back beside the correction.
+          const old = content.facts.find((f) => f.id === change.fact);
+          if (old) markRemoved(content, { facts: [old.text] });
           content.facts =
             change.op === "editFact"
               ? content.facts.map((f) => (f.id === change.fact ? { ...f, text: change.text } : f))
               : content.facts.filter((f) => f.id !== change.fact);
+          if (change.op === "editFact") unmarkRemoved(content, { facts: [change.text] });
         }
         return;
       }
       case "addFact": {
         const revision = target.revisions.at(-1)!;
         const nextId = Math.max(0, ...all.flatMap((content) => content.facts.map((f) => f.id))) + 1;
+        for (const content of all) unmarkRemoved(content, { facts: [change.text] });
         revision.content.facts.push({
           id: nextId,
           text: change.text,
@@ -276,6 +290,7 @@ export function planWorldEdit(world: EditWorld, changes: WorldEditChange[]): Pla
               base.related = [...new Set([...base.related, ...from.related])].filter(
                 (slug) => slug !== target.slug && slug !== into.slug,
               );
+              if (from.removed) markRemoved(base, from.removed);
             }
             return { sessionId, content: base };
           }),

@@ -59,6 +59,9 @@ export interface WorldPageContent {
   // Slugs of pages closely tied to this one: an NPC's faction, a quest's
   // people and places.
   related: string[];
+  // Names and fact texts a person removed, so later sessions don't add them
+  // back. Absent on pages nobody has corrected.
+  removed?: { names: string[]; facts: string[] };
 }
 
 export interface WorldPageState {
@@ -268,11 +271,52 @@ export function addPageNames(
   aliases: string[],
   references: string[],
 ): void {
-  content.references = uniqueNames([...content.references, ...references], content.name);
+  const kept = (name: string) => !isRemovedName(content, name);
+  content.references = uniqueNames(
+    [...content.references, ...references.filter(kept)],
+    content.name,
+  );
   const referenceKeys = new Set(content.references.map(nameKey));
-  content.aliases = uniqueNames([...content.aliases, ...aliases], content.name).filter(
+  content.aliases = uniqueNames([...content.aliases, ...aliases.filter(kept)], content.name).filter(
     (alias) => !referenceKeys.has(nameKey(alias)),
   );
+}
+
+export function isRemovedName(content: WorldPageContent, name: string): boolean {
+  const key = nameKey(name);
+  return Boolean(key) && (content.removed?.names ?? []).some((removed) => nameKey(removed) === key);
+}
+
+function factKey(text: string): string {
+  return text.trim().toLowerCase();
+}
+
+// Records names or facts a person took off a page, or forgets them again when
+// a person puts them back.
+export function markRemoved(
+  content: WorldPageContent,
+  removed: { names?: string[]; facts?: string[] },
+): void {
+  const names = uniqueNames([...(content.removed?.names ?? []), ...(removed.names ?? [])], "");
+  const facts = [...(content.removed?.facts ?? [])];
+  for (const text of removed.facts ?? []) {
+    if (text.trim() && !facts.some((fact) => factKey(fact) === factKey(text)))
+      facts.push(text.trim());
+  }
+  content.removed = { names, facts };
+}
+
+export function unmarkRemoved(
+  content: WorldPageContent,
+  restored: { names?: string[]; facts?: string[] },
+): void {
+  if (!content.removed) return;
+  const nameKeys = new Set((restored.names ?? []).map(nameKey));
+  const factKeys = new Set((restored.facts ?? []).map(factKey));
+  content.removed = {
+    names: content.removed.names.filter((name) => !nameKeys.has(nameKey(name))),
+    facts: content.removed.facts.filter((fact) => !factKeys.has(factKey(fact))),
+  };
 }
 
 export interface PlannedPage {
@@ -420,7 +464,8 @@ export function planWorldUpdate(
     const aliases = ownNames([...entry.aliases, ...threadTitles]);
     // Capitalization and articles vary from mention to mention; only a
     // different spelling renames the page.
-    if (nameKey(name) !== nameKey(content.name)) {
+    // A name a person took off the page never renames it back.
+    if (nameKey(name) !== nameKey(content.name) && !isRemovedName(content, name)) {
       const previous = content.name;
       content.name = name;
       content.aliases = uniqueNames([previous, ...content.aliases], name);
@@ -443,11 +488,15 @@ export function planWorldUpdate(
       if (fact && !fact.supersededIn) fact.supersededIn = sessionId;
     }
     let nextId = content.facts.reduce((max, fact) => Math.max(max, fact.id), 0) + 1;
-    const known = new Set(content.facts.map((fact) => fact.text.trim().toLowerCase()));
+    // A fact a person removed or reworded stays out, even when a later
+    // session reports it again.
+    const known = new Set(
+      [...content.facts.map((fact) => fact.text), ...(content.removed?.facts ?? [])].map(factKey),
+    );
     for (const fact of entry.newFacts) {
       const text = fact.text.trim();
-      if (!text || known.has(text.toLowerCase())) continue;
-      known.add(text.toLowerCase());
+      if (!text || known.has(factKey(text))) continue;
+      known.add(factKey(text));
       content.facts.push({ id: nextId++, text, sessionId, at: fact.at, supersededIn: null });
     }
 
