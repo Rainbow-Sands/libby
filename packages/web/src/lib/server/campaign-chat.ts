@@ -19,13 +19,23 @@ import type { ProposedWorldEdit } from "$lib/world-edit";
 export type ChatContext =
   | { kind: "campaign" }
   | { kind: "world" }
-  | { kind: "page"; slug: string }
+  // asOf is the session a page is viewed as of, or null for the latest.
+  | { kind: "page"; slug: string; asOf: string | null }
   | { kind: "session"; sessionId: string };
 
 export function parseChatContext(value: unknown): ChatContext {
-  const context = value as Partial<{ kind: string; slug: string; sessionId: string }> | null;
+  const context = value as Partial<{
+    kind: string;
+    slug: string;
+    asOf: string | null;
+    sessionId: string;
+  }> | null;
   if (context?.kind === "page" && typeof context.slug === "string") {
-    return { kind: "page", slug: context.slug };
+    return {
+      kind: "page",
+      slug: context.slug,
+      asOf: typeof context.asOf === "string" ? context.asOf : null,
+    };
   }
   if (context?.kind === "session" && typeof context.sessionId === "string") {
     return { kind: "session", sessionId: context.sessionId };
@@ -156,6 +166,8 @@ export function buildViewSystem(
 
 export interface ChatToolSources {
   campaignId: string;
+  // Only the sessions the person may hear about: all of them, or those up to
+  // the session the page is viewed as of.
   sessions: WorldSession[];
   loadSession: (sessionId: string) => Promise<SessionViewMaterial | null>;
   cast: CampaignCastMember[];
@@ -180,9 +192,13 @@ export function campaignChatTools(sources: ChatToolSources) {
       inputSchema: z.object({ page: z.string().describe("The page's slug or exact name") }),
       execute: async ({ page }) => {
         const history = await getWorldPageHistory(sources.campaignId, page);
-        if (!history) return `No page is called "${page}".`;
-        const current = history.revisions.at(-1)!;
-        const changes = history.revisions
+        // Revisions from sessions after the as-of bound are left out.
+        const revisions = history?.revisions.filter((revision) =>
+          sessionsById.has(revision.sessionId),
+        );
+        if (!history || !revisions?.length) return `No page is called "${page}".`;
+        const current = revisions.at(-1)!;
+        const changes = revisions
           .map((revision) => sessionsById.get(revision.sessionId))
           .filter((session) => session !== undefined)
           .map((session) => `session ${session.number}`);
