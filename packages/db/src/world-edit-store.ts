@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
 import { db, type DatabaseTransaction } from "./client.ts";
 import {
   sessions,
@@ -6,6 +6,7 @@ import {
   worldEdits,
   worldPageAvatars,
   worldPageMoments,
+  worldPageRedirects,
   worldPageRevisions,
   worldPages,
   worldRecapLinks,
@@ -22,7 +23,7 @@ import {
   type WorldEditPreview,
 } from "./world-edits.ts";
 import type { WorldMoment, WorldPageContent, WorldPageKind } from "./world.ts";
-import { getWorldSummary, lockWorld } from "./world-store.ts";
+import { getWorldSummary, lockWorld, worldRedirectSlugs } from "./world-store.ts";
 
 type Queryable = typeof db | DatabaseTransaction;
 
@@ -41,6 +42,10 @@ export interface WorldEditSnapshot {
   // Recap links a merge moved to the page it kept. Missing from edits saved
   // before recaps were linked by the model.
   recapLinks?: { id: string; pageId: string }[];
+  // Redirects a merge pointed somewhere new, with the page each led to
+  // before, and the ones it added. Missing from edits saved before redirects.
+  redirects?: { id: string; pageId: string }[];
+  createdRedirectIds?: string[];
   createdPageIds: string[];
   // The campaign's newest world update time when the edit was applied, read
   // from the same column it is compared with so clocks never mix.
@@ -65,13 +70,14 @@ async function loadEditWorld(
   edit: WorldEdit,
   queryable: Queryable,
 ): Promise<{ world: EditWorld; rows: PageRow[] }> {
-  const [summary, order] = await Promise.all([
+  const [summary, order, redirectSlugs] = await Promise.all([
     getWorldSummary(campaignId, {}, queryable),
     queryable
       .select({ id: sessions.id })
       .from(sessions)
       .where(eq(sessions.campaignId, campaignId))
       .orderBy(asc(sessions.startedAt)),
+    worldRedirectSlugs(campaignId, queryable),
   ]);
   const resolve = (ref: string) => {
     const bySlug = summary.find((page) => page.slug === ref);
@@ -140,7 +146,7 @@ async function loadEditWorld(
   return {
     world: {
       pages: pages.filter((page) => page.revisions.length > 0),
-      slugs: new Set(summary.map((page) => page.slug)),
+      slugs: new Set([...summary.map((page) => page.slug), ...redirectSlugs]),
       sessionOrder: order.map((row) => row.id),
       links,
     },
@@ -251,6 +257,8 @@ export async function applyWorldEdit(
     );
 
     const recapLinks: { id: string; pageId: string }[] = [];
+    const redirects: { id: string; pageId: string }[] = [];
+    const createdRedirectIds: string[] = [];
     for (const page of planned.pages.filter((p) => p.removed && p.id !== null)) {
       const intoId = ids.get(page.mergedInto!)!;
       const fromId = page.id!;
@@ -277,6 +285,35 @@ export async function applyWorldEdit(
           .set({ avatarId: row.avatarId })
           .where(eq(worldPages.id, intoId));
       }
+      // The merged page's slug, and any slugs that already led to it, now
+      // lead to the page that kept its facts.
+      const leading = await tx
+        .select({ id: worldPageRedirects.id, pageId: worldPageRedirects.pageId })
+        .from(worldPageRedirects)
+        .where(
+          and(
+            eq(worldPageRedirects.campaignId, campaignId),
+            or(eq(worldPageRedirects.pageId, fromId), eq(worldPageRedirects.slug, row.slug)),
+          ),
+        );
+      redirects.push(...leading);
+      if (leading.length) {
+        await tx
+          .update(worldPageRedirects)
+          .set({ pageId: intoId })
+          .where(
+            inArray(
+              worldPageRedirects.id,
+              leading.map((redirect) => redirect.id),
+            ),
+          );
+      }
+      const added = await tx
+        .insert(worldPageRedirects)
+        .values({ campaignId, slug: row.slug, pageId: intoId })
+        .onConflictDoNothing()
+        .returning({ id: worldPageRedirects.id });
+      createdRedirectIds.push(...added.map((redirect) => redirect.id));
       await tx.delete(worldPageRevisions).where(eq(worldPageRevisions.pageId, fromId));
       await tx.delete(worldPages).where(eq(worldPages.id, fromId));
     }
@@ -292,6 +329,8 @@ export async function applyWorldEdit(
       moments,
       avatars,
       recapLinks,
+      redirects,
+      createdRedirectIds,
       links: world.links
         .filter((link) => planned.links.has(link.revisionId))
         .map((link) => ({ revisionId: link.revisionId, related: link.related })),
@@ -389,6 +428,21 @@ export async function undoWorldEdit(
         update ${worldPageAvatars} as a set page_id = v.page_id
         from (values ${values}) as v(id, page_id)
         where a.id = v.id`);
+    }
+    if (snapshot.createdRedirectIds?.length) {
+      await tx
+        .delete(worldPageRedirects)
+        .where(inArray(worldPageRedirects.id, snapshot.createdRedirectIds));
+    }
+    if (snapshot.redirects?.length) {
+      const values = sql.join(
+        snapshot.redirects.map((redirect) => sql`(${redirect.id}::uuid, ${redirect.pageId}::uuid)`),
+        sql`, `,
+      );
+      await tx.execute(sql`
+        update ${worldPageRedirects} as r set page_id = v.page_id
+        from (values ${values}) as v(id, page_id)
+        where r.id = v.id`);
     }
     if (snapshot.createdPageIds.length) {
       await tx.delete(worldPages).where(inArray(worldPages.id, snapshot.createdPageIds));

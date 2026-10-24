@@ -22,6 +22,7 @@ import {
   worldRecapLinkRuns,
   worldRecapLinks,
   worldPageMoments,
+  worldPageRedirects,
   worldPageRevisions,
   worldPages,
   worldUpdates,
@@ -369,7 +370,13 @@ export async function recordWorldUpdate(
     const pageIds = new Map(existing.map((page) => [page.slug, page.id]));
     const before = new Map(existing.map((page) => [page.slug, page.content]));
     const changes: StoredWorldPageChange[] = [];
-    const plan = planWorldUpdate(existing, update, sessionId, recap);
+    const plan = planWorldUpdate(
+      existing,
+      update,
+      sessionId,
+      recap,
+      await worldRedirectSlugs(campaignId, tx),
+    );
 
     // Each kind of write is one statement for all pages, not one per page.
     const newPages = plan.pages.filter((page) => !pageIds.has(page.slug));
@@ -802,6 +809,30 @@ export async function getSessionWorldChanges(sessionId: string): Promise<Session
       (a, b) => Number(b.created) - Number(a.created) || a.name.localeCompare(b.name),
     ),
   };
+}
+
+// Slugs of pages merged away, which new pages never take so old links keep
+// leading to the page that kept the facts.
+export async function worldRedirectSlugs(
+  campaignId: string,
+  queryable: Queryable = db,
+): Promise<string[]> {
+  const rows = await queryable
+    .select({ slug: worldPageRedirects.slug })
+    .from(worldPageRedirects)
+    .where(eq(worldPageRedirects.campaignId, campaignId));
+  return rows.map((row) => row.slug);
+}
+
+// The current slug of the page a merged page's slug now leads to.
+export async function findWorldRedirect(campaignId: string, slug: string): Promise<string | null> {
+  const [row] = await db
+    .select({ slug: worldPages.slug })
+    .from(worldPageRedirects)
+    .innerJoin(worldPages, eq(worldPageRedirects.pageId, worldPages.id))
+    .where(and(eq(worldPageRedirects.campaignId, campaignId), eq(worldPageRedirects.slug, slug)))
+    .limit(1);
+  return row?.slug ?? null;
 }
 
 export async function getWorldPageRef(
