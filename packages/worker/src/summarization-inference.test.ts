@@ -174,18 +174,18 @@ test("open threads come from the world's quests once it has some", async () => {
           name: "Find the Keeper",
           aliases: ["The Missing Keeper"],
           summary: "The lighthouse keeper vanished. Nobody has seen him.",
-          sessionsSinceChange: 0,
+          sessionsSinceActive: 0,
         },
-        { name: "Lasting Strength damage", aliases: [], summary: "", sessionsSinceChange: 9 },
+        { name: "Lasting Strength damage", aliases: [], summary: "", sessionsSinceActive: 9 },
       ],
     },
     complete,
   );
   expect(prompts[0]).toContain(
-    "Open quests:\n- Find the Keeper (also: The Missing Keeper): The lighthouse keeper vanished. (moved last session)",
+    "Open quests:\n- Find the Keeper (also: The Missing Keeper): The lighthouse keeper vanished. (came up last session)",
   );
   expect(prompts[0]).toContain(
-    "Dormant quests, untouched for 5 or more sessions:\n- Lasting Strength damage",
+    "Dormant quests, not mentioned for 5 or more sessions:\n- Lasting Strength damage",
   );
   expect(prompts[0]).not.toContain("Unresolved threads:");
 });

@@ -22,6 +22,7 @@ import {
   getCampaignCast,
   getPreviousSessionNotes,
   getWorldBeforeSession,
+  lastMentionedBefore,
   listWorldCorrections,
   listWorldSessions,
   getWorldState,
@@ -206,12 +207,13 @@ async function sessionMaterial(
   campaignId: string,
   sessionId: string,
 ): Promise<SessionInferenceInput> {
-  const [cast, previous, world, corrections, sessions] = await Promise.all([
+  const [cast, previous, world, corrections, sessions, mentioned] = await Promise.all([
     getCampaignCast(campaignId),
     getPreviousSessionNotes(sessionId),
     getWorldBeforeSession(campaignId, sessionId),
     listWorldCorrections(campaignId),
     listWorldSessions(campaignId),
+    lastMentionedBefore(campaignId, sessionId),
   ]);
   const position = new Map(sessions.map((session, index) => [session.id, index]));
   const current = position.get(sessionId) ?? sessions.length;
@@ -222,9 +224,15 @@ async function sessionMaterial(
           name: page.content.name,
           aliases: page.content.aliases,
           summary: page.content.summary,
-          sessionsSinceChange: Math.max(
+          // A quest stays active while sessions change it or mention it.
+          sessionsSinceActive: Math.max(
             0,
-            current - (position.get(page.revisionSessionId) ?? current) - 1,
+            current -
+              Math.max(
+                position.get(page.revisionSessionId) ?? current,
+                position.get(mentioned.get(page.id) ?? "") ?? -1,
+              ) -
+              1,
           ),
         }))
     : null;

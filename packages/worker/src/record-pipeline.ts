@@ -49,11 +49,12 @@ export interface QuestState {
   name: string;
   aliases: string[];
   summary: string;
-  // Sessions since one last changed the quest's page.
-  sessionsSinceChange: number;
+  // Sessions since the quest last came up: since one changed its page or its
+  // recap mentioned it.
+  sessionsSinceActive: number;
 }
 
-// A quest nobody has touched for this many sessions is listed as dormant:
+// A quest that has not come up for this many sessions is listed as dormant:
 // still on the quest board, but no longer repeated in every recap.
 export const DORMANT_AFTER_SESSIONS = 5;
 
@@ -101,22 +102,22 @@ function questName(quest: QuestState): string {
 }
 
 function formatQuests(quests: QuestState[]): string[] {
-  const active = quests.filter((quest) => quest.sessionsSinceChange < DORMANT_AFTER_SESSIONS);
-  const dormant = quests.filter((quest) => quest.sessionsSinceChange >= DORMANT_AFTER_SESSIONS);
+  const active = quests.filter((quest) => quest.sessionsSinceActive < DORMANT_AFTER_SESSIONS);
+  const dormant = quests.filter((quest) => quest.sessionsSinceActive >= DORMANT_AFTER_SESSIONS);
   return [
     "Open quests:",
     ...(active.length
       ? active.map((quest) => {
           const line = summaryLine(quest.summary);
           const since =
-            quest.sessionsSinceChange === 0
-              ? "moved last session"
-              : `last moved ${quest.sessionsSinceChange + 1} sessions ago`;
+            quest.sessionsSinceActive === 0
+              ? "came up last session"
+              : `last came up ${quest.sessionsSinceActive + 1} sessions ago`;
           return `- ${questName(quest)}${line ? `: ${line}` : ""} (${since})`;
         })
       : ["- None"]),
     "",
-    `Dormant quests, untouched for ${DORMANT_AFTER_SESSIONS} or more sessions:`,
+    `Dormant quests, not mentioned for ${DORMANT_AFTER_SESSIONS} or more sessions:`,
     ...(dormant.length ? dormant.map((quest) => `- ${questName(quest)}`) : ["- None"]),
   ];
 }
