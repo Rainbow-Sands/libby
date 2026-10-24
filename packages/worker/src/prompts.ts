@@ -59,6 +59,7 @@ export const WORLD_UPDATE_SYSTEM = `You maintain the wiki of a tabletop RPG camp
 - supersededFacts: ids of the page's facts this session proved wrong or outdated, such as a death, a betrayal revealed or an item changing hands. Never supersede a fact just to reword it.
 - status: for people "alive", "dead", "missing" or similar. Leave it null for quests. Null keeps the current one.
 - questStatus: quests only, "open" or "resolved". A quest whose open thread this session resolved is "resolved". A quest the party gave up stays "open". A quest that comes back after being resolved is "open" again. Null keeps the current one, and is always null for other pages.
+- holder: for items, who carries it at the end of this session. Null keeps the current holder. When the item was sold, lost, destroyed or left behind and nobody carries it now, set holderGone to true and leave holder null. holderGone is false otherwise and for other pages.
 - summary: two or three sentences describing the page as of the end of this session, written from all of its facts. Present tense, no session numbers.
 - related: names of other pages closely tied to this one, such as an NPC's faction, a quest's people and places, or where an item was found.
 - Use canonical spellings throughout. When the ledger lists other spellings in heardAs, add them to aliases and report them in nameCorrections.
