@@ -378,6 +378,7 @@ export function planWorldUpdate(
         return !owner || owner === page;
       });
     const before = page ? JSON.stringify(page.content) : null;
+    const kindBefore = page?.kind;
 
     if (!page) {
       page = {
@@ -409,6 +410,11 @@ export function planWorldUpdate(
         }
       }
     }
+
+    // A page first seen as "other" takes the first specific kind a later
+    // session gives it, so a stranger who turns out to be an NPC moves to the
+    // NPC list. Specific kinds stay put; a person can change those.
+    if (page.kind === "other" && entry.kind !== "other") page.kind = entry.kind;
 
     const content = page.content;
     const aliases = ownNames([...entry.aliases, ...threadTitles]);
@@ -447,7 +453,7 @@ export function planWorldUpdate(
 
     // A summary only changes along with the facts it summarizes, so a page
     // the session merely mentioned keeps its revision history quiet.
-    const changed = page.created || before !== JSON.stringify(content);
+    const changed = page.created || before !== JSON.stringify(content) || kindBefore !== page.kind;
     if (changed && entry.summary.trim()) content.summary = entry.summary.trim();
 
     index(page);
