@@ -223,6 +223,7 @@ export {
   getWorldBeforeSession,
   getWorldPage,
   getWorldPageRef,
+  findWorldRedirect,
   getWorldState,
   getWorldSummary,
   listWorldSessions,

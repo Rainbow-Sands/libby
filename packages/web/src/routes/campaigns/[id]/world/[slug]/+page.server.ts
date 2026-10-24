@@ -1,5 +1,6 @@
 import { error, redirect } from "@sveltejs/kit";
 import {
+  findWorldRedirect,
   getCampaignAccess,
   getCampaignDetail,
   getWorldPage,
@@ -29,7 +30,15 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
     worldLoad,
     getWorldPage(params.id, params.slug, bound, worldLoad),
   ]);
-  if (!detail) throw error(404, "There is no such page in this world.");
+  if (!detail) {
+    // A page merged into another leads to the one that kept its facts. Not a
+    // permanent redirect, since undoing the merge brings the page back.
+    const moved = await findWorldRedirect(params.id, params.slug);
+    if (moved && moved !== params.slug) {
+      throw redirect(307, `/campaigns/${params.id}/world/${moved}${url.search}`);
+    }
+    throw error(404, "There is no such page in this world.");
+  }
   const player = detail.memberUserId
     ? campaign.members.find((member) => member.id === detail.memberUserId)
     : undefined;

@@ -355,7 +355,10 @@ export function planWorldUpdate(
   update: WorldUpdate,
   sessionId: string,
   recap: WorldRecap,
+  // Slugs no new page may take, such as those of pages merged away.
+  takenSlugs: Iterable<string> = [],
 ): WorldUpdatePlan {
+  const taken = new Set(takenSlugs);
   const bySlug = new Map<string, PlannedPage>();
   // Null for a name more than one existing page answers to, which matches
   // neither. A name this session gives a second page stays with the first.
@@ -385,7 +388,7 @@ export function planWorldUpdate(
   const uniqueSlug = (name: string) => {
     const base = slugify(name);
     let slug = base;
-    for (let n = 2; bySlug.has(slug); n++) slug = `${base}-${n}`;
+    for (let n = 2; bySlug.has(slug) || taken.has(slug); n++) slug = `${base}-${n}`;
     return slug;
   };
 

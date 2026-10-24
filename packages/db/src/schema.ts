@@ -350,6 +350,27 @@ export const worldPageAvatars = pgTable(
   (t) => [index("world_page_avatars_page_idx").on(t.pageId)],
 );
 
+// The slug of a page merged into another, so links and bookmarks to it lead
+// to the page that kept its facts.
+export const worldPageRedirects = pgTable(
+  "world_page_redirects",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    campaignId: uuid("campaign_id")
+      .references(() => campaigns.id)
+      .notNull(),
+    slug: varchar("slug", { length: 100 }).notNull(),
+    pageId: uuid("page_id")
+      .references(() => worldPages.id)
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("world_page_redirects_campaign_slug_unique").on(t.campaignId, t.slug),
+    index("world_page_redirects_page_idx").on(t.pageId),
+  ],
+);
+
 // A recap epic moment featuring a page, copied so the page keeps it even if
 // the session's recap is regenerated later.
 export const worldPageMoments = pgTable(
