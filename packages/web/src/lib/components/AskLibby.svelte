@@ -18,7 +18,7 @@
   type Context =
     | { kind: "campaign" }
     | { kind: "world" }
-    | { kind: "page"; slug: string }
+    | { kind: "page"; slug: string; asOf: string | null }
     | { kind: "session"; sessionId: string };
 
   // Beside the page when the window can spare the pane and still leave the
@@ -40,7 +40,7 @@
         const kind = detail?.kind as WorldPageKind | undefined;
         const name = detail?.content?.name ?? page.params.slug;
         return {
-          context: { kind: "page", slug: page.params.slug ?? "" },
+          context: { kind: "page", slug: page.params.slug ?? "", asOf: data.asOf ?? null },
           label: kind ? `${name} · ${KIND_LABELS[kind]}` : name,
         };
       }

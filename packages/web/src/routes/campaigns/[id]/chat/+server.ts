@@ -45,16 +45,25 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
   }
   const context = parseChatContext(body.context);
 
-  const [access, campaignName, cast, sessions, world, corrections] = await Promise.all([
+  const [access, campaignName, cast, allSessions, corrections] = await Promise.all([
     getCampaignAccess(params.id, locals.user.id),
     getCampaignName(params.id),
     getCampaignCast(params.id),
     listWorldSessions(params.id),
-    getWorldSummary(params.id),
     listWorldCorrections(params.id),
   ]);
   if (!access.canAccess) throw error(403, "You cannot view this campaign.");
   if (!campaignName) throw error(404, "Campaign not found.");
+  // A page viewed as of a session gets answers from what was known by then:
+  // the world, the sessions and the tools all stop at that session.
+  const asOf =
+    context.kind === "page" && context.asOf
+      ? allSessions.find((session) => session.id === context.asOf)
+      : undefined;
+  const sessions = asOf
+    ? allSessions.filter((session) => session.number <= asOf.number)
+    : allSessions;
+  const world = await getWorldSummary(params.id, asOf ? { through: asOf.startedAt } : {});
   const sessionsById = new Map(sessions.map((session) => [session.id, session]));
 
   // Sessions processed with a ledger carry it and the full transcript; older
@@ -79,9 +88,14 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
     view = "The person is on the world wiki's index of every page.";
   } else if (context.kind === "page") {
     const history = await getWorldPageHistory(params.id, context.slug);
-    if (history) {
-      const current = history.revisions.at(-1)!.content;
-      view = `The person is looking at this world page:\n\n${formatPageContent(history.slug, history.kind, current, sessionsById)}`;
+    const current = history?.revisions
+      .filter((revision) => sessionsById.has(revision.sessionId))
+      .at(-1)?.content;
+    if (history && current) {
+      const page = formatPageContent(history.slug, history.kind, current, sessionsById);
+      view = asOf
+        ? `The person is looking at this world page as it stood after session ${asOf.number}, and only the campaign up to that session is shown to you. Answer from what was known by then. If they ask about later events, say the page's latest view covers them.\n\n${page}`
+        : `The person is looking at this world page:\n\n${page}`;
     }
   } else if (context.kind === "session") {
     sessionMaterial = await loadSession(context.sessionId);
