@@ -159,12 +159,12 @@ export async function getSessionRecapLinks(sessionId: string): Promise<RecapLink
   return rows;
 }
 
-// The newest session before the given one whose recap mentions each page, by
-// page id. Only mentions "Mentioned in" lists count, so a quest carried
-// forward untouched as "Still open" is not counted as having come up.
-export async function lastMentionedBefore(
+// The newest session whose recap mentions each page, by page id; with a
+// session, only sessions before it. Only mentions "Mentioned in" lists count,
+// so a quest carried forward untouched as "Still open" has not come up.
+export async function lastMentioned(
   campaignId: string,
-  sessionId: string,
+  beforeSessionId?: string,
 ): Promise<Map<string, string>> {
   const rows = await db
     .selectDistinctOn([worldRecapLinks.pageId], {
@@ -179,7 +179,9 @@ export async function lastMentionedBefore(
         eq(sessions.campaignId, campaignId),
         isNotNull(worldRecapLinks.sentence),
         eq(worldRecapLinkRuns.recapHash, currentHash),
-        sql`${sessions.startedAt} < (select bound.started_at from ${sessions} bound where bound.id = ${sessionId})`,
+        beforeSessionId
+          ? sql`${sessions.startedAt} < (select bound.started_at from ${sessions} bound where bound.id = ${beforeSessionId})`
+          : undefined,
       ),
     )
     .orderBy(worldRecapLinks.pageId, desc(sessions.startedAt));

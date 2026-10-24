@@ -21,8 +21,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
   const counts: Partial<Record<WorldPageKind, number>> = {};
   for (const page of world) counts[page.kind] = (counts[page.kind] ?? 0) + 1;
   const openQuests = world.filter(
-    (page) =>
-      page.kind === "quest" && !["resolved", "abandoned"].includes(page.content.status ?? ""),
+    (page) => page.kind === "quest" && page.content.status !== "resolved",
   ).length;
 
   // A player's character page: the one tied to them, or one with their

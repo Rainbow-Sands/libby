@@ -22,7 +22,7 @@ import {
   getCampaignCast,
   getPreviousSessionNotes,
   getWorldBeforeSession,
-  lastMentionedBefore,
+  lastMentioned,
   listWorldCorrections,
   listWorldSessions,
   getWorldState,
@@ -213,7 +213,7 @@ async function sessionMaterial(
     getWorldBeforeSession(campaignId, sessionId),
     listWorldCorrections(campaignId),
     listWorldSessions(campaignId),
-    lastMentionedBefore(campaignId, sessionId),
+    lastMentioned(campaignId, sessionId),
   ]);
   const position = new Map(sessions.map((session, index) => [session.id, index]));
   const current = position.get(sessionId) ?? sessions.length;

@@ -405,10 +405,6 @@
     color: var(--ok);
     background: var(--ok-soft);
   }
-  .pill.status-abandoned {
-    color: var(--ink-soft);
-    background: var(--surface-sunken);
-  }
   .page-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 17.5rem;

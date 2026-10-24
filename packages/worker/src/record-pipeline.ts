@@ -1,4 +1,5 @@
 import {
+  DORMANT_AFTER_SESSIONS,
   formatElapsed,
   recapLinkFields,
   recapLinkIndex,
@@ -53,10 +54,6 @@ export interface QuestState {
   // recap mentioned it.
   sessionsSinceActive: number;
 }
-
-// A quest that has not come up for this many sessions is listed as dormant:
-// still on the quest board, but no longer repeated in every recap.
-export const DORMANT_AFTER_SESSIONS = 5;
 
 // Names and one line each: enough to spell names consistently and recognize
 // returning characters without spending the context on full pages.
