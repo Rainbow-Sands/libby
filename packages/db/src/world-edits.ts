@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { nameKey } from "./world-links.ts";
 import {
+  QUEST_STATUSES,
   WORLD_PAGE_KINDS,
+  questStatus,
   slugify,
   uniqueNames,
   type WorldFact,
@@ -218,9 +220,21 @@ export function planWorldEdit(world: EditWorld, changes: WorldEditChange[]): Pla
         });
         return;
       }
-      case "setStatus":
-        now.status = change.status?.trim().toLowerCase() || null;
+      case "setStatus": {
+        const status = change.status?.trim().toLowerCase() || null;
+        if (target.kind !== "quest" || status === null) {
+          now.status = status;
+          return;
+        }
+        const quest = questStatus(status);
+        if (!quest) {
+          return void errors.push(
+            `${label}: a quest's status is ${QUEST_STATUSES.join(", ")}, not "${status}".`,
+          );
+        }
+        now.status = quest;
         return;
+      }
       case "setHolder":
         now.holder = change.holder?.trim() || null;
         return;

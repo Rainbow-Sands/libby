@@ -23,6 +23,50 @@ export type WorldPageKind = (typeof WORLD_PAGE_KINDS)[number];
 export const PERSON_KINDS = ["character", "npc"] as const satisfies readonly WorldPageKind[];
 
 export const QUEST_STATUSES = ["open", "resolved", "abandoned"] as const;
+export type QuestStatus = (typeof QUEST_STATUSES)[number];
+
+// The words the model and people use for each quest status. Anything else
+// means nothing for a quest.
+const QUEST_STATUS_WORDS: Record<QuestStatus, string[]> = {
+  open: ["open", "active", "ongoing", "in progress", "new", "advanced", "started", "pending"],
+  resolved: [
+    "resolved",
+    "complete",
+    "completed",
+    "done",
+    "finished",
+    "fulfilled",
+    "accomplished",
+    "solved",
+    "succeeded",
+    "success",
+  ],
+  abandoned: [
+    "abandoned",
+    "failed",
+    "given up",
+    "dropped",
+    "cancelled",
+    "canceled",
+    "impossible",
+    "forfeited",
+  ],
+};
+const QUEST_STATUS_BY_WORD = new Map(
+  Object.entries(QUEST_STATUS_WORDS).flatMap(([status, words]) =>
+    words.map((word) => [word, status as QuestStatus]),
+  ),
+);
+
+// One of QUEST_STATUSES for a quest status worded any way, or null when the
+// words mean none of them.
+export function questStatus(status: string | null | undefined): QuestStatus | null {
+  const key = status
+    ?.trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, " ");
+  return (key && QUEST_STATUS_BY_WORD.get(key)) || null;
+}
 
 export interface WorldFact {
   // Stable within a page, so later sessions can supersede it.
@@ -404,7 +448,10 @@ export function planWorldUpdate(
     }
     addPageNames(content, aliases, entry.references);
 
-    const status = entry.status?.trim().toLowerCase();
+    // A quest's status is one of QUEST_STATUSES, so the board and the prompts
+    // can tell open quests from finished ones; other wording keeps it as is.
+    const status =
+      page.kind === "quest" ? questStatus(entry.status) : entry.status?.trim().toLowerCase();
     if (status) content.status = status;
     if (page.kind === "item" && entry.holder?.trim()) content.holder = entry.holder.trim();
 
