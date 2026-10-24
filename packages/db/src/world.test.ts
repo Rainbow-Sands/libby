@@ -29,6 +29,7 @@ function entry(overrides: Partial<WorldUpdate["pages"][number]>): WorldUpdate["p
     newFacts: [],
     supersededFacts: [],
     holder: null,
+    holderGone: false,
     related: [],
     summary: "",
     openThreads: [],
@@ -565,4 +566,45 @@ test("a quest takes its status from questStatus, and other pages from status", (
     noRecap,
   );
   expect(plan.pages.map((page) => page.content.status)).toEqual(["resolved", "undead"]);
+});
+
+test("an item's holder changes, stays when not given, and clears when nobody carries it", () => {
+  const lantern: WorldPageState = {
+    id: "p9",
+    slug: "silver-lantern",
+    kind: "item",
+    content: {
+      version: 1,
+      name: "Silver lantern",
+      aliases: [],
+      references: [],
+      status: null,
+      summary: "",
+      facts: [],
+      holder: "Ismark",
+      related: [],
+    },
+  };
+  const holder = (overrides: Partial<WorldUpdate["pages"][number]>) =>
+    planWorldUpdate(
+      [lantern],
+      {
+        ...empty,
+        pages: [
+          entry({
+            page: "silver-lantern",
+            name: "Silver lantern",
+            kind: "item",
+            newFacts: [{ text: "Changed hands.", at: null }],
+            ...overrides,
+          }),
+        ],
+      },
+      "s5",
+      noRecap,
+    ).pages[0].content.holder;
+
+  expect(holder({ holder: "Ireena" })).toBe("Ireena");
+  expect(holder({})).toBe("Ismark");
+  expect(holder({ holderGone: true })).toBeNull();
 });

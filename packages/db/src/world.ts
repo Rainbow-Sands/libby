@@ -167,7 +167,14 @@ export const worldUpdateSchema = z.object({
         holder: z
           .string()
           .nullable()
-          .describe("Items only: who carries it now. Null when unknown or not an item"),
+          .describe(
+            "Items only: who carries it now. Null keeps the current holder, or when unknown or not an item",
+          ),
+        holderGone: z
+          .boolean()
+          .describe(
+            "Items only: true when this session the item left its holder and nobody carries it now, such as sold, lost, destroyed or left behind",
+          ),
         related: z
           .array(z.string())
           .describe("Names of other pages closely tied to it, such as a faction or a quest's NPCs"),
@@ -418,7 +425,12 @@ export function planWorldUpdate(
     // can tell open quests from finished ones.
     const status = page.kind === "quest" ? entry.questStatus : entry.status?.trim().toLowerCase();
     if (status) content.status = status;
-    if (page.kind === "item" && entry.holder?.trim()) content.holder = entry.holder.trim();
+    // A null holder keeps the current one, so an item nobody carries any more
+    // says so separately.
+    if (page.kind === "item") {
+      if (entry.holder?.trim()) content.holder = entry.holder.trim();
+      else if (entry.holderGone) content.holder = null;
+    }
 
     for (const id of entry.supersededFacts) {
       const fact = content.facts.find((candidate) => candidate.id === id);
