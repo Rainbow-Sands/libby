@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { db } from "./client.ts";
 import {
   sessions,
@@ -157,4 +157,31 @@ export async function getSessionRecapLinks(sessionId: string): Promise<RecapLink
     )
     .orderBy(asc(worldRecapLinks.position));
   return rows;
+}
+
+// The newest session before the given one whose recap mentions each page, by
+// page id. Only mentions "Mentioned in" lists count, so a quest carried
+// forward untouched as "Still open" is not counted as having come up.
+export async function lastMentionedBefore(
+  campaignId: string,
+  sessionId: string,
+): Promise<Map<string, string>> {
+  const rows = await db
+    .selectDistinctOn([worldRecapLinks.pageId], {
+      pageId: worldRecapLinks.pageId,
+      sessionId: worldRecapLinks.sessionId,
+    })
+    .from(worldRecapLinks)
+    .innerJoin(sessions, eq(worldRecapLinks.sessionId, sessions.id))
+    .innerJoin(worldRecapLinkRuns, eq(worldRecapLinkRuns.sessionId, sessions.id))
+    .where(
+      and(
+        eq(sessions.campaignId, campaignId),
+        isNotNull(worldRecapLinks.sentence),
+        eq(worldRecapLinkRuns.recapHash, currentHash),
+        sql`${sessions.startedAt} < (select bound.started_at from ${sessions} bound where bound.id = ${sessionId})`,
+      ),
+    )
+    .orderBy(worldRecapLinks.pageId, desc(sessions.startedAt));
+  return new Map(rows.map((row) => [row.pageId, row.sessionId]));
 }

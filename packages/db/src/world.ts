@@ -22,7 +22,9 @@ export type WorldPageKind = (typeof WORLD_PAGE_KINDS)[number];
 // "character" is a player character. Every other person or creature is an NPC.
 export const PERSON_KINDS = ["character", "npc"] as const satisfies readonly WorldPageKind[];
 
-export const QUEST_STATUSES = ["open", "resolved", "abandoned"] as const;
+// A quest the party stops pursuing stays open; it goes dormant once sessions
+// stop moving it, which is worked out from its history rather than stored.
+export const QUEST_STATUSES = ["open", "resolved"] as const;
 
 export interface WorldFact {
   // Stable within a page, so later sessions can supersede it.
@@ -146,8 +148,12 @@ export const worldUpdateSchema = z.object({
           .string()
           .nullable()
           .describe(
-            'One or two words such as "alive", "dead" or "missing". For quests: open, resolved or abandoned. Null keeps the current status',
+            'Not for quests. One or two words such as "alive", "dead" or "missing". Null keeps the current status',
           ),
+        questStatus: z
+          .enum(QUEST_STATUSES)
+          .nullable()
+          .describe("Quests only: open or resolved. Null keeps the current status"),
         newFacts: z
           .array(z.object({ text: z.string().describe("One self-contained sentence"), at }))
           .describe("What this session established about it that the page does not say yet"),
@@ -404,7 +410,9 @@ export function planWorldUpdate(
     }
     addPageNames(content, aliases, entry.references);
 
-    const status = entry.status?.trim().toLowerCase();
+    // A quest's status is one of QUEST_STATUSES, so the board and the prompts
+    // can tell open quests from finished ones.
+    const status = page.kind === "quest" ? entry.questStatus : entry.status?.trim().toLowerCase();
     if (status) content.status = status;
     if (page.kind === "item" && entry.holder?.trim()) content.holder = entry.holder.trim();
 

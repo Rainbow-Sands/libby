@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { nameKey } from "./world-links.ts";
 import {
+  QUEST_STATUSES,
   WORLD_PAGE_KINDS,
   slugify,
   uniqueNames,
@@ -109,6 +110,7 @@ export interface PlannedEdit {
   errors: string[];
 }
 
+const isQuestStatus = (status: string) => (QUEST_STATUSES as readonly string[]).includes(status);
 const clone = <T>(value: T): T => structuredClone(value);
 const latest = (target: EditPage) => target.revisions.at(-1)!.content;
 const factTexts = (content: WorldPageContent) => content.facts.map((f) => f.text);
@@ -218,9 +220,16 @@ export function planWorldEdit(world: EditWorld, changes: WorldEditChange[]): Pla
         });
         return;
       }
-      case "setStatus":
-        now.status = change.status?.trim().toLowerCase() || null;
+      case "setStatus": {
+        const status = change.status?.trim().toLowerCase() || null;
+        if (target.kind === "quest" && status !== null && !isQuestStatus(status)) {
+          return void errors.push(
+            `${label}: a quest's status is ${QUEST_STATUSES.join(" or ")}, not "${status}".`,
+          );
+        }
+        now.status = status;
         return;
+      }
       case "setHolder":
         now.holder = change.holder?.trim() || null;
         return;

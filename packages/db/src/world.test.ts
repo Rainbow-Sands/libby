@@ -25,6 +25,7 @@ function entry(overrides: Partial<WorldUpdate["pages"][number]>): WorldUpdate["p
     aliases: [],
     references: [],
     status: null,
+    questStatus: null,
     newFacts: [],
     supersededFacts: [],
     holder: null,
@@ -543,4 +544,25 @@ test("an NPC who turns out to be a player character keeps their page", () => {
     noRecap,
   );
   expect(plan.pages.map((page) => page.slug)).toEqual(["magister-venn"]);
+});
+
+test("a quest takes its status from questStatus, and other pages from status", () => {
+  const plan = planWorldUpdate(
+    [],
+    {
+      ...empty,
+      pages: [
+        entry({
+          name: "Find the children",
+          kind: "quest",
+          status: "completed",
+          questStatus: "resolved",
+        }),
+        entry({ name: "Doru", status: "Undead", questStatus: "resolved" }),
+      ],
+    },
+    "s5",
+    noRecap,
+  );
+  expect(plan.pages.map((page) => page.content.status)).toEqual(["resolved", "undead"]);
 });

@@ -206,6 +206,7 @@ export {
 export {
   clearRecapLinkRuns,
   getSessionRecapLinks,
+  lastMentionedBefore,
   nextRecapLinkStep,
   recordRecapLinkFailure,
   recordRecapLinks,

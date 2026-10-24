@@ -57,7 +57,6 @@
     new: "New",
     advanced: "Advanced",
     resolved: "Resolved",
-    abandoned: "Abandoned",
     open: "Still open",
   } as const;
 
@@ -228,7 +227,7 @@
         <h3>Open threads</h3>
         <ul class="threads">
           {#each sections.openThreads as thread, index (index)}
-            <li class:abandoned={thread.status === "abandoned"}>
+            <li>
               <span class="pill status-{thread.status}">{STATUS_LABELS[thread.status]}</span>
               <span
                 ><strong>{@render named(`openThreads.${index}`, thread.title)}</strong>
@@ -333,10 +332,6 @@
   .threads strong {
     color: var(--accent);
   }
-  .threads .abandoned strong,
-  .threads .abandoned strong :global(a) {
-    color: var(--ink-soft);
-  }
   .why {
     font-size: 0.92rem;
     color: var(--ink-soft);
@@ -367,10 +362,6 @@
     color: var(--ink-soft);
     background: var(--surface-sunken);
     border: 1px solid var(--edge);
-  }
-  .status-abandoned {
-    color: var(--ink-soft);
-    border: 1px dashed var(--ink-soft);
   }
   .loot-wrap {
     overflow-x: auto;

@@ -256,3 +256,21 @@ test("naming a reference makes it a name, and removing one drops it", () => {
   expect(after.aliases).toEqual(["the twins"]);
   expect(after.references).toEqual([]);
 });
+
+test("a quest's status is one of the quest statuses", () => {
+  const quest: EditPage = {
+    ...wine,
+    id: "q1",
+    slug: "find-the-children",
+    kind: "quest",
+    revisions: [{ sessionId: "s1", content: content({ name: "Find the children" }) }],
+  };
+  const quests: EditWorld = { ...world, pages: [quest], links: [] };
+  const set = (status: string) =>
+    planWorldEdit(quests, [{ op: "setStatus", page: "find-the-children", status }]);
+
+  expect(set("Resolved").pages[0].revisions[0].content.status).toBe("resolved");
+  expect(set("completed").errors).toEqual([
+    'Change 1 (setStatus): a quest\'s status is open or resolved, not "completed".',
+  ]);
+});
