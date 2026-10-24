@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, notInArray, or, sql } from "drizzle-orm";
 import { db, type DatabaseTransaction } from "./client.ts";
 import {
   sessions,
@@ -12,6 +12,8 @@ import {
   worldRecapLinks,
   worldUpdates,
 } from "./schema.ts";
+import { enqueueRecapLinks } from "./jobs.ts";
+import { renderRecapMarkdown, type SessionRecap } from "./session-notes.ts";
 import { nameKey } from "./world-links.ts";
 import {
   planWorldEdit,
@@ -46,6 +48,15 @@ export interface WorldEditSnapshot {
   // before, and the ones it added. Missing from edits saved before redirects.
   redirects?: { id: string; pageId: string }[];
   createdRedirectIds?: string[];
+  // Recaps the edit fixed, as they were, and the md5 of what it wrote, so undo
+  // can tell when a recap was regenerated since. Missing from edits saved
+  // before recaps could be fixed.
+  recaps?: {
+    sessionId: string;
+    recapSections: SessionRecap;
+    recap: string | null;
+    writtenHash: string;
+  }[];
   createdPageIds: string[];
   // The campaign's newest world update time when the edit was applied, read
   // from the same column it is compared with so clocks never mix.
@@ -88,14 +99,17 @@ async function loadEditWorld(
     );
   };
   const refs = edit.changes.flatMap((change) =>
-    change.op === "merge" ? [change.page, change.into] : [change.page],
+    change.op === "merge" ? [change.page, change.into] : "page" in change ? [change.page] : [],
+  );
+  const changesRecaps = edit.changes.some(
+    (change) => change.op === "editRecap" || change.op === "replaceInRecaps",
   );
   const ids = [...new Set(refs.map(resolve).flatMap((page) => (page ? [page.id] : [])))];
   const removing = edit.changes.flatMap((change) =>
     change.op === "merge" ? [resolve(change.page)?.slug].filter((s) => s !== undefined) : [],
   );
 
-  const [rows, revisions, links] = await Promise.all([
+  const [rows, revisions, links, recaps] = await Promise.all([
     ids.length ? queryable.select().from(worldPages).where(inArray(worldPages.id, ids)) : [],
     ids.length
       ? queryable
@@ -130,6 +144,13 @@ async function loadEditWorld(
             ),
           )
       : ([] as EditLink[]),
+    changesRecaps
+      ? queryable
+          .select({ sessionId: sessions.id, recap: sessions.recapSections })
+          .from(sessions)
+          .where(and(eq(sessions.campaignId, campaignId), isNotNull(sessions.recapSections)))
+          .orderBy(asc(sessions.startedAt))
+      : [],
   ]);
 
   const pages: EditPage[] = rows.map((row) => ({
@@ -149,6 +170,9 @@ async function loadEditWorld(
       slugs: new Set([...summary.map((page) => page.slug), ...redirectSlugs]),
       sessionOrder: order.map((row) => row.id),
       links,
+      recaps: recaps.flatMap((row) =>
+        row.recap ? [{ sessionId: row.sessionId, sections: row.recap.sections }] : [],
+      ),
     },
     rows,
   };
@@ -187,7 +211,7 @@ export async function applyWorldEdit(
   userId: string,
   edit: WorldEdit,
 ): Promise<{ editId: string; preview: WorldEditPreview }> {
-  return db.transaction(async (tx) => {
+  const applied = await db.transaction(async (tx) => {
     await lockWorld(tx, campaignId);
     const { world, rows } = await loadEditWorld(campaignId, edit, tx);
     const planned = planWorldEdit(world, edit.changes);
@@ -245,16 +269,19 @@ export async function applyWorldEdit(
         from (values ${values}) as v(id, kind, created_in)
         where p.id = v.id`);
     }
-    await tx.delete(worldPageRevisions).where(inArray(worldPageRevisions.pageId, keptIds));
-    await tx.insert(worldPageRevisions).values(
-      kept.flatMap((page) =>
-        page.revisions.map((revision) => ({
-          pageId: ids.get(page.slug)!,
-          sessionId: revision.sessionId,
-          content: revision.content,
-        })),
-      ),
-    );
+    // An edit that only fixes recaps touches no page.
+    if (kept.length) {
+      await tx.delete(worldPageRevisions).where(inArray(worldPageRevisions.pageId, keptIds));
+      await tx.insert(worldPageRevisions).values(
+        kept.flatMap((page) =>
+          page.revisions.map((revision) => ({
+            pageId: ids.get(page.slug)!,
+            sessionId: revision.sessionId,
+            content: revision.content,
+          })),
+        ),
+      );
+    }
 
     const recapLinks: { id: string; pageId: string }[] = [];
     const redirects: { id: string; pageId: string }[] = [];
@@ -323,6 +350,29 @@ export async function applyWorldEdit(
       [...planned.links].map(([revisionId, related]) => ({ revisionId, related })),
     );
 
+    const recapSnapshots: NonNullable<WorldEditSnapshot["recaps"]> = [];
+    for (const fixed of planned.recaps) {
+      const [before] = await tx
+        .select({ recapSections: sessions.recapSections, recap: sessions.recap })
+        .from(sessions)
+        .where(eq(sessions.id, fixed.sessionId));
+      if (!before?.recapSections) continue;
+      const [written] = await tx
+        .update(sessions)
+        .set({
+          recapSections: { ...before.recapSections, sections: fixed.sections },
+          recap: renderRecapMarkdown(fixed.sections),
+        })
+        .where(eq(sessions.id, fixed.sessionId))
+        .returning({ hash: sql<string>`md5(${sessions.recapSections}::text)` });
+      recapSnapshots.push({
+        sessionId: fixed.sessionId,
+        recapSections: before.recapSections,
+        recap: before.recap,
+        writtenHash: written.hash,
+      });
+    }
+
     const snapshot: WorldEditSnapshot = {
       pages: rows,
       revisions,
@@ -331,6 +381,7 @@ export async function applyWorldEdit(
       recapLinks,
       redirects,
       createdRedirectIds,
+      recaps: recapSnapshots,
       links: world.links
         .filter((link) => planned.links.has(link.revisionId))
         .map((link) => ({ revisionId: link.revisionId, related: link.related })),
@@ -351,6 +402,18 @@ export async function applyWorldEdit(
     }
     return { editId: saved.id, preview };
   });
+  if (applied.preview.recaps.length) await relinkRecaps(campaignId);
+  return applied;
+}
+
+// A fixed recap has new text, so its links to the world are worked out again.
+// The fix stands either way; the links catch up on the next world update.
+async function relinkRecaps(campaignId: string): Promise<void> {
+  try {
+    await enqueueRecapLinks({ campaignId });
+  } catch (error) {
+    console.error(`[world-edit] could not queue recap links for ${campaignId}:`, error);
+  }
 }
 
 // Puts back every row the edit touched. Refused once a world update or another
@@ -360,7 +423,7 @@ export async function undoWorldEdit(
   editId: string,
   userId: string,
 ): Promise<void> {
-  await db.transaction(async (tx) => {
+  const restoredRecaps = await db.transaction(async (tx) => {
     await lockWorld(tx, campaignId);
     const [edit] = await tx
       .select()
@@ -392,6 +455,23 @@ export async function undoWorldEdit(
     }
 
     const snapshot = edit.snapshot;
+    for (const recap of snapshot.recaps ?? []) {
+      const [current] = await tx
+        .select({ hash: sql<string | null>`md5(${sessions.recapSections}::text)` })
+        .from(sessions)
+        .where(eq(sessions.id, recap.sessionId));
+      if (current?.hash !== recap.writtenHash) {
+        throw new WorldEditError(
+          "A recap this fixed has been rewritten since, so it can't be undone. Ask Libby for a new fix instead.",
+        );
+      }
+    }
+    for (const recap of snapshot.recaps ?? []) {
+      await tx
+        .update(sessions)
+        .set({ recapSections: recap.recapSections, recap: recap.recap })
+        .where(eq(sessions.id, recap.sessionId));
+    }
     const touched = [...snapshot.pages.map((page) => page.id), ...snapshot.createdPageIds];
     if (touched.length) {
       await tx.delete(worldPageMoments).where(inArray(worldPageMoments.pageId, touched));
@@ -477,7 +557,9 @@ export async function undoWorldEdit(
       .update(worldCorrections)
       .set({ retiredAt: new Date() })
       .where(eq(worldCorrections.editId, editId));
+    return Boolean(snapshot.recaps?.length);
   });
+  if (restoredRecaps) await relinkRecaps(campaignId);
 }
 
 // The standing notes recaps and world updates follow, oldest first.

@@ -266,5 +266,7 @@ export {
   type WorldEditChange,
   type WorldEditPagePreview,
   type WorldEditPreview,
+  type WorldEditRecapPreview,
   type WorldEditRow,
 } from "./world-edits.ts";
+export { formatRecapFields, type RecapChange } from "./recap-edits.ts";

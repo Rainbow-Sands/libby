@@ -1,10 +1,12 @@
 import {
+  formatRecapFields,
   formatTranscriptForInference,
   getWorldPageHistory,
   previewCampaignWorldEdit,
   summaryLine,
   worldEditSchema,
   type CampaignCastMember,
+  type RecapSections,
   type SessionLedger,
   type Transcript,
   type WorldPageContent,
@@ -59,7 +61,8 @@ export const CAMPAIGN_CHAT_SYSTEM = `You are Libby, a spirit librarian who dwell
 - Set remember to one sentence when the mistake could happen again in later sessions, such as two names that are easy to confuse or a thing recorded as the wrong kind. Leave it null for one-off updates, such as who holds an item now.
 - If proposeChanges returns problems, correct the proposal and call it again.
 - You never apply changes yourself. The person reviews your proposal on a card and applies it. After proposing, explain the fix in a sentence or two without repeating the card's details. Never say you have updated, changed or fixed anything: say what the proposal would do.
-- You cannot change recaps or transcripts. Say so if asked.
+- Recaps can be fixed too. Read the session with readSession first: its recap fields are listed with their ids in square brackets. Use editRecap to replace the exact words in one field, quoting enough of the sentence that they occur once, and replaceInRecaps for a name or phrase that is wrong in many recaps, such as a misspelling. When a wrong detail is in both a recap and the wiki, fix both in one proposal.
+- You cannot change transcripts. Say so if asked.
 
 Keep answers short and grounded in what happened at the table. Stay warm, in the voice of a kindly librarian, with any flourish light enough that it never gets in the way.`;
 
@@ -140,6 +143,9 @@ export function buildCampaignSystem(material: CampaignChatMaterial): SystemModel
 export interface SessionViewMaterial {
   session: WorldSession;
   recap: string | null;
+  // The recap's fields with their ids, for fixing; null for an older recap
+  // written as one block of text.
+  recapSections: RecapSections | null;
   ledger: SessionLedger | null;
   detailedRecord: string | null;
   transcript: Transcript | null;
@@ -152,6 +158,9 @@ export function buildViewSystem(
   const parts = [tagged("current_view", view)];
   if (session) {
     if (session.recap) parts.push(tagged("session_recap", session.recap));
+    if (session.recapSections) {
+      parts.push(tagged("session_recap_fields", formatRecapFields(session.recapSections)));
+    }
     if (session.ledger) parts.push(tagged("session_ledger", JSON.stringify(session.ledger)));
     if (session.detailedRecord) parts.push(tagged("session_record", session.detailedRecord));
     // The transcript is long, so it is read with readTranscript only when the
@@ -210,7 +219,8 @@ export function campaignChatTools(sources: ChatToolSources) {
       },
     }),
     readSession: tool({
-      description: "Read a session's recap and its ledger, the structured record of what happened.",
+      description:
+        "Read a session's recap, with the id of each recap field for fixing it, and its ledger, the structured record of what happened.",
       inputSchema: z.object({ session: sessionRef }),
       execute: async ({ session }) => {
         const found = findSession(sources.sessions, session);
@@ -219,6 +229,9 @@ export function campaignChatTools(sources: ChatToolSources) {
         return [
           formatSessionLine(found),
           material.recap ?? "No recap yet.",
+          material.recapSections
+            ? `Recap fields, by id:\n${formatRecapFields(material.recapSections)}`
+            : "",
           material.ledger ? `Ledger:\n${JSON.stringify(material.ledger)}` : "",
           material.detailedRecord ?? "",
         ]
@@ -243,7 +256,11 @@ export function campaignChatTools(sources: ChatToolSources) {
       inputSchema: worldEditSchema,
       execute: async (edit): Promise<ProposedWorldEdit> => {
         const preview = await previewCampaignWorldEdit(sources.campaignId, edit);
-        const mentioned = [preview.fromSessionId, ...preview.pages.map((p) => p.fromSessionId)];
+        const mentioned = [
+          preview.fromSessionId,
+          ...preview.pages.map((p) => p.fromSessionId),
+          ...preview.recaps.flatMap((group) => group.sessionIds),
+        ];
         return {
           ...preview,
           sessionNumbers: Object.fromEntries(
@@ -258,7 +275,7 @@ export function campaignChatTools(sources: ChatToolSources) {
         type: "text",
         value: output.errors.length
           ? `Problems, nothing was shown: ${output.errors.join(" ")}`
-          : `Shown to the person for review, not applied yet: ${output.pages.length} pages affected.`,
+          : `Shown to the person for review, not applied yet: ${output.pages.length} pages and ${output.recaps.flatMap((group) => group.sessionIds).length} recaps affected.`,
       }),
     }),
   };

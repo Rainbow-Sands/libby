@@ -16,6 +16,12 @@
 
   const pageCount = $derived(proposal.pages.length + proposal.relinked.length);
   const changeCount = $derived(proposal.changes.length);
+  const recapSessions = $derived([
+    ...new Set(proposal.recaps.flatMap((group) => group.sessionIds)),
+  ]);
+  // A name fixed across many recaps shows its first few mentions.
+  const RECAP_PREVIEW = 3;
+  let expanded = $state<Record<number, boolean>>({});
 
   function session(id: string | null): string | null {
     const number = id ? proposal.sessionNumbers[id] : undefined;
@@ -75,11 +81,66 @@
     <header>
       <h4>{changeCount} {changeCount === 1 ? "change" : "changes"}</h4>
       <span class="scope">
-        {#if session(proposal.fromSessionId)}Affects {session(proposal.fromSessionId)} onwards ·{/if}
-        {pageCount}
-        {pageCount === 1 ? "page" : "pages"}
+        {#if recapSessions.length === 1}
+          {session(recapSessions[0])} recap{#if pageCount}&nbsp;·{/if}
+        {:else if recapSessions.length}
+          {recapSessions.length} recaps{#if pageCount}&nbsp;·{/if}
+        {:else if session(proposal.fromSessionId)}
+          Affects {session(proposal.fromSessionId)} onwards ·
+        {/if}
+        {#if pageCount || !recapSessions.length}
+          {pageCount}
+          {pageCount === 1 ? "page" : "pages"}
+        {/if}
       </span>
     </header>
+
+    {#each proposal.recaps as group, groupIndex (groupIndex)}
+      {@const shown =
+        group.find !== null && !expanded[groupIndex] ? group.rows.slice(0, RECAP_PREVIEW) : group.rows}
+      <section class="change">
+        <div class="change-head">
+          {#if group.find !== null}
+            <span class="pill recap">Recaps</span>
+            <span class="name">“{group.find}” → “{group.replace}”</span>
+            <span class="kind">
+              {group.rows.length}
+              {group.rows.length === 1 ? "mention" : "mentions"} in {group.sessionIds.length}
+              {group.sessionIds.length === 1 ? "session" : "sessions"}
+            </span>
+          {:else}
+            <span class="pill recap">Recap</span>
+            <a class="name" href="/campaigns/{campaignId}/sessions/{group.sessionIds[0]}">
+              {session(group.sessionIds[0])}
+            </a>
+          {/if}
+        </div>
+        <dl class="diff">
+          {#each shown as row, index (index)}
+            <dt>
+              {#if group.find !== null}
+                <a href="/campaigns/{campaignId}/sessions/{row.sessionId}">{session(row.sessionId)}</a>
+              {:else}
+                {row.label}
+              {/if}
+            </dt>
+            <dd>
+              {#if group.find !== null}{row.label}:{" "}{/if}{row.before}<del>{row.removed}</del
+              >{" "}<ins>{row.added}</ins>{row.after}
+            </dd>
+          {/each}
+        </dl>
+        {#if group.find !== null && group.rows.length > RECAP_PREVIEW}
+          <button
+            class="more"
+            type="button"
+            onclick={() => (expanded = { ...expanded, [groupIndex]: !expanded[groupIndex] })}
+          >
+            {expanded[groupIndex] ? "Show fewer" : `Show all ${group.rows.length} mentions`}
+          </button>
+        {/if}
+      </section>
+    {/each}
 
     {#each proposal.pages as page (page.slug)}
       <section class="change">
@@ -241,6 +302,10 @@
     background: var(--warn-soft);
     color: var(--accent-bright);
   }
+  .pill.recap {
+    background: var(--recap-soft);
+    color: var(--recap);
+  }
   .pill.links {
     background: var(--warn-soft);
     color: var(--warn);
@@ -298,6 +363,14 @@
     border: 1px solid var(--edge);
     border-radius: 4px;
     cursor: pointer;
+  }
+  button.more {
+    justify-self: start;
+    font-family: inherit;
+    font-size: 0.9rem;
+    letter-spacing: 0;
+    color: var(--link);
+    background: none;
   }
   button.primary {
     color: var(--surface);
