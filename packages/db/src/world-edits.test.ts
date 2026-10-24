@@ -6,6 +6,7 @@ import {
   type EditWorld,
   type WorldEdit,
 } from "./world-edits.ts";
+import type { RecapSections } from "./session-notes.ts";
 import { planWorldUpdate, type WorldPageContent } from "./world.ts";
 
 function content(overrides: Partial<WorldPageContent>): WorldPageContent {
@@ -334,4 +335,134 @@ test("names and facts a person removed stay out of later sessions", () => {
     [{ op: "addAlias", page: "Wizard of Wines", alias: "Wizard of Lines" }],
   );
   expect(restored.pages[0].revisions[0].content.removed?.names).toEqual([]);
+});
+
+function recap(sessionId: string, overrides: Partial<RecapSections>) {
+  return {
+    sessionId,
+    sections: {
+      recap: "",
+      leftOff: "",
+      openThreads: [],
+      loot: [],
+      epicMoments: [],
+      newFaces: [],
+      rulings: [],
+      ...overrides,
+    } satisfies RecapSections,
+  };
+}
+
+test("a recap fix replaces the quoted words in one field", () => {
+  const recaps = [
+    recap("s2", {
+      recap: "When the ghouls rushed the gate, Ismark struck down the first. Ismark then rested.",
+      epicMoments: [
+        { description: "Ismark fells the ghoul.", quote: null, speaker: null, at: null },
+      ],
+    }),
+  ];
+  const edit = (changes: WorldEdit["changes"]) => {
+    const planned = planWorldEdit({ ...world, recaps }, changes);
+    return {
+      planned,
+      preview: previewWorldEdit(world, { summary: "", remember: null, changes }, planned),
+    };
+  };
+
+  const { planned, preview } = edit([
+    {
+      op: "editRecap",
+      session: "2",
+      field: "recap",
+      find: "Ismark struck",
+      replace: "Ireena struck",
+    },
+    { op: "editRecap", session: "s2", field: "epicMoments.0", find: "Ismark", replace: "Ireena" },
+  ]);
+  expect(planned.errors).toEqual([]);
+  expect(planned.recaps[0].sections.recap).toBe(
+    "When the ghouls rushed the gate, Ireena struck down the first. Ismark then rested.",
+  );
+  expect(planned.recaps[0].sections.epicMoments[0].description).toBe("Ireena fells the ghoul.");
+  expect(recaps[0].sections.recap).toContain("Ismark struck");
+  expect(preview.recaps).toEqual([
+    {
+      find: null,
+      replace: null,
+      sessionIds: ["s2"],
+      rows: [
+        {
+          sessionId: "s2",
+          field: "recap",
+          label: "Recap",
+          before: "When the ghouls rushed the gate, ",
+          removed: "Ismark struck",
+          added: "Ireena struck",
+          after: " down the first. Ismark then rested.",
+        },
+        {
+          sessionId: "s2",
+          field: "epicMoments.0",
+          label: "Epic moment",
+          before: "",
+          removed: "Ismark",
+          added: "Ireena",
+          after: " fells the ghoul.",
+        },
+      ],
+    },
+  ]);
+  expect(preview.fromSessionId).toBe("s2");
+
+  expect(
+    edit([{ op: "editRecap", session: "s2", field: "recap", find: "Ismark", replace: "Ireena" }])
+      .planned.errors,
+  ).toEqual([
+    'Change 1 (editRecap): "Ismark" appears 2 times in recap; quote more of the sentence.',
+  ]);
+  expect(
+    edit([{ op: "editRecap", session: "s2", field: "loot.0", find: "x", replace: "y" }]).planned
+      .errors,
+  ).toEqual(['Change 1 (editRecap): the recap has no field "loot.0".']);
+});
+
+test("a name is replaced as whole words across every recap", () => {
+  const recaps = [
+    recap("s1", {
+      recap: "Roosevelta, the burgomaster's wife, met Rooseveltan guards.",
+      newFaces: [{ name: "Roosevelta", kind: "npc" }],
+    }),
+    recap("s3", {
+      openThreads: [{ title: "Find Roosevelta's ring", status: "open", note: "", at: null }],
+    }),
+    recap("s4", { recap: "Nothing about her." }),
+  ];
+  const changes: WorldEdit["changes"] = [
+    { op: "replaceInRecaps", find: "Roosevelta", replace: "Rosavalda" },
+  ];
+  const planned = planWorldEdit({ ...world, recaps }, changes);
+  expect(planned.errors).toEqual([]);
+  expect(planned.recaps.map((r) => r.sessionId)).toEqual(["s1", "s3"]);
+  expect(planned.recaps[0].sections.recap).toBe(
+    "Rosavalda, the burgomaster's wife, met Rooseveltan guards.",
+  );
+  expect(planned.recaps[1].sections.openThreads[0].title).toBe("Find Rosavalda's ring");
+  const preview = previewWorldEdit(world, { summary: "", remember: null, changes }, planned);
+  expect(preview.recaps).toHaveLength(1);
+  expect(preview.recaps[0]).toMatchObject({
+    find: "Roosevelta",
+    replace: "Rosavalda",
+    sessionIds: ["s1", "s3"],
+  });
+  expect(preview.recaps[0].rows.map((row) => row.field)).toEqual([
+    "recap",
+    "newFaces.0",
+    "openThreads.0",
+  ]);
+
+  expect(
+    planWorldEdit({ ...world, recaps }, [{ op: "replaceInRecaps", find: "Strahd", replace: "S" }])
+      .errors,
+  ).toEqual(['Change 1 (replaceInRecaps): no recap mentions "Strahd".']);
 });

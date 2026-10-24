@@ -31,6 +31,8 @@ html {
   --warn-soft: #f3e1b8;
   --info: #2f5470;
   --info-soft: #d6e2ea;
+  --recap: #6b4f12;
+  --recap-soft: #efe1bd;
   color-scheme: light;
 }
 
@@ -55,6 +57,8 @@ html {
     --warn-soft: #3a2c14;
     --info: #9cc0dc;
     --info-soft: #1c2a35;
+    --recap: #e4c27a;
+    --recap-soft: #33280f;
     color-scheme: dark;
   }
 }
@@ -78,6 +82,8 @@ html {
   --warn-soft: #3a2c14;
   --info: #9cc0dc;
   --info-soft: #1c2a35;
+  --recap: #e4c27a;
+  --recap-soft: #33280f;
   color-scheme: dark;
 }
 

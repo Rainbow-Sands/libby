@@ -79,7 +79,14 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
         : null,
       detail.transcriptArtifact ? loadTranscriptArtifact(detail.transcriptArtifact) : null,
     ]);
-    return { session, recap: detail.recap, ledger, detailedRecord, transcript };
+    return {
+      session,
+      recap: detail.recap,
+      recapSections: detail.recapSections?.sections ?? null,
+      ledger,
+      detailedRecord,
+      transcript,
+    };
   }
 
   let view = `The person is on the campaign's home page.`;

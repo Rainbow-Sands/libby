@@ -1,4 +1,13 @@
 import { z } from "zod";
+import {
+  exactly,
+  recapTextFields,
+  replaceInField,
+  setRecapField,
+  wholeWords,
+  type RecapChange,
+} from "./recap-edits.ts";
+import type { RecapSections } from "./session-notes.ts";
 import { nameKey } from "./world-links.ts";
 import {
   QUEST_STATUSES,
@@ -54,6 +63,22 @@ export const worldEditChangeSchema = z.discriminatedUnion("op", [
     aliases: z.array(z.string()).describe("Other names that move to the new page"),
     summary: z.string().describe("Two or three sentences describing the new page"),
   }),
+  z.object({
+    op: z.literal("editRecap"),
+    session: z.string().describe("The session's id in square brackets, or its number"),
+    field: z.string().describe("The recap field's id from readSession, such as recap or loot.2"),
+    find: z
+      .string()
+      .describe("The exact words to replace, as the field has them, long enough to occur once"),
+    replace: z.string(),
+  }),
+  z.object({
+    op: z.literal("replaceInRecaps"),
+    find: z
+      .string()
+      .describe("A name or phrase, replaced wherever it appears as whole words in any recap"),
+    replace: z.string(),
+  }),
 ]);
 
 export const worldEditSchema = z.object({
@@ -96,8 +121,16 @@ export interface EditLink {
   related: string[];
 }
 
+// A session's recap as an edit sees it.
+export interface EditRecap {
+  sessionId: string;
+  sections: RecapSections;
+}
+
 export interface EditWorld {
   pages: EditPage[];
+  // Every recap in the campaign, loaded only for an edit that changes recaps.
+  recaps?: EditRecap[];
   // Every slug in the campaign, so a new page never reuses one.
   slugs: Set<string>;
   // Session ids in play order.
@@ -109,6 +142,10 @@ export interface PlannedEdit {
   pages: EditPage[];
   // Revision id to its new related list.
   links: Map<string, string[]>;
+  // The recaps the edit changes, as they would read.
+  recaps: EditRecap[];
+  // Each replaced stretch of recap text, with the index of its change.
+  recapChanges: (RecapChange & { change: number })[];
   errors: string[];
 }
 
@@ -148,8 +185,63 @@ export function planWorldEdit(world: EditWorld, changes: WorldEditChange[]): Pla
   const sortRevisions = (revisions: EditRevision[]) =>
     revisions.toSorted((a, b) => (order.get(a.sessionId) ?? 0) - (order.get(b.sessionId) ?? 0));
 
+  const recaps = (world.recaps ?? []).map(clone);
+  const changedRecaps = new Set<string>();
+  const recapChanges: PlannedEdit["recapChanges"] = [];
+  const findRecap = (ref: string): EditRecap | undefined => {
+    const number = Number(ref.replace(/^session\s*/i, ""));
+    const id = Number.isInteger(number) ? (world.sessionOrder[number - 1] ?? ref) : ref;
+    return recaps.find((recap) => recap.sessionId === ref || recap.sessionId === id);
+  };
+
   changes.forEach((change, index) => {
     const label = `Change ${index + 1} (${change.op})`;
+    if (change.op === "editRecap") {
+      const recap = findRecap(change.session);
+      if (!recap) return void errors.push(`${label}: session ${change.session} has no recap.`);
+      const field = recapTextFields(recap.sections).find((entry) => entry.field === change.field);
+      if (!field) {
+        return void errors.push(`${label}: the recap has no field "${change.field}".`);
+      }
+      const found = change.find ? field.text.split(change.find).length - 1 : 0;
+      if (found !== 1) {
+        return void errors.push(
+          found
+            ? `${label}: "${change.find}" appears ${found} times in ${change.field}; quote more of the sentence.`
+            : `${label}: ${change.field} does not contain "${change.find}".`,
+        );
+      }
+      const replaced = replaceInField(field.text, exactly(change.find), change.replace, {
+        sessionId: recap.sessionId,
+        field: field.field,
+        label: field.label,
+      });
+      setRecapField(recap.sections, field.field, replaced.text);
+      changedRecaps.add(recap.sessionId);
+      recapChanges.push(...replaced.changes.map((c) => ({ ...c, change: index })));
+      return;
+    }
+    if (change.op === "replaceInRecaps") {
+      const phrase = change.find.trim();
+      if (!phrase) return void errors.push(`${label}: there is nothing to find.`);
+      let count = 0;
+      for (const recap of recaps) {
+        for (const field of recapTextFields(recap.sections)) {
+          const replaced = replaceInField(field.text, wholeWords(phrase), change.replace, {
+            sessionId: recap.sessionId,
+            field: field.field,
+            label: field.label,
+          });
+          if (!replaced.changes.length) continue;
+          setRecapField(recap.sections, field.field, replaced.text);
+          changedRecaps.add(recap.sessionId);
+          recapChanges.push(...replaced.changes.map((c) => ({ ...c, change: index })));
+          count += replaced.changes.length;
+        }
+      }
+      if (!count) errors.push(`${label}: no recap mentions "${phrase}".`);
+      return;
+    }
     const target = find(change.page);
     if (!target) {
       errors.push(`${label}: no page is called "${change.page}".`);
@@ -397,7 +489,13 @@ export function planWorldEdit(world: EditWorld, changes: WorldEditChange[]): Pla
     }
   });
 
-  return { pages, links, errors };
+  return {
+    pages,
+    links,
+    recaps: recaps.filter((recap) => changedRecaps.has(recap.sessionId)),
+    recapChanges,
+    errors,
+  };
 }
 
 // What the confirmation card shows for one page: each changed field as the
@@ -420,11 +518,23 @@ export interface WorldEditPagePreview {
   rows: WorldEditRow[];
 }
 
+// The recap text one group of changes replaces: one session's fixes, or one
+// name replaced across every recap.
+export interface WorldEditRecapPreview {
+  // For a name replaced across recaps, what it replaces; null for one
+  // session's fixes.
+  find: string | null;
+  replace: string | null;
+  sessionIds: string[];
+  rows: RecapChange[];
+}
+
 export interface WorldEditPreview {
   summary: string;
   remember: string | null;
   changes: WorldEditChange[];
   errors: string[];
+  recaps: WorldEditRecapPreview[];
   pages: WorldEditPagePreview[];
   // Other pages whose links move to the page a merge keeps.
   relinked: string[];
@@ -525,6 +635,33 @@ export function previewWorldEdit(
     });
   }
 
+  const recaps: WorldEditRecapPreview[] = [];
+  for (const row of planned.recapChanges) {
+    const change = edit.changes[row.change];
+    const bulk = change?.op === "replaceInRecaps" ? change : null;
+    let group = recaps.find((candidate) =>
+      bulk
+        ? candidate.find === bulk.find && candidate.replace === bulk.replace
+        : candidate.find === null && candidate.sessionIds[0] === row.sessionId,
+    );
+    if (!group) {
+      group = {
+        find: bulk?.find ?? null,
+        replace: bulk?.replace ?? null,
+        sessionIds: [],
+        rows: [],
+      };
+      recaps.push(group);
+    }
+    if (!group.sessionIds.includes(row.sessionId)) group.sessionIds.push(row.sessionId);
+    const { change: _, ...shown } = row;
+    group.rows.push(shown);
+  }
+  for (const group of recaps) {
+    group.sessionIds.sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
+    group.rows.sort((a, b) => (order.get(a.sessionId) ?? 0) - (order.get(b.sessionId) ?? 0));
+  }
+
   const relinked = [
     ...new Set(
       world.links.filter((link) => planned.links.has(link.revisionId)).map((link) => link.pageName),
@@ -535,8 +672,12 @@ export function previewWorldEdit(
     remember: edit.remember?.trim() || null,
     changes: edit.changes,
     errors: planned.errors,
+    recaps,
     pages,
     relinked,
-    fromSessionId: earliest(pages.map((p) => p.fromSessionId)),
+    fromSessionId: earliest([
+      ...pages.map((p) => p.fromSessionId),
+      ...recaps.flatMap((group) => group.sessionIds),
+    ]),
   };
 }
