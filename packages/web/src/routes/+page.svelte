@@ -21,8 +21,12 @@
     <h1>No campaigns yet</h1>
     <TaperedRule />
     <p class="muted">
-      You are not in any campaigns. Ask your Dungeon Master to add you, and they will appear here.
+      You are not in any campaigns. Ask your Dungeon Master for an invite link, and your campaigns
+      will appear here.
     </p>
+    {#if data.canCreate}
+      <p><a class="btn" href="/campaigns/new">New campaign</a></p>
+    {/if}
   </div>
 {:else if data.campaigns.length === 0}
   <div class="panel hero">
@@ -37,7 +41,12 @@
   </div>
 {:else}
   <p class="eyebrow">From the Mirrorways</p>
-  <h1>Campaigns</h1>
+  <div class="title-row">
+    <h1>Campaigns</h1>
+    {#if data.canCreate}
+      <a class="btn quiet" href="/campaigns/new">New campaign</a>
+    {/if}
+  </div>
   <TaperedRule />
   <ul class="campaigns">
     {#each data.campaigns as campaign (campaign.id)}
@@ -63,6 +72,13 @@
   }
   .hero .btn {
     margin-top: 0.5rem;
+  }
+  .title-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
   }
   .campaigns {
     list-style: none;

@@ -27,6 +27,7 @@ export {
   PROCESSING_RUN_STATUSES,
   RECOVERABLE_SESSION_STATUSES,
   SESSION_STATUSES,
+  SUBSCRIPTION_STATUSES,
   TRANSCRIPTION_STATUSES,
   WORLD_UPDATE_STATUSES,
   type AudioStatus,
@@ -37,6 +38,7 @@ export {
   type ProcessingRunStatus,
   type RecoverableSessionStatus,
   type SessionStatus,
+  type SubscriptionStatus,
   type TranscriptionStatus,
   type WorldUpdateStatus,
 } from "./domain.ts";
@@ -52,10 +54,30 @@ export {
 export {
   createCampaign,
   addCampaignMember,
+  ensureCampaignInviteCode,
+  getCampaignInvite,
+  getCampaignSettings,
+  getUnlinkedCampaignsForDm,
+  joinCampaign,
+  linkCampaignToGuild,
+  recordUserSignIn,
   removeCampaignMember,
-  type CreateCampaignInput,
+  resetCampaignInviteCode,
+  setCharacterName,
+  updateCampaignDetails,
   type AddCampaignMemberInput,
+  type CampaignInvite,
+  type CampaignSettings,
+  type CreateCampaignInput,
+  type LinkableCampaign,
+  type LinkCampaignResult,
 } from "./campaigns.ts";
+export {
+  canCreateCampaigns,
+  listUsersForAdmin,
+  setSubscriptionStatus,
+  type AdminUserSummary,
+} from "./users.ts";
 export {
   getCampaignName,
   getCampaignSessionStats,

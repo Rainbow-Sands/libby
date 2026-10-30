@@ -8,7 +8,7 @@ export async function requireDmOfCampaign(
   interaction: ChatInputCommandInteraction,
   campaignId: string,
   action = "manage players",
-): Promise<{ guildId: string; dmId: string | null } | null> {
+): Promise<{ guildId: string | null; dmId: string | null } | null> {
   const meta = await getCampaignMeta(campaignId);
   if (!meta || meta.guildId !== interaction.guildId) {
     await interaction.reply("That campaign does not exist in this server.");

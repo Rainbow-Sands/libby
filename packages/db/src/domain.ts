@@ -4,6 +4,9 @@ export const CAMPAIGN_MEMBER_ROLES = ["dm", "player"] as const;
 export type CampaignMemberRole = ValueOf<typeof CAMPAIGN_MEMBER_ROLES>;
 export type CampaignAccessRole = CampaignMemberRole | "admin";
 
+export const SUBSCRIPTION_STATUSES = ["none", "active"] as const;
+export type SubscriptionStatus = ValueOf<typeof SUBSCRIPTION_STATUSES>;
+
 export const SESSION_STATUSES = [
   "recording",
   "closing",

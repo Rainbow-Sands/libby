@@ -227,6 +227,28 @@ p {
   border-color: var(--gold);
 }
 
+/* ── Form fields ─────────────────────────────────────────────────────────── */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.input {
+  font: inherit;
+  padding: 0.45rem 0.6rem;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+}
+.input:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
+.form-error {
+  color: var(--accent-bright);
+}
+
 /* ── Breadcrumbs ──────────────────────────────────────────────────────────── */
 .crumbs {
   display: flex;

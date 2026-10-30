@@ -159,11 +159,17 @@
         {/if}
       </section>
 
-      {#if data.canSchedule}
+      {#if data.canManage}
         <section class="box">
-          <h2>Schedule</h2>
-          <p class="muted schedule-note">Session reminders and the recap rotation.</p>
-          <a class="btn quiet schedule" href="/campaigns/{data.campaign.id}/schedule">Edit schedule</a>
+          <h2>Manage</h2>
+          <ul class="manage">
+            <li>
+              <a href="/campaigns/{data.campaign.id}/members">Members and invites</a>
+              <span class="muted">{data.campaign.members.length}</span>
+            </li>
+            <li><a href="/campaigns/{data.campaign.id}/schedule">Schedule and recaps</a></li>
+            <li><a href="/campaigns/{data.campaign.id}/settings">Campaign settings</a></li>
+          </ul>
         </section>
       {/if}
     </aside>
@@ -289,13 +295,27 @@
   .box-head a {
     font-size: 0.95rem;
   }
-  .box .empty,
-  .schedule-note {
+  .box .empty {
     margin: 0;
     font-size: 0.95rem;
   }
-  .schedule {
-    justify-self: start;
+  .manage {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--edge);
+    border-radius: 4px;
+    background: var(--surface);
+  }
+  .manage li {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.45rem 0.75rem;
+    border-bottom: 1px solid var(--edge);
+  }
+  .manage li:last-child {
+    border-bottom: 0;
   }
   .world {
     display: grid;

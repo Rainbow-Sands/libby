@@ -2,9 +2,7 @@ import { error, fail, redirect } from "@sveltejs/kit";
 import {
   REMINDER_LEAD_MS,
   WEEKDAYS,
-  getCampaignAccess,
   getCampaignDetail,
-  getCampaignMeta,
   getCampaignReminder,
   getRecapRotation,
   nextSessionAfter,
@@ -12,20 +10,10 @@ import {
   parseTimeOfDay,
   setCampaignReminderSchedule,
   setRecapRotation,
+  skipCampaignRecapper,
 } from "@rainbot/db";
+import { requireCampaignManager as requireScheduleAccess } from "$lib/server/campaign-access";
 import type { Actions, PageServerLoad } from "./$types";
-
-// Only the campaign's DM (or an application admin) manages its schedule.
-async function requireScheduleAccess(campaignId: string, userId: string): Promise<void> {
-  const [meta, access] = await Promise.all([
-    getCampaignMeta(campaignId),
-    getCampaignAccess(campaignId, userId),
-  ]);
-  if (!meta) throw error(404, "Campaign not found.");
-  if (meta.dmId !== userId && !access.isAdmin) {
-    throw error(403, "Only the campaign's DM can manage its schedule.");
-  }
-}
 
 function formatSessionTime(instant: Date, timeZone: string): string {
   return new Intl.DateTimeFormat("en-US", {
@@ -70,9 +58,22 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
         }
       : null;
 
+  // The member on recap duty, once the reminder for a session has gone out.
+  const recapper =
+    reminder?.recapUserId && reminder.recapSessionAt
+      ? {
+          userId: reminder.recapUserId,
+          username:
+            rotation.find((member) => member.userId === reminder.recapUserId)?.username ??
+            "A former member",
+          session: formatSessionTime(reminder.recapSessionAt, timeZone ?? "UTC"),
+        }
+      : null;
+
   return {
     campaign: { id: campaign.id, name: campaign.name },
     reminder: reminder ? { channelName: reminder.channelName, schedule: reminder.schedule } : null,
+    recapper,
     nextSession,
     rotation: rotation.map((member) => ({
       ...member,
@@ -89,7 +90,19 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 };
 
 export const actions: Actions = {
-  default: async ({ request, params, locals }) => {
+  // The web version of /skip-recapper.
+  skip: async ({ params, locals }) => {
+    if (!locals.user) throw error(401, "Please log in to manage the schedule.");
+    await requireScheduleAccess(params.id, locals.user.id);
+    const result = await skipCampaignRecapper(params.id);
+    if (result.status === "no-recapper") {
+      return fail(400, {
+        message: "Nobody is on recap duty yet. A recapper is picked when the reminder goes out.",
+      });
+    }
+    return { skipped: true };
+  },
+  save: async ({ request, params, locals }) => {
     if (!locals.user) throw error(401, "Please log in to manage the schedule.");
     await requireScheduleAccess(params.id, locals.user.id);
 

@@ -34,6 +34,9 @@
           onclick={() => (askLibby.open = !askLibby.open)}>Ask Libby</button
         >
       {/if}
+      {#if data.isAdmin}
+        <a class="navlink" href="/admin">Admin</a>
+      {/if}
       {#if data.user}
         <span class="who">{data.user.username}</span>
         <a class="navlink" href="/auth/logout">Log out</a>
