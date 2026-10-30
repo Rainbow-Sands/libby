@@ -20,7 +20,14 @@
     id: string;
   }
 
+  type RoomProgress = NonNullable<PageData["roomProgress"]>;
+
   let streamedStatus = $state<SessionStatus | null>(null);
+  let streamedProgress = $state<RoomProgress | null>(null);
+  let roomProgress = $derived(streamedProgress ?? data.roomProgress);
+  let speakersUrl = $derived(
+    `/campaigns/${data.session.campaignId}/sessions/${data.session.id}/speakers`,
+  );
   let liveTranscriptSnippets = $state<LiveTranscriptSnippet[]>([]);
   let sessionStatus = $derived(streamedStatus ?? data.session.status);
   let transcriptTurns = $derived(
@@ -131,6 +138,9 @@
       };
       streamedStatus = update.status;
     });
+    source.addEventListener("progress", (event) => {
+      streamedProgress = JSON.parse((event as MessageEvent<string>).data) as RoomProgress;
+    });
     source.addEventListener("complete", (event) => {
       const update = JSON.parse((event as MessageEvent<string>).data) as {
         status: SessionStatus | null;
@@ -231,8 +241,64 @@
     </div>
   </div>
   <TaperedRule />
-  {#if sessionStatus && sessionStatus !== "done"}
+  {#if roomProgress && sessionStatus !== "done"}
+    {@const detecting = roomProgress.status === "detecting"}
+    {@const transcribing = !detecting && roomProgress.transcribed < roomProgress.turns}
+    {@const writing = sessionStatus === "summarizing"}
+    <div class="room-steps" aria-label="Progress">
+      <div class="done"><span class="k">✓</span>Uploaded</div>
+      {#if detecting}
+        <div class="now"><span class="k">◐</span>Finding who is speaking</div>
+      {:else}
+        <div class="done">
+          <span class="k">✓</span>Found {roomProgress.speakers}
+          {roomProgress.speakers === 1 ? "speaker" : "speakers"}
+        </div>
+      {/if}
+      {#if transcribing}
+        <div class="now">
+          <span class="k">◐</span><span class="grow"
+            >Transcribing · {roomProgress.transcribed.toLocaleString()} of {roomProgress.turns.toLocaleString()}
+            turns<span class="bar"
+              ><i style={`width: ${(roomProgress.transcribed / Math.max(1, roomProgress.turns)) * 100}%`}
+              ></i></span
+            ></span
+          >
+        </div>
+      {:else if !detecting}
+        <div class="done"><span class="k">✓</span>Transcribed</div>
+      {:else}
+        <div class="todo"><span class="k">○</span>Transcribe</div>
+      {/if}
+      {#if roomProgress.speakers > 0 && !detecting}
+        {#if roomProgress.speakersConfirmed}
+          <div class="done">
+            <span class="k">✓</span>Speakers named · <a href={speakersUrl}>Change</a>
+          </div>
+        {:else}
+          <div class="now">
+            <span class="k">!</span>Who's who is ready for you · <a href={speakersUrl}>Match speakers</a>
+          </div>
+        {/if}
+      {/if}
+      {#if sessionStatus === "failed"}
+        <div class="failed">
+          <span class="k">✕</span>{roomProgress.error ?? "Processing failed."}
+        </div>
+      {:else if writing}
+        <div class="now"><span class="k">◐</span>Writing the recap and world updates</div>
+      {:else}
+        <div class="todo">
+          <span class="k">○</span>Recap and world updates{roomProgress.speakersConfirmed
+            ? ", after transcription"
+            : ", after Who's who"}
+        </div>
+      {/if}
+    </div>
+  {:else if sessionStatus && sessionStatus !== "done"}
     <p class="status"><span class="pill status-{sessionStatus}">{sessionStatus}</span></p>
+  {:else if roomProgress && roomProgress.speakers > 0}
+    <p class="muted room-note">Recorded at the table · <a href={speakersUrl}>Who's who</a></p>
   {/if}
 
   {#if data.canViewDetails}
@@ -484,6 +550,55 @@
     opacity: 0.5;
   }
   .status {
+    margin: 0 0 0.75rem;
+  }
+  .room-steps {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0 0 1rem;
+  }
+  .room-steps div {
+    display: flex;
+    gap: 0.6rem;
+    align-items: baseline;
+  }
+  .room-steps .k {
+    flex: none;
+    width: 1rem;
+    text-align: center;
+  }
+  .room-steps .grow {
+    flex: 1;
+    min-width: 0;
+  }
+  .room-steps .done {
+    color: var(--ok);
+  }
+  .room-steps .now {
+    color: var(--warn);
+  }
+  .room-steps .todo {
+    color: var(--ink-soft);
+  }
+  .room-steps .failed {
+    color: var(--accent-bright);
+  }
+  .room-steps .bar {
+    display: block;
+    max-width: 24rem;
+    height: 0.4rem;
+    margin-top: 0.3rem;
+    background: var(--surface-sunken);
+    border: 1px solid var(--edge);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .room-steps .bar i {
+    display: block;
+    height: 100%;
+    background: var(--gold);
+  }
+  .room-note {
     margin: 0 0 0.75rem;
   }
   .pill {

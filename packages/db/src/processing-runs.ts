@@ -399,6 +399,22 @@ export async function reconcilePendingJobs(): Promise<void> {
       runnableRuns.map((run) => ({ id: run.id, data: { runId: run.id } })),
     );
 
+    // Room recordings still waiting for speaker detection. The job id is the
+    // run id, so a job that is still queued is not sent twice.
+    const detectingRuns = await tx
+      .select({ id: processingRuns.id, sessionId: processingRuns.sessionId })
+      .from(processingRuns)
+      .innerJoin(sessions, eq(sessions.activeRunId, processingRuns.id))
+      .where(eq(processingRuns.status, "detecting"));
+    await enqueueJobs(
+      tx,
+      JOB_QUEUES.detectSpeakers,
+      detectingRuns.map((run) => ({
+        id: run.id,
+        data: { sessionId: run.sessionId, runId: run.id },
+      })),
+    );
+
     const transcribingRuns = await tx
       .select({ id: processingRuns.id })
       .from(processingRuns)

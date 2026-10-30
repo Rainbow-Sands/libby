@@ -2,6 +2,7 @@ import { error } from "@sveltejs/kit";
 import {
   getCampaignAccess,
   getCampaignCast,
+  getRoomProgress,
   getSessionDetail,
   getSessionStatus,
   listLiveTranscriptSegments,
@@ -50,6 +51,9 @@ export const GET: RequestHandler = async ({ params, locals, request }) => {
       const sent = new Set<string>();
       let cursor: Date | undefined;
       let lastStatus: string | null = null;
+      let lastProgress = "";
+      let tick = 0;
+      let room = true;
 
       void (async () => {
         try {
@@ -83,6 +87,16 @@ export const GET: RequestHandler = async ({ params, locals, request }) => {
             const latest = segments.at(-1)?.transcribedAt;
             if (latest && (!cursor || latest > cursor)) cursor = latest;
 
+            // A room recording also reports its steps, a little less often.
+            if (room && (tick++ % 3 === 0 || status !== lastStatus)) {
+              const progress = await getRoomProgress(session.id);
+              room = progress !== null;
+              const serialized = progress ? JSON.stringify(progress) : "";
+              if (progress && serialized !== lastProgress) {
+                lastProgress = serialized;
+                controller.enqueue(event("progress", progress));
+              }
+            }
             if (status !== lastStatus) {
               lastStatus = status;
               controller.enqueue(event("status", { status }));

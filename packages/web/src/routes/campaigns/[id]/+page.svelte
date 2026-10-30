@@ -74,8 +74,8 @@
         </h2>
         {#if data.canIngest}
           <a class="btn quiet" href="/campaigns/{data.campaign.id}/ingest"
-            ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>Ingest
-            audio</a
+            ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>Upload a
+            session</a
           >
         {/if}
       </div>

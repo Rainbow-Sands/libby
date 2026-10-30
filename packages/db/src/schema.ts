@@ -7,6 +7,7 @@ import {
   jsonb,
   pgTable,
   primaryKey,
+  real,
   text,
   timestamp,
   uniqueIndex,
@@ -23,6 +24,7 @@ import {
   NOTIFICATION_STATUSES,
   PROCESSING_RUN_KINDS,
   PROCESSING_RUN_STATUSES,
+  SESSION_SOURCES,
   SESSION_STATUSES,
   SUBSCRIPTION_STATUSES,
   TRANSCRIPTION_STATUSES,
@@ -31,6 +33,7 @@ import {
   type NotificationStatus,
   type ProcessingRunKind,
   type ProcessingRunStatus,
+  type SessionSource,
   type SessionStatus,
   type SubscriptionStatus,
   type TranscriptionStatus,
@@ -182,6 +185,14 @@ export const sessions = pgTable(
     recapSections: jsonb("recap_sections").$type<SessionRecap>(),
     startedAt: timestamp("started_at").defaultNow().notNull(),
     endedAt: timestamp("ended_at"),
+    source: varchar("source", { length: 20 }).$type<SessionSource>().notNull().default("discord"),
+    // A room recording's original upload, and how many people the uploader
+    // said were talking.
+    recordingObjectKey: text("recording_object_key"),
+    expectedSpeakers: integer("expected_speakers"),
+    // Set once someone confirms who each detected speaker is. A room
+    // recording waits for it before its transcript is aggregated.
+    speakersConfirmedAt: timestamp("speakers_confirmed_at", { withTimezone: true }),
   },
   (t) => [
     index("sessions_guild_status_idx").on(t.guildId, t.status),
@@ -190,6 +201,40 @@ export const sessions = pgTable(
       .on(t.guildId)
       .where(sql`${t.guildId} is not null and ${t.status} in ('recording', 'closing')`),
     check("sessions_status_check", oneOf(t.status, SESSION_STATUSES)),
+    check("sessions_source_check", oneOf(t.source, SESSION_SOURCES)),
+  ],
+);
+
+// One row per voice that speaker detection found in a room recording. label
+// is the userId its clips carry ("speaker:3") until the speakers are
+// confirmed; then each label maps to a member, a named guest, or nobody.
+// turns is the speaker's [start, end] seconds into the recording, merged for
+// the timeline; samples are segment ids whose audio is kept in the artifact
+// bucket for playback.
+export const sessionSpeakers = pgTable(
+  "session_speakers",
+  {
+    sessionId: varchar("session_id", { length: 30 })
+      .references(() => sessions.id, { onDelete: "cascade" })
+      .notNull(),
+    label: varchar("label", { length: 20 }).notNull(),
+    position: integer("position").notNull(),
+    talkSeconds: real("talk_seconds").notNull(),
+    turns: jsonb("turns").$type<[number, number][]>().notNull(),
+    samples: jsonb("samples").$type<string[]>().notNull(),
+    embedding: real("embedding").array(),
+    userId: varchar("user_id", { length: 20 }).references(() => users.id),
+    guestName: text("guest_name"),
+    ignored: boolean("ignored").notNull().default(false),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.sessionId, t.label] }),
+    index("session_speakers_user_idx").on(t.userId),
+    check(
+      "session_speakers_assignment_check",
+      sql`(${t.userId} is not null)::int + (${t.guestName} is not null)::int + ${t.ignored}::int <= 1`,
+    ),
   ],
 );
 

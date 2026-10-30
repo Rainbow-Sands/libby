@@ -20,6 +20,7 @@ import {
   completeProcessingRun,
   completeSegmentTranscription,
   failProcessingRun,
+  failSpeakerDetection,
   failSegmentTranscription,
   getProcessingRun,
   getTranscriptSegments,
@@ -34,6 +35,7 @@ import {
   storeRunTitle,
   type AdvanceProcessingRunJob,
   type BackfillCampaignRecapsJob,
+  type DetectSpeakersJob,
   type LinkCampaignRecapsJob,
   type ProcessingRunData,
   type SessionArtifactKind,
@@ -52,6 +54,7 @@ import {
   loadSessionLedgerArtifact,
   loadTranscriptArtifact,
 } from "@rainbot/storage";
+import { detectSpeakers } from "./detect-speakers.ts";
 import { UnrecoverableTaskError } from "./errors.ts";
 import { postSessionLink } from "./notify.ts";
 import {
@@ -444,6 +447,23 @@ export async function runSessionWorker(signal: AbortSignal): Promise<void> {
       if (job) await processRun(job.data);
     },
   );
+  // Speaker detection holds a whole recording in memory on the diarization
+  // server, so one at a time.
+  await boss.work<DetectSpeakersJob>(
+    JOB_QUEUES.detectSpeakers,
+    { localConcurrency: 1 },
+    async ([job]) => {
+      if (!job) return;
+      try {
+        await detectSpeakers(job.data, job.signal);
+      } catch (error) {
+        const failure = asError(error);
+        if (!(failure instanceof UnrecoverableTaskError)) throw failure;
+        console.error(`[speakers] session ${job.data.sessionId} failed:`, failure);
+        await failSpeakerDetection(job.data.sessionId, job.data.runId, failure.message);
+      }
+    },
+  );
   await boss.work<BackfillCampaignRecapsJob>(JOB_QUEUES.backfillCampaignRecaps, async ([job]) => {
     if (job) await backfillCampaignStep(job.data);
   });
@@ -461,6 +481,14 @@ export async function runSessionWorker(signal: AbortSignal): Promise<void> {
       job.data.sessionId,
       job.data.segmentId,
       "Transcription exhausted its retry limit",
+    );
+  });
+  await boss.work<DetectSpeakersJob>(JOB_QUEUES.detectSpeakersDead, async ([job]) => {
+    if (!job) return;
+    await failSpeakerDetection(
+      job.data.sessionId,
+      job.data.runId,
+      "Speaker detection exhausted its retry limit",
     );
   });
   await boss.work<AdvanceProcessingRunJob>(JOB_QUEUES.advanceProcessingRunDead, async ([job]) => {

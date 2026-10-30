@@ -16,7 +16,8 @@ import {
 import { db, type DatabaseTransaction } from "./client.ts";
 import { JOB_QUEUES, enqueueJob, enqueueJobs, startJobQueue } from "./jobs.ts";
 import { evaluateTranscriptionBarrier } from "./processing-state.ts";
-import { processingRuns, sessionSegments, sessions } from "./schema.ts";
+import { processingRuns, sessionSegments, sessionSpeakers, sessions, users } from "./schema.ts";
+import { applySpeakerAssignments, type SpeakerAssignment } from "./speaker-turns.ts";
 import type { TranscriptSegment } from "./transcript.ts";
 import type { AudioSegmentRef } from "./recording.ts";
 
@@ -185,6 +186,7 @@ export async function advanceTranscriptionBarrier(
     return false;
   }
   if (barrier === "waiting") return false;
+  if (await speakersPending(tx, run.sessionId)) return false;
 
   const claimed = await tx
     .update(processingRuns)
@@ -197,25 +199,59 @@ export async function advanceTranscriptionBarrier(
   return true;
 }
 
+// A room recording's transcript waits for its speakers to be named, so a
+// placeholder or wrong name never reaches the recap.
+async function speakersPending(tx: DatabaseTransaction, sessionId: string): Promise<boolean> {
+  const [session] = await tx
+    .select({ source: sessions.source, confirmedAt: sessions.speakersConfirmedAt })
+    .from(sessions)
+    .where(eq(sessions.id, sessionId));
+  return session?.source === "room" && session.confirmedAt === null;
+}
+
+export async function getSpeakerAssignments(sessionId: string): Promise<SpeakerAssignment[]> {
+  return db
+    .select({
+      label: sessionSpeakers.label,
+      userId: sessionSpeakers.userId,
+      username: users.username,
+      guestName: sessionSpeakers.guestName,
+      ignored: sessionSpeakers.ignored,
+    })
+    .from(sessionSpeakers)
+    .leftJoin(users, eq(sessionSpeakers.userId, users.id))
+    .where(eq(sessionSpeakers.sessionId, sessionId));
+}
+
 export async function claimAggregationIfReady(runId: string): Promise<boolean> {
   await startJobQueue();
   return db.transaction((tx) => advanceTranscriptionBarrier(tx, runId));
 }
 
+// A run's transcribed clips in order, with a room recording's confirmed
+// speaker names in place of its "speaker:N" placeholders.
 export async function getTranscriptSegments(runId: string): Promise<TranscriptSegment[]> {
-  const rows = await db
-    .select({ transcript: sessionSegments.transcript })
-    .from(sessionSegments)
-    .where(
-      and(
-        eq(sessionSegments.transcriptionRunId, runId),
-        eq(sessionSegments.transcriptionStatus, "completed"),
+  const [rows, [run]] = await Promise.all([
+    db
+      .select({ transcript: sessionSegments.transcript })
+      .from(sessionSegments)
+      .where(
+        and(
+          eq(sessionSegments.transcriptionRunId, runId),
+          eq(sessionSegments.transcriptionStatus, "completed"),
+        ),
       ),
-    );
-  return rows
+    db
+      .select({ sessionId: processingRuns.sessionId })
+      .from(processingRuns)
+      .where(eq(processingRuns.id, runId)),
+  ]);
+  const segments = rows
     .map((row) => row.transcript)
     .filter((segment): segment is TranscriptSegment => segment !== null)
     .toSorted((a, b) => a.timestamp.localeCompare(b.timestamp));
+  const speakers = run ? await getSpeakerAssignments(run.sessionId) : [];
+  return speakers.length > 0 ? applySpeakerAssignments(segments, speakers) : segments;
 }
 
 export async function listLiveTranscriptSegments(
