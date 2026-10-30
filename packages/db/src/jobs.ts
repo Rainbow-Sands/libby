@@ -10,7 +10,14 @@ export const JOB_QUEUES = {
   backfillCampaignRecaps: "backfill-campaign-recaps",
   updateCampaignWorld: "update-campaign-world",
   linkCampaignRecaps: "link-campaign-recaps",
+  detectSpeakers: "detect-speakers",
+  detectSpeakersDead: "detect-speakers-dead",
 } as const;
+
+export interface DetectSpeakersJob {
+  sessionId: string;
+  runId: string;
+}
 
 export interface TranscribeSegmentJob {
   jobId: string;
@@ -102,6 +109,18 @@ const LINK_QUEUE_OPTIONS = {
   expireInSeconds: 15 * 60,
 } as const satisfies QueueDefinition;
 
+// Speaker detection reads a whole room recording, which can take a long time
+// on a long session, so it gets few attempts and a long expiry.
+const DETECT_SPEAKERS_QUEUE_OPTIONS = {
+  retryLimit: 2,
+  retryDelay: 60,
+  retryBackoff: true,
+  expireInSeconds: 12 * 60 * 60,
+  heartbeatSeconds: 60,
+  deadLetter: JOB_QUEUES.detectSpeakersDead,
+  notify: true,
+} as const satisfies QueueDefinition;
+
 type QueueDefinition = Omit<Queue, "name" | "policy" | "partition">;
 
 let boss: PgBoss | null = null;
@@ -122,6 +141,8 @@ async function ensureQueue(
 async function ensureQueues(instance: PgBoss): Promise<void> {
   await ensureQueue(instance, JOB_QUEUES.transcribeSegmentDead);
   await ensureQueue(instance, JOB_QUEUES.advanceProcessingRunDead);
+  await ensureQueue(instance, JOB_QUEUES.detectSpeakersDead);
+  await ensureQueue(instance, JOB_QUEUES.detectSpeakers, DETECT_SPEAKERS_QUEUE_OPTIONS, workerMode);
   await ensureQueue(
     instance,
     JOB_QUEUES.transcribeSegment,
@@ -218,6 +239,12 @@ export async function enqueueJob(
 ): Promise<void>;
 export async function enqueueJob(
   tx: DrizzleTransactionLike,
+  name: typeof JOB_QUEUES.detectSpeakers,
+  data: DetectSpeakersJob,
+  id: string,
+): Promise<void>;
+export async function enqueueJob(
+  tx: DrizzleTransactionLike,
   name: string,
   data: object,
   id: string,
@@ -240,6 +267,11 @@ export async function enqueueJobs(
   tx: DrizzleTransactionLike,
   name: typeof JOB_QUEUES.advanceProcessingRun,
   jobs: { id: string; data: AdvanceProcessingRunJob }[],
+): Promise<void>;
+export async function enqueueJobs(
+  tx: DrizzleTransactionLike,
+  name: typeof JOB_QUEUES.detectSpeakers,
+  jobs: { id: string; data: DetectSpeakersJob }[],
 ): Promise<void>;
 export async function enqueueJobs(
   tx: DrizzleTransactionLike,

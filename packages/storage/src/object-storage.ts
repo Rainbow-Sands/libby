@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, stat } from "node:fs/promises";
 import path from "node:path";
+import type { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
@@ -77,6 +78,12 @@ export function audioObjectKey(sessionId: string, segmentId: string, filename: s
   return `sessions/${encodeURIComponent(sessionId)}/activations/${encodeURIComponent(segmentId)}${extension}`;
 }
 
+// The whole recording of a room session, before it is cut into turns.
+export function recordingObjectKey(sessionId: string, filename: string): string {
+  const extension = path.extname(filename).toLowerCase() || ".audio";
+  return `sessions/${encodeURIComponent(sessionId)}/recording${extension}`;
+}
+
 export function artifactObjectKey(
   campaignId: string,
   sessionId: string,
@@ -119,6 +126,23 @@ export function avatarObjectKey(
   ].join("/");
 }
 
+// A room recording's speaker sample, kept for the Who's who page after the
+// audio bucket has let the clip go.
+export function speakerSampleObjectKey(
+  campaignId: string,
+  sessionId: string,
+  segmentId: string,
+): string {
+  return [
+    "campaigns",
+    encodeURIComponent(campaignId),
+    "sessions",
+    encodeURIComponent(sessionId),
+    "speakers",
+    `${encodeURIComponent(segmentId)}.ogg`,
+  ].join("/");
+}
+
 export function bytesContentHash(body: Uint8Array): string {
   return createHash("sha256").update(body).digest("hex");
 }
@@ -152,6 +176,15 @@ export class ObjectStorage {
         ContentLength: file.size,
         ContentType: contentType,
       },
+    });
+    await upload.done();
+  }
+
+  // For uploads of unknown length, such as a request body on its way in.
+  async uploadStream(objectKey: string, body: Readable, contentType: string): Promise<void> {
+    const upload = new Upload({
+      client: this.#client,
+      params: { Bucket: this.#bucket, Key: objectKey, Body: body, ContentType: contentType },
     });
     await upload.done();
   }

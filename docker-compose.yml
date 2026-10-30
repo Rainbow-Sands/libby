@@ -55,6 +55,7 @@ services:
         condition: service_completed_successfully
     environment:
       TRANSCRIPTION_URL: ${TRANSCRIPTION_URL}
+      DIARIZATION_URL: ${DIARIZATION_URL:-http://diarize:8000}
       DISCORD_TOKEN: ${DISCORD_TOKEN}
       WEB_URL: ${ORIGIN}
       TRANSCRIPTION_MODEL: ${TRANSCRIPTION_MODEL}
@@ -76,6 +77,17 @@ services:
       S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE}
       S3_REGION: ${S3_REGION}
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
+    restart: unless-stopped
+
+  # Finds who is speaking in single-microphone uploads. The model is gated
+  # on Hugging Face: accept its terms once and pass a read token.
+  diarize:
+    image: ghcr.io/rainbow-sands/rainbot-sands/diarize:main
+    environment:
+      HF_TOKEN: ${HF_TOKEN}
+      DIARIZATION_DEVICE: ${DIARIZATION_DEVICE:-cpu}
+    volumes:
+      - diarize-models:/models
     restart: unless-stopped
 
   web:
@@ -109,3 +121,4 @@ services:
 
 volumes:
   postgres_data:
+  diarize-models:

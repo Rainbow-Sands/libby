@@ -17,6 +17,8 @@ export {
   getAudioStorage,
   loadArtifactStorageConfig,
   loadAudioStorageConfig,
+  recordingObjectKey,
+  speakerSampleObjectKey,
   type ObjectStorageConfig,
   type UploadedArtifactObject,
 } from "./object-storage.ts";

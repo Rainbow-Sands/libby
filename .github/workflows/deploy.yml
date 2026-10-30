@@ -51,7 +51,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        service: [db, discord, worker, web]
+        service: [db, discord, worker, web, diarize]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -75,8 +75,9 @@ jobs:
       - name: Build and push ${{ matrix.service }}
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: packages/${{ matrix.service }}/Dockerfile
+          # The speaker-detection service is Python and builds on its own.
+          context: ${{ matrix.service == 'diarize' && 'services/diarize' || '.' }}
+          file: ${{ matrix.service == 'diarize' && 'services/diarize/Dockerfile' || format('packages/{0}/Dockerfile', matrix.service) }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

@@ -5,6 +5,7 @@ import {
   RECOVERABLE_SESSION_STATUSES,
   type AudioStatus,
   type RecoverableSessionStatus,
+  type SessionSource,
 } from "./domain.ts";
 import { processingRuns, sessionSegments, sessions } from "./schema.ts";
 import { JOB_QUEUES, enqueueJob, startJobQueue } from "./jobs.ts";
@@ -25,6 +26,8 @@ export interface CreateRecordingSessionInput {
   channelId: string;
   notificationChannelId?: string;
   sessionDir: string;
+  source?: SessionSource;
+  startedAt?: Date;
 }
 
 export async function createRecordingSession(input: CreateRecordingSessionInput): Promise<string> {
@@ -38,6 +41,8 @@ export async function createRecordingSession(input: CreateRecordingSessionInput)
       sessionDir: input.sessionDir,
       activeRunId: runId,
       status: "recording",
+      source: input.source,
+      startedAt: input.startedAt,
     });
     await tx.insert(processingRuns).values({
       id: runId,

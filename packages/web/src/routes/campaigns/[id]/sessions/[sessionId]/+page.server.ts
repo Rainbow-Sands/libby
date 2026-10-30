@@ -5,6 +5,7 @@ import {
   formatTranscriptForDisplay,
   getCampaignAccess,
   getCampaignCast,
+  getRoomProgress,
   getSessionDetail,
   getSessionRecapLinks,
   getSessionWorldChanges,
@@ -80,16 +81,18 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
       canViewDetails: false,
       canRegenerate: false,
       failedTranscriptions: 0,
+      roomProgress: null,
       preview,
     };
   }
   if (!access.canAccess) throw error(403, "You cannot view this campaign.");
 
-  const [transcript, failedTranscriptions] = await Promise.all([
+  const [transcript, failedTranscriptions, roomProgress] = await Promise.all([
     tab === "transcript" && session.transcriptArtifact
       ? loadTranscriptArtifact(session.transcriptArtifact)
       : null,
     access.isAdmin && session.status === "failed" ? countFailedTranscriptions(session.id) : 0,
+    getRoomProgress(session.id),
   ]);
   const transcriptTurns = transcript && cast ? formatTranscriptForDisplay(transcript, cast) : null;
 
@@ -108,6 +111,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
     canViewDetails: true,
     canRegenerate: access.isAdmin,
     failedTranscriptions,
+    roomProgress,
     preview,
   };
 };

@@ -106,6 +106,7 @@ export const actions: Actions = {
         id: sessionId,
         channelId: "manual",
         campaignId: params.id,
+        source: "tracks",
         sessionDir,
       });
 

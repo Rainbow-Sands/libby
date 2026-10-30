@@ -9,6 +9,8 @@ export type SubscriptionStatus = ValueOf<typeof SUBSCRIPTION_STATUSES>;
 
 export const SESSION_STATUSES = [
   "recording",
+  // A single room recording waiting for its speakers to be found.
+  "detecting",
   "closing",
   "transcribing",
   "summarizing",
@@ -28,6 +30,7 @@ export type ProcessingRunKind = ValueOf<typeof PROCESSING_RUN_KINDS>;
 
 export const PROCESSING_RUN_STATUSES = [
   "recording",
+  "detecting",
   "transcribing",
   "aggregating",
   "summarizing",
@@ -37,6 +40,12 @@ export const PROCESSING_RUN_STATUSES = [
   "failed",
 ] as const;
 export type ProcessingRunStatus = ValueOf<typeof PROCESSING_RUN_STATUSES>;
+
+// discord: the bot recorded one clip per voice activation. tracks: uploaded
+// files, one per speaker. room: one uploaded recording of the whole table,
+// split by speaker detection.
+export const SESSION_SOURCES = ["discord", "tracks", "room"] as const;
+export type SessionSource = ValueOf<typeof SESSION_SOURCES>;
 
 export const NOTIFICATION_STATUSES = ["pending", "completed", "failed"] as const;
 export type NotificationStatus = ValueOf<typeof NOTIFICATION_STATUSES>;
