@@ -204,6 +204,13 @@
       "when": 1792863465495,
       "tag": "0028_world_page_redirects",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1793322769920,
+      "tag": "0029_web_campaigns",
+      "breakpoints": true
     }
   ]
 }

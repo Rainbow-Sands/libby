@@ -1,7 +1,7 @@
 import { Client, Events, GatewayIntentBits, REST, Routes, type Interaction } from "discord.js";
 import { start } from "./commands/start.ts";
 import { stop } from "./commands/stop.ts";
-import { campaign } from "./commands/campaign.ts";
+import { linkCampaign } from "./commands/link-campaign.ts";
 import { addPlayer } from "./commands/add-player.ts";
 import { removePlayer } from "./commands/remove-player.ts";
 import { reminder } from "./commands/reminder.ts";
@@ -11,7 +11,7 @@ import { DISCORD_TOKEN, DISCORD_APPLICATION_ID } from "./env.ts";
 const commands = {
   start,
   stop,
-  campaign,
+  "link-campaign": linkCampaign,
   "add-player": addPlayer,
   "remove-player": removePlayer,
   reminder,

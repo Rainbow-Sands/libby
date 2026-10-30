@@ -70,7 +70,21 @@
       <p class="error" role="alert">{form.message}</p>
     {/if}
 
-    <form method="POST">
+    {#if data.recapper}
+      <form class="on-duty" method="POST" action="?/skip">
+        <span class="name">
+          <strong>{data.recapper.username}</strong> is on recap duty for {data.recapper.session}.
+          {#if form?.skipped}<span role="status">Skipped.</span>{/if}
+        </span>
+        <button type="submit" class="btn quiet">Skip</button>
+        <span class="muted wide">
+          Skipping keeps them first in line for next time, and whoever recapped least recently takes
+          over.
+        </span>
+      </form>
+    {/if}
+
+    <form method="POST" action="?/save">
       <label>
         Day
         <select name="day" bind:value={day} required>
@@ -270,5 +284,20 @@
   }
   .error {
     color: var(--accent-bright);
+  }
+  .on-duty {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1rem;
+    margin: 0 0 1.25rem;
+    padding: 0.75rem 0.9rem;
+    background: var(--surface-sunken);
+    border: 1px solid var(--edge);
+    border-radius: 4px;
+  }
+  .on-duty .wide {
+    flex-basis: 100%;
+    font-size: 0.9rem;
   }
 </style>

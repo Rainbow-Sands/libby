@@ -43,8 +43,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
   return {
     campaign,
     canIngest: access.isMember,
-    // Matches the schedule page's own check: the DM or an application admin.
-    canSchedule:
+    // Matches requireCampaignManager: the DM or an application admin.
+    canManage:
       access.isAdmin ||
       campaign.members.some((member) => member.role === "dm" && member.id === locals.user?.id),
     world: { total: world.length, counts, openQuests },

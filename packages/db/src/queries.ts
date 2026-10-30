@@ -88,7 +88,7 @@ export interface CampaignMember {
 // and who is its DM. Returns null if the campaign does not exist.
 export async function getCampaignMeta(
   campaignId: string,
-): Promise<{ guildId: string; dmId: string | null } | null> {
+): Promise<{ guildId: string | null; dmId: string | null } | null> {
   const [[campaign], [dm]] = await Promise.all([
     db
       .select({ guildId: campaigns.guildId })
@@ -158,7 +158,8 @@ export async function getCampaignDetail(campaignId: string): Promise<CampaignDet
       })
       .from(campaignMembers)
       .innerJoin(users, eq(campaignMembers.userId, users.id))
-      .where(eq(campaignMembers.campaignId, campaignId)),
+      .where(eq(campaignMembers.campaignId, campaignId))
+      .orderBy(campaignMembers.joinedAt),
     db
       .select({
         id: sessions.id,

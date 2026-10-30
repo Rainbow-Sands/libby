@@ -12,6 +12,9 @@ export interface CampaignReminder {
   channelName: string | null;
   schedule: CampaignReminderSchedule | null;
   nextSessionAt: Date | null;
+  // Who is on recap duty for the session at recapSessionAt, once assigned.
+  recapUserId: string | null;
+  recapSessionAt: Date | null;
 }
 
 export interface DueCampaignReminder extends CampaignReminder {
@@ -240,6 +243,8 @@ function selectReminders() {
       minuteOfDay: campaignReminders.minuteOfDay,
       timeZone: campaignReminders.timeZone,
       nextSessionAt: campaignReminders.nextSessionAt,
+      recapUserId: campaignReminders.recapUserId,
+      recapSessionAt: campaignReminders.recapSessionAt,
     })
     .from(campaignReminders)
     .innerJoin(campaigns, eq(campaignReminders.campaignId, campaigns.id))

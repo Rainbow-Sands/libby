@@ -24,6 +24,7 @@ import {
   PROCESSING_RUN_KINDS,
   PROCESSING_RUN_STATUSES,
   SESSION_STATUSES,
+  SUBSCRIPTION_STATUSES,
   TRANSCRIPTION_STATUSES,
   type AudioStatus,
   type CampaignMemberRole,
@@ -31,6 +32,7 @@ import {
   type ProcessingRunKind,
   type ProcessingRunStatus,
   type SessionStatus,
+  type SubscriptionStatus,
   type TranscriptionStatus,
   type WorldUpdateStatus,
   type RecapLinkStatus,
@@ -61,24 +63,42 @@ export const guilds = pgTable("guilds", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const users = pgTable("users", {
-  id: varchar("id", { length: 20 }).primaryKey(),
-  username: varchar("username", { length: 100 }).notNull(),
-  isAdmin: boolean("is_admin").notNull().default(false),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+// An active subscription lets a user create campaigns. Admins set it by hand
+// for now; a payment system can manage it later.
+export const users = pgTable(
+  "users",
+  {
+    id: varchar("id", { length: 20 }).primaryKey(),
+    username: varchar("username", { length: 100 }).notNull(),
+    isAdmin: boolean("is_admin").notNull().default(false),
+    subscriptionStatus: varchar("subscription_status", { length: 20 })
+      .$type<SubscriptionStatus>()
+      .notNull()
+      .default("none"),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    check("users_subscription_status_check", oneOf(t.subscriptionStatus, SUBSCRIPTION_STATUSES)),
+  ],
+);
 
-export const campaigns = pgTable("campaigns", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  guildId: varchar("guild_id", { length: 20 })
-    .references(() => guilds.id)
-    .notNull(),
-  name: varchar("name", { length: 200 }).notNull(),
-  description: text("description"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+// guildId is null until the DM runs /link-campaign in a Discord server.
+// inviteCode is the secret in the campaign's join link; null turns joining off.
+export const campaigns = pgTable(
+  "campaigns",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    guildId: varchar("guild_id", { length: 20 }).references(() => guilds.id),
+    name: varchar("name", { length: 200 }).notNull(),
+    description: text("description"),
+    inviteCode: varchar("invite_code", { length: 32 }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("campaigns_invite_code_idx").on(t.inviteCode)],
+);
 
 // characterName is the player's character (null for the DM).
 export const campaignMembers = pgTable(
