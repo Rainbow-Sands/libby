@@ -56,7 +56,12 @@ skipped rather than sent late. Claiming also assigns recap duty, and
   receiver/decoder/ffmpeg pipelines before closing the durable session. The
   close transition and transcription barrier then enqueue post-session work
   when every activation is terminal. Keep this ordering so speech in progress
-  during `/stop` or auto-end is retained.
+  during `/stop` or auto-end is retained. A clip still finalizing 30s after
+  shutdown starts is aborted (ffmpeg is killed and the clip discarded), so one
+  stuck clip can't keep the bot in voice.
+- ffmpeg's stderr must always be read (`clip-encoder.ts`). An unread pipe fills
+  on a long clip and ffmpeg then blocks forever.
+- Bots in the voice channel (music bots) are never recorded.
 - The transcript speaker label is the **account username** resolved from the
   guild member cache (`session.ts`), falling back to the user id. It is joined to
   campaign members by `userId` downstream, so keep the id flowing through.

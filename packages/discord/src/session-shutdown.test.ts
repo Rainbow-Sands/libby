@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { finishActiveActivations } from "./session-shutdown.ts";
 
 function deferred() {
@@ -60,5 +60,81 @@ describe("finishActiveActivations", () => {
     expect(remainingStarted).toBe(true);
     remaining.resolve();
     await expect(flushing).resolves.toBeUndefined();
+  });
+});
+
+describe("finishActiveActivations deadline", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("aborts a clip that never finalizes without blocking the others", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const healthy = deferred();
+    const stuck = deferred();
+    let healthyDone = false;
+    let aborted = false;
+
+    let finished = false;
+    const flushing = finishActiveActivations(
+      [
+        {
+          finish: () => stuck.promise,
+          abort: () => {
+            aborted = true;
+            stuck.resolve();
+          },
+        },
+        {
+          finish: () =>
+            healthy.promise.then(() => {
+              healthyDone = true;
+            }),
+        },
+      ],
+      { timeoutMs: 30_000, abortGraceMs: 5_000 },
+    ).then(() => {
+      finished = true;
+    });
+
+    healthy.resolve();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(healthyDone).toBe(true);
+    expect(aborted).toBe(false);
+    expect(finished).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(29_000);
+    expect(aborted).toBe(true);
+    await flushing;
+    expect(finished).toBe(true);
+  });
+
+  it("gives up on an aborted clip that still never settles", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    let aborted = false;
+    let finished = false;
+    const flushing = finishActiveActivations(
+      [
+        {
+          finish: () => new Promise<void>(() => {}),
+          abort: () => {
+            aborted = true;
+          },
+        },
+      ],
+      { timeoutMs: 30_000, abortGraceMs: 5_000 },
+    ).then(() => {
+      finished = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(aborted).toBe(true);
+    expect(finished).toBe(false);
+    await vi.advanceTimersByTimeAsync(5_000);
+    await flushing;
+    expect(finished).toBe(true);
   });
 });

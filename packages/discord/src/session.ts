@@ -3,11 +3,11 @@ import { joinVoiceChannel, EndBehaviorType } from "@discordjs/voice";
 import prism from "prism-media";
 import { mkdirSync, statSync } from "fs";
 import { rm } from "node:fs/promises";
-import { spawn } from "child_process";
 import path from "path";
 import { randomUUID } from "node:crypto";
 import { getActiveSession, setActiveSession } from "./recording.ts";
 import { finishActiveActivations, type FinalizableActivation } from "./session-shutdown.ts";
+import { CHANNELS, SAMPLE_RATE, spawnClipEncoder } from "./clip-encoder.ts";
 import {
   beginSessionShutdown,
   completeAudioSegment,
@@ -17,8 +17,6 @@ import {
   type SegmentRef,
 } from "@rainbot/worker";
 
-const SAMPLE_RATE = 48000;
-const CHANNELS = 2;
 const FRAME_SIZE = 960; // 20ms at 48kHz — Discord's standard Opus frame duration
 // One 20ms frame of silence, substituted for a packet the decoder couldn't
 // parse so a single bad packet doesn't leave an audible gap or resync issue.
@@ -30,7 +28,7 @@ const SILENT_FRAME = Buffer.alloc(FRAME_SIZE * CHANNELS * 2);
 // file, which the transcription server then fails to do anything with.
 const MIN_CLIP_BYTES = 1024;
 
-interface ActiveActivation extends FinalizableActivation {
+interface ActiveActivation extends Required<FinalizableActivation> {
   // Settles once the clip stops receiving audio, before it is finalized.
   listening: Promise<void>;
   completed: Promise<void>;
@@ -60,21 +58,7 @@ function startActivation(
   // new activation can subscribe from then on.
   const listening = new Promise<void>((resolve) => audioStream.once("close", () => resolve()));
 
-  const ffmpegProcess = spawn("ffmpeg", [
-    "-f",
-    "s16le",
-    "-ar",
-    String(SAMPLE_RATE),
-    "-ac",
-    String(CHANNELS),
-    "-i",
-    "pipe:0",
-    "-c:a",
-    "libopus",
-    "-b:a",
-    "64k",
-    outputPath,
-  ]);
+  const ffmpegProcess = spawnClipEncoder(outputPath, `${ref.userId}, ${ref.segmentId}`);
 
   ffmpegProcess.on("error", (err) => console.error(`ffmpeg error (${ref.userId}):`, err));
 
@@ -166,13 +150,25 @@ function startActivation(
 
   audioStream.pipe(opusDecoder! as any);
 
-  ffmpegProcess.on("close", async (code) => {
+  // Used only when finalizing has overrun its deadline. A killed ffmpeg
+  // closes with a signal, so the clip takes the discard path below.
+  const abort = () => {
+    if (ffmpegProcess.exitCode === null && ffmpegProcess.signalCode === null) {
+      ffmpegProcess.kill("SIGKILL");
+    }
+  };
+
+  ffmpegProcess.on("close", async (code, signal) => {
     try {
       if (code === 0 && hasMeaningfulAudio(outputPath)) {
         await onDone();
       } else {
         await onDiscard(
-          code === 0 ? "Audio clip did not contain meaningful data" : `ffmpeg exited with ${code}`,
+          code === 0
+            ? "Audio clip did not contain meaningful data"
+            : signal
+              ? `ffmpeg was killed by ${signal}`
+              : `ffmpeg exited with ${code}`,
         );
       }
     } catch (error) {
@@ -182,7 +178,7 @@ function startActivation(
     }
   });
 
-  return { listening, completed, finish };
+  return { listening, completed, finish, abort };
 }
 
 export function attachRecordingSession(
@@ -264,6 +260,9 @@ export function attachRecordingSession(
   // alongside the recording rather than before it.
   const speakingStartHandler = (userId: string) => {
     if (ending || listening.has(userId)) return;
+    // Bots (music bots and the like) are not players. A member missing from
+    // the cache is recorded, since we can't tell.
+    if (voiceChannel.guild.members.cache.get(userId)?.user.bot) return;
 
     const segmentId = randomUUID();
     segmentCounter++;
