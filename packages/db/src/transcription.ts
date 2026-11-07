@@ -1,18 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-  and,
-  asc,
-  count,
-  eq,
-  exists,
-  gte,
-  inArray,
-  isNotNull,
-  isNull,
-  ne,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, count, eq, exists, gte, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { db, type DatabaseTransaction } from "./client.ts";
 import { JOB_QUEUES, enqueueJob, enqueueJobs, startJobQueue } from "./jobs.ts";
 import { evaluateTranscriptionBarrier } from "./processing-state.ts";
@@ -24,16 +11,6 @@ export interface SegmentForTranscription extends AudioSegmentRef {
   sessionId: string;
   runId: string;
   jobId: string;
-}
-
-export interface LiveTranscriptSnippet {
-  segmentId: string;
-  runId: string;
-  timestamp: string;
-  userId: string;
-  username?: string;
-  text: string;
-  transcribedAt: Date;
 }
 
 export async function claimSegmentForTranscription(
@@ -218,10 +195,19 @@ export async function getTranscriptSegments(runId: string): Promise<TranscriptSe
     .toSorted((a, b) => a.timestamp.localeCompare(b.timestamp));
 }
 
-export async function listLiveTranscriptSegments(
+export interface TranscribedSegments {
+  segments: TranscriptSegment[];
+  // The newest transcribedAt among them, the cursor for the next poll.
+  latestTranscribedAt: Date | null;
+}
+
+// Completed clips for a session, transcribed at or after `since`, for the live
+// transcript. Only the Whisper fields that order and filter utterances are
+// read, not the full raw response, to keep the transfer small.
+export async function listTranscribedSegments(
   sessionId: string,
   since?: Date,
-): Promise<LiveTranscriptSnippet[]> {
+): Promise<TranscribedSegments> {
   const predicates = [
     eq(sessionSegments.sessionId, sessionId),
     eq(sessionSegments.transcriptionStatus, "completed"),
@@ -233,31 +219,45 @@ export async function listLiveTranscriptSegments(
   const rows = await db
     .select({
       segmentId: sessionSegments.segmentId,
-      runId: sessionSegments.transcriptionRunId,
       timestamp: sessionSegments.recordedAt,
       userId: sessionSegments.userId,
       username: sessionSegments.username,
-      transcript: sessionSegments.transcript,
+      text: sql<string | null>`${sessionSegments.transcript}->>'text'`,
+      subSegments: sql<unknown>`(
+        select jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+          'start', s->'start',
+          'text', s->'text',
+          'no_speech_prob', s->'no_speech_prob',
+          'avg_logprob', s->'avg_logprob'
+        )) order by ordinality)
+        from jsonb_array_elements(
+          case jsonb_typeof(${sessionSegments.transcript}->'whisper'->'segments')
+            when 'array' then ${sessionSegments.transcript}->'whisper'->'segments'
+            else '[]'::jsonb
+          end
+        ) with ordinality as t(s, ordinality)
+      )`,
       transcribedAt: sessionSegments.transcribedAt,
     })
     .from(sessionSegments)
-    .where(and(...predicates))
-    .orderBy(asc(sessionSegments.transcribedAt), asc(sessionSegments.segmentId));
+    .where(and(...predicates));
 
-  return rows.flatMap((row) => {
-    if (!row.runId || !row.transcript || !row.transcribedAt) return [];
-    return [
-      {
-        segmentId: row.segmentId,
-        runId: row.runId,
-        timestamp: row.timestamp,
-        userId: row.userId,
-        ...(row.username ? { username: row.username } : {}),
-        text: row.transcript.text,
-        transcribedAt: row.transcribedAt,
-      },
-    ];
+  let latestTranscribedAt: Date | null = null;
+  const segments = rows.map((row) => {
+    if (row.transcribedAt && (!latestTranscribedAt || row.transcribedAt > latestTranscribedAt)) {
+      latestTranscribedAt = row.transcribedAt;
+    }
+    return {
+      segmentId: row.segmentId,
+      timestamp: row.timestamp,
+      userId: row.userId,
+      ...(row.username ? { username: row.username } : {}),
+      text: row.text ?? "",
+      noSpeechProb: 0,
+      whisper: row.subSegments ? { segments: row.subSegments } : null,
+    } satisfies TranscriptSegment;
   });
+  return { segments, latestTranscribedAt };
 }
 
 export async function getAudioSegmentRefs(sessionId: string): Promise<AudioSegmentRef[]> {

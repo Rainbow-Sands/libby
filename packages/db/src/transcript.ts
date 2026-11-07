@@ -55,14 +55,6 @@ interface CastMember {
   characterName: string;
 }
 
-export interface TranscriptTurn {
-  timestamp: string;
-  userId: string;
-  speaker: string;
-  characterName: string | null;
-  text: string;
-}
-
 // Whisper's own per-clip utterance segmentation, already stored verbatim
 // under TranscriptSegment.whisper. Duck-typed since that field is `unknown` —
 // @rainbot/db stays decoupled from the worker's whisper.cpp response type.
@@ -153,42 +145,139 @@ function explodeSegment(segment: TranscriptSegment): Utterance[] {
     }));
 }
 
+// One utterance as the transcript page shows it. `id` is stable across the
+// live view and the finished transcript (clip id plus the Whisper sub-segment
+// position), so lines can be merged and deduplicated as they stream in.
+export interface TranscriptLine {
+  id: string;
+  timestamp: string;
+  userId: string;
+  speaker: string;
+  characterName: string | null;
+  text: string;
+}
+
+export interface TranscriptLineStats {
+  turns: number;
+  // Everyone who spoke, in order of first line.
+  speakers: { userId: string; speaker: string }[];
+}
+
+// Orders lines by when they were said; the id breaks ties so the order (and
+// so paging by sort key) is total.
+export function transcriptLineKey(line: Pick<TranscriptLine, "timestamp" | "id">): string {
+  return `${line.timestamp}|${line.id}`;
+}
+
+export function compareTranscriptLines(
+  a: Pick<TranscriptLine, "timestamp" | "id">,
+  b: Pick<TranscriptLine, "timestamp" | "id">,
+): number {
+  return transcriptLineKey(a).localeCompare(transcriptLineKey(b));
+}
+
+// Every non-empty utterance in the clips, in spoken order, labelled with the
+// speaker's username and character.
+export function transcriptLines(
+  segments: TranscriptSegment[],
+  cast: CastMember[],
+): TranscriptLine[] {
+  const characterByUserId = new Map(cast.map((member) => [member.userId, member.characterName]));
+  return segments
+    .flatMap((segment) =>
+      explodeSegment(segment).map((utterance, index) => ({
+        id: `${segment.segmentId}:${String(index).padStart(4, "0")}`,
+        timestamp: utterance.timestamp,
+        userId: utterance.userId,
+        speaker: utterance.username ?? utterance.userId,
+        characterName: characterByUserId.get(utterance.userId) ?? null,
+        text: utterance.text.trim(),
+      })),
+    )
+    .filter((line) => line.text)
+    .toSorted(compareTranscriptLines);
+}
+
+// Speaker turns (consecutive lines from one person) and who spoke.
+export function transcriptLineStats(lines: TranscriptLine[]): TranscriptLineStats {
+  let turns = 0;
+  let previous: string | null = null;
+  const speakers = new Map<string, string>();
+  for (const line of lines) {
+    if (line.userId !== previous) turns++;
+    previous = line.userId;
+    if (!speakers.has(line.userId)) speakers.set(line.userId, line.speaker);
+  }
+  return {
+    turns,
+    speakers: [...speakers].map(([userId, speaker]) => ({ userId, speaker })),
+  };
+}
+
+export type TranscriptLineQuery =
+  | { before: string }
+  | { after: string }
+  | { atSeconds: number }
+  | { end: true }
+  | Record<string, never>;
+
+export interface TranscriptLinePage {
+  lines: TranscriptLine[];
+  hasBefore: boolean;
+  hasAfter: boolean;
+}
+
+// First index whose key is greater than `key` (or, with `inclusive`, at least `key`).
+function boundary(lines: TranscriptLine[], key: string, inclusive: boolean): number {
+  let low = 0;
+  let high = lines.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    const compared = transcriptLineKey(lines[mid]).localeCompare(key);
+    if (compared < 0 || (!inclusive && compared === 0)) low = mid + 1;
+    else high = mid;
+  }
+  return low;
+}
+
+// Windows start at the beginning of a speaker's turn, so a page loaded above
+// the current one never splits the turn the reader is looking at.
+function turnStart(lines: TranscriptLine[], index: number): number {
+  let start = index;
+  while (start > 0 && lines[start - 1].userId === lines[start].userId) start--;
+  return start;
+}
+
+// One window of a sorted transcript: the start (no query), the end, the
+// lines just before or after a sort key, or the stretch around an elapsed
+// time (seconds since the first line, as recap and world citations use),
+// with a little context before the cited line.
+export function pageTranscriptLines(
+  lines: TranscriptLine[],
+  query: TranscriptLineQuery,
+  limit: number,
+): TranscriptLinePage {
+  let from = 0;
+  if ("before" in query) {
+    const to = boundary(lines, query.before, true);
+    from = turnStart(lines, Math.max(0, to - limit));
+    return { lines: lines.slice(from, to), hasBefore: from > 0, hasAfter: to < lines.length };
+  }
+  if ("after" in query) from = boundary(lines, query.after, false);
+  else if ("end" in query) from = turnStart(lines, Math.max(0, lines.length - limit));
+  else if ("atSeconds" in query && lines.length > 0) {
+    const targetMs = new Date(lines[0].timestamp).getTime() + query.atSeconds * 1000;
+    const cited = lines.findLastIndex((line) => new Date(line.timestamp).getTime() <= targetMs);
+    from = turnStart(lines, Math.max(0, cited - Math.floor(limit / 4)));
+  }
+  const to = "end" in query ? lines.length : Math.min(lines.length, from + limit);
+  return { lines: lines.slice(from, to), hasBefore: from > 0, hasAfter: to < lines.length };
+}
+
 function orderedUtterances(transcript: Transcript): Utterance[] {
   return transcript.segments
     .flatMap(explodeSegment)
     .toSorted((a, b) => a.timestamp.localeCompare(b.timestamp));
-}
-
-// Build display-ready speaker turns while retaining the first utterance's
-// timestamp. Consecutive utterances from the same user are grouped so the UI
-// reads like a conversation rather than a wall of Whisper fragments.
-export function formatTranscriptForDisplay(
-  transcript: Transcript,
-  cast: CastMember[],
-): TranscriptTurn[] {
-  const characterByUserId = new Map(cast.map((member) => [member.userId, member.characterName]));
-  const turns: TranscriptTurn[] = [];
-
-  for (const utterance of orderedUtterances(transcript)) {
-    const text = utterance.text.trim();
-    if (!text) continue;
-
-    const previous = turns.at(-1);
-    if (previous?.userId === utterance.userId) {
-      previous.text += ` ${text}`;
-      continue;
-    }
-
-    turns.push({
-      timestamp: utterance.timestamp,
-      userId: utterance.userId,
-      speaker: utterance.username ?? utterance.userId,
-      characterName: characterByUserId.get(utterance.userId) ?? null,
-      text,
-    });
-  }
-
-  return turns;
 }
 
 // Preserve utterance-level speaker boundaries and chronological ordering for

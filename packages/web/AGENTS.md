@@ -8,8 +8,15 @@ for workspace-wide conventions.
 ## Layout
 
 - `src/routes/` — pages + `+page.server.ts` loaders and `auth/` OAuth endpoints.
-- Session transcript routes include an authenticated SSE endpoint that polls
-  completed segment checkpoints and streams snippets until processing ends.
+- The session transcript tab (`SessionTranscript.svelte`) loads lines a page at
+  a time from `transcript/lines` (start, end, before/after a line key, or
+  `at=<seconds>` for `#at-<seconds>` citations). Lines are Whisper
+  sub-segments ordered by when they were said, the same as the inference
+  transcript. A finished transcript comes from its artifact (cached by id); a
+  live one from `session_segments`. The SSE endpoint `transcript/events`
+  streams lines from clips transcribed since the page's cursor, plus status,
+  until processing ends. The component does its own scroll anchoring
+  (`keepPosition`) and turns off the browser's while mounted.
 - `campaigns/[id]/schedule` — DM-only session schedule and recap rotation,
   linked from Discord's `/reminder`. Pages that need a login can redirect to
   `/auth/login?returnTo=<path>`; the callback returns there (same-site paths only).

@@ -2,16 +2,13 @@ import { error, fail, redirect } from "@sveltejs/kit";
 import {
   countFailedTranscriptions,
   countSessionWorldChanges,
-  formatTranscriptForDisplay,
   getCampaignAccess,
-  getCampaignCast,
   getSessionDetail,
   getSessionRecapLinks,
   getSessionWorldChanges,
   getWorldSummary,
   isAdmin,
 } from "@rainbot/db";
-import { loadTranscriptArtifact } from "@rainbot/storage";
 import {
   requestFailedTranscriptionRetry,
   requestInferenceRegeneration,
@@ -39,7 +36,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
   const user = locals.user;
   const tab = url.searchParams.get("tab");
   const recapTab = tab !== "transcript" && tab !== "world";
-  const [session, access, worldPages, recapLinks, worldChanges, worldChangeCount, cast] =
+  const [session, access, worldPages, recapLinks, worldChanges, worldChangeCount] =
     await Promise.all([
       getSessionDetail(params.sessionId),
       user ? getCampaignAccess(params.id, user.id) : null,
@@ -48,7 +45,6 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
       user && recapTab ? getSessionRecapLinks(params.sessionId) : [],
       user && tab === "world" ? getSessionWorldChanges(params.sessionId) : null,
       user ? countSessionWorldChanges(params.sessionId) : null,
-      user && tab === "transcript" ? getCampaignCast(params.id) : null,
     ]);
   if (!session || session.campaignId !== params.id) {
     throw error(404, "Session not found.");
@@ -69,9 +65,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
         startedAt: session.startedAt,
         recap: null,
         recapSections: null,
-        transcript: null,
       },
-      transcriptTurns: null,
       world: null,
       recapLinks: [],
       worldChanges: null,
@@ -85,17 +79,12 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
   }
   if (!access.canAccess) throw error(403, "You cannot view this campaign.");
 
-  const [transcript, failedTranscriptions] = await Promise.all([
-    tab === "transcript" && session.transcriptArtifact
-      ? loadTranscriptArtifact(session.transcriptArtifact)
-      : null,
-    access.isAdmin && session.status === "failed" ? countFailedTranscriptions(session.id) : 0,
-  ]);
-  const transcriptTurns = transcript && cast ? formatTranscriptForDisplay(transcript, cast) : null;
+  // The transcript tab loads its lines itself, a page at a time.
+  const failedTranscriptions =
+    access.isAdmin && session.status === "failed" ? await countFailedTranscriptions(session.id) : 0;
 
   return {
-    session: { ...session, transcript },
-    transcriptTurns,
+    session,
     world: {
       campaignId: session.campaignId,
       asOf: session.id,

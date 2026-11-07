@@ -43,13 +43,20 @@ export {
   type WorldUpdateStatus,
 } from "./domain.ts";
 export {
-  formatTranscriptForDisplay,
+  compareTranscriptLines,
   formatTranscriptForInference,
+  pageTranscriptLines,
   parseTranscript,
+  transcriptLineKey,
+  transcriptLineStats,
+  transcriptLines,
   transcriptTableStats,
   type Transcript,
+  type TranscriptLine,
+  type TranscriptLinePage,
+  type TranscriptLineQuery,
+  type TranscriptLineStats,
   type TranscriptSegment,
-  type TranscriptTurn,
 } from "./transcript.ts";
 export {
   createCampaign,
@@ -140,11 +147,11 @@ export {
   failSegmentTranscription,
   getAudioSegmentRefs,
   getTranscriptSegments,
-  listLiveTranscriptSegments,
+  listTranscribedSegments,
   startFailedTranscriptionRetry,
   startTranscriptRegeneration,
-  type LiveTranscriptSnippet,
   type SegmentForTranscription,
+  type TranscribedSegments,
 } from "./transcription.ts";
 export {
   completeProcessingRun,
