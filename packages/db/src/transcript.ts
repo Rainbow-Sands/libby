@@ -288,6 +288,9 @@ export interface TranscriptSearchMatch {
   key: string;
   // Seconds since the session's first line.
   seconds: number;
+  userId: string;
+  // The matching line, for the timeline's tooltip.
+  text: string;
 }
 
 // Lines whose text contains `query`, ignoring case, in transcript order. At
@@ -305,7 +308,12 @@ export function searchTranscriptLines(
     if (!line.text.toLocaleLowerCase().includes(needle)) continue;
     total++;
     if (matches.length < limit) {
-      matches.push({ key: transcriptLineKey(line), seconds: elapsedSeconds(lines, line) });
+      matches.push({
+        key: transcriptLineKey(line),
+        seconds: elapsedSeconds(lines, line),
+        userId: line.userId,
+        text: line.text,
+      });
     }
   }
   return { matches, total };
