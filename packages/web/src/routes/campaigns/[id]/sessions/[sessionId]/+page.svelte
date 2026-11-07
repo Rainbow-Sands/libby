@@ -2,7 +2,7 @@
   import { marked } from "marked";
   import type { ActionData, PageData } from "./$types";
   import { page } from "$app/state";
-  import { invalidateAll } from "$app/navigation";
+  import { goto, invalidateAll } from "$app/navigation";
   import Breadcrumbs from "$lib/components/Breadcrumbs.svelte";
   import TaperedRule from "$lib/components/TaperedRule.svelte";
   import SessionRecap from "$lib/components/SessionRecap.svelte";
@@ -25,6 +25,30 @@
   let activeTab = $derived(sessionTab(page.url.searchParams.get("tab")));
   // Regenerating waits until the session is no longer being processed.
   let busy = $derived(["recording", "transcribing", "summarizing"].includes(data.session.status));
+  // Until the session is done there is no recap or world to show, so the
+  // page is just the live transcript, without tabs.
+  let inProgress = $derived(
+    data.canViewDetails &&
+      ["recording", "closing", "transcribing", "summarizing"].includes(data.session.status),
+  );
+  let voices = $state(0);
+  let now = $state(Date.now());
+
+  $effect(() => {
+    if (!inProgress) return;
+    const timer = setInterval(() => (now = Date.now()), 30_000);
+    return () => clearInterval(timer);
+  });
+
+  function formatClock(d: Date | string): string {
+    return new Date(d).toLocaleTimeString("en-CA", { hour: "numeric", minute: "2-digit" });
+  }
+
+  function formatSoFar(from: Date | string): string {
+    const minutes = Math.max(0, Math.floor((now - new Date(from).getTime()) / 60_000));
+    const hours = Math.floor(minutes / 60);
+    return hours > 0 ? `${hours} h ${minutes % 60} min` : `${minutes} min`;
+  }
 
   function formatDate(d: Date | string): string {
     return new Date(d).toLocaleString("en-CA", {
@@ -65,7 +89,10 @@
 
   function onTranscriptComplete(status: SessionStatus | null) {
     streamedStatus = status;
-    if (status === "done") void invalidateAll();
+    // Leaving the live page, stay on the transcript you were reading.
+    if (inProgress) {
+      void goto("?tab=transcript", { replaceState: true, noScroll: true, invalidateAll: true });
+    } else if (status === "done") void invalidateAll();
   }
 </script>
 
@@ -110,7 +137,9 @@
         {#if data.sequence}Session {data.sequence.number} ·{/if}
         {formatDate(data.session.startedAt)}
       </p>
-      <h1>{data.session.title ?? formatDate(data.session.startedAt)}</h1>
+      <h1>
+        {data.session.title ?? (inProgress ? "Session in progress" : formatDate(data.session.startedAt))}
+      </h1>
     </div>
     <div class="actions">
       {#if data.sequence}
@@ -156,11 +185,43 @@
     </div>
   </div>
   <TaperedRule />
-  {#if sessionStatus && sessionStatus !== "done"}
+  {#if sessionStatus && sessionStatus !== "done" && !inProgress}
     <p class="status"><span class="pill status-{sessionStatus}">{sessionStatus}</span></p>
   {/if}
 
-  {#if data.canViewDetails}
+  {#if inProgress}
+    {#if form?.message}
+      <p class="error" role="alert">{form.message}</p>
+    {/if}
+    <div class="live-banner" class:recording={sessionStatus === "recording"}>
+      <span class="live-state"
+        ><span class="live-dot" aria-hidden="true"></span>{sessionStatus === "recording"
+          ? "Recording"
+          : sessionStatus === "summarizing"
+            ? "Writing the recap"
+            : "Transcribing"}</span
+      >
+      <span class="live-facts">
+        Started {formatClock(data.session.startedAt)}
+        {#if sessionStatus === "recording"}· {formatSoFar(data.session.startedAt)} so far{/if}
+        {#if voices > 0}· {voices} {voices === 1 ? "voice" : "voices"}{/if}
+      </span>
+      <span class="live-note">
+        {sessionStatus === "summarizing"
+          ? "The recap and world changes appear here in a few minutes."
+          : "The recap and world changes appear here once the session ends."}
+      </span>
+    </div>
+    <SessionTranscript
+      campaignId={data.session.campaignId}
+      sessionId={data.session.id}
+      active
+      status={sessionStatus}
+      bind:voices
+      onstatus={(status) => (streamedStatus = status)}
+      oncomplete={onTranscriptComplete}
+    />
+  {:else if data.canViewDetails}
     {#if form?.message}
       <p class="error" role="alert">{form.message}</p>
     {/if}
@@ -231,6 +292,7 @@
         sessionId={data.session.id}
         active={activeTab === "transcript"}
         status={sessionStatus}
+        recap={data.session.recapSections}
         onstatus={(status) => (streamedStatus = status)}
         oncomplete={onTranscriptComplete}
       />
@@ -369,6 +431,55 @@
   .pill.status-failed {
     color: var(--accent-bright);
     background: color-mix(in srgb, var(--accent-bright) 14%, transparent);
+  }
+  .live-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.9rem;
+    margin: 0 0 0.5rem;
+    padding: 0.7rem 1rem;
+    background: var(--ok-soft);
+    border: 1px solid color-mix(in srgb, var(--ok) 30%, transparent);
+    border-radius: 4px;
+  }
+  .live-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--font-display);
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ok);
+  }
+  .live-dot {
+    width: 0.6rem;
+    height: 0.6rem;
+    background: currentColor;
+    border-radius: 50%;
+    box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 22%, transparent);
+  }
+  .live-banner.recording .live-dot {
+    animation: breathe 2s ease-in-out infinite;
+  }
+  @keyframes breathe {
+    50% {
+      box-shadow: 0 0 0 7px color-mix(in srgb, currentColor 10%, transparent);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .live-banner.recording .live-dot {
+      animation: none;
+    }
+  }
+  .live-facts {
+    color: var(--ink);
+  }
+  .live-note {
+    margin-left: auto;
+    font-size: 0.95rem;
+    color: var(--ink-soft);
   }
   .preview-description {
     line-height: 1.7;

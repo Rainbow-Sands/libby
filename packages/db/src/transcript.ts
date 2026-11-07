@@ -218,6 +218,7 @@ export type TranscriptLineQuery =
   | { before: string }
   | { after: string }
   | { atSeconds: number }
+  | { around: string }
   | { end: true }
   | Record<string, never>;
 
@@ -250,8 +251,8 @@ function turnStart(lines: TranscriptLine[], index: number): number {
 
 // One window of a sorted transcript: the start (no query), the end, the
 // lines just before or after a sort key, or the stretch around an elapsed
-// time (seconds since the first line, as recap and world citations use),
-// with a little context before the cited line.
+// time (seconds since the first line, as recap and world citations use) or
+// a line's sort key, with a little context before the cited line.
 export function pageTranscriptLines(
   lines: TranscriptLine[],
   query: TranscriptLineQuery,
@@ -269,9 +270,94 @@ export function pageTranscriptLines(
     const targetMs = new Date(lines[0].timestamp).getTime() + query.atSeconds * 1000;
     const cited = lines.findLastIndex((line) => new Date(line.timestamp).getTime() <= targetMs);
     from = turnStart(lines, Math.max(0, cited - Math.floor(limit / 4)));
+  } else if ("around" in query) {
+    const cited = boundary(lines, query.around, true);
+    from = turnStart(lines, Math.max(0, cited - Math.floor(limit / 4)));
   }
   const to = "end" in query ? lines.length : Math.min(lines.length, from + limit);
   return { lines: lines.slice(from, to), hasBefore: from > 0, hasAfter: to < lines.length };
+}
+
+function elapsedSeconds(lines: TranscriptLine[], line: TranscriptLine): number {
+  const ms = new Date(line.timestamp).getTime() - new Date(lines[0].timestamp).getTime();
+  return Number.isFinite(ms) ? Math.max(0, Math.floor(ms / 1000)) : 0;
+}
+
+export interface TranscriptSearchMatch {
+  // The matching line's sort key (transcriptLineKey).
+  key: string;
+  // Seconds since the session's first line.
+  seconds: number;
+}
+
+// Lines whose text contains `query`, ignoring case, in transcript order. At
+// most `limit` are returned; `total` counts them all.
+export function searchTranscriptLines(
+  lines: TranscriptLine[],
+  query: string,
+  limit: number,
+): { matches: TranscriptSearchMatch[]; total: number } {
+  const needle = query.trim().toLocaleLowerCase();
+  const matches: TranscriptSearchMatch[] = [];
+  let total = 0;
+  if (!needle) return { matches, total };
+  for (const line of lines) {
+    if (!line.text.toLocaleLowerCase().includes(needle)) continue;
+    total++;
+    if (matches.length < limit) {
+      matches.push({ key: transcriptLineKey(line), seconds: elapsedSeconds(lines, line) });
+    }
+  }
+  return { matches, total };
+}
+
+export interface TranscriptTimelineBand {
+  userId: string;
+  // Seconds since the session's first line.
+  from: number;
+  to: number;
+}
+
+export interface TranscriptTimeline {
+  durationSeconds: number;
+  // Who talked most in each stretch of the session, merged where the same
+  // speaker holds consecutive stretches.
+  bands: TranscriptTimelineBand[];
+}
+
+// A coarse picture of who was talking when, for the transcript's timeline.
+// The session is cut into `buckets` equal stretches and each goes to whoever
+// said the most words in it; a stretch nobody spoke in joins the one before.
+export function transcriptTimeline(lines: TranscriptLine[], buckets: number): TranscriptTimeline {
+  if (lines.length === 0) return { durationSeconds: 0, bands: [] };
+  const durationSeconds = elapsedSeconds(lines, lines.at(-1)!);
+  const count = Math.max(1, buckets);
+  const width = Math.max(1, durationSeconds) / count;
+  const words = Array.from({ length: count }, () => new Map<string, number>());
+  for (const line of lines) {
+    const index = Math.min(count - 1, Math.floor(elapsedSeconds(lines, line) / width));
+    const bucket = words[index];
+    bucket.set(line.userId, (bucket.get(line.userId) ?? 0) + line.text.split(/\s+/).length);
+  }
+
+  const bands: TranscriptTimelineBand[] = [];
+  words.forEach((bucket, index) => {
+    let top: string | null = null;
+    let most = 0;
+    for (const [userId, total] of bucket) {
+      if (total > most) {
+        top = userId;
+        most = total;
+      }
+    }
+    const from = Math.round(index * width);
+    const to = Math.round((index + 1) * width);
+    const previous = bands.at(-1);
+    if (previous && (top === null || top === previous.userId)) previous.to = to;
+    else if (top !== null) bands.push({ userId: top, from, to });
+  });
+  if (bands[0]) bands[0].from = 0;
+  return { durationSeconds, bands };
 }
 
 function orderedUtterances(transcript: Transcript): Utterance[] {

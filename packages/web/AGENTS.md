@@ -17,6 +17,16 @@ for workspace-wide conventions.
   streams lines from clips transcribed since the page's cursor, plus status,
   until processing ends. The component does its own scroll anchoring
   (`keepPosition`) and turns off the browser's while mounted.
+- Transcript layout: elapsed time, character (player beneath), text; the
+  campaign DM's turns (`dmUserId`) read as shaded narration. The find bar asks
+  `transcript/search?q=` for every matching line in the session and steps
+  through them, loading `around=<line key>` when a match is outside the loaded
+  window; live lines that match join the results. A finished transcript also
+  gets a timeline rail (speaker bands from `transcriptTimeline`, markers from
+  the recap's `at` fields) and inline epic moments.
+- While a session is recording, closing, transcribing or summarizing, the
+  session page shows only the live transcript (no tabs); when the stream
+  completes it moves to `?tab=transcript`.
 - `campaigns/[id]/schedule` — DM-only session schedule and recap rotation,
   linked from Discord's `/reminder`. Pages that need a login can redirect to
   `/auth/login?returnTo=<path>`; the callback returns there (same-site paths only).

@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   formatTranscriptForInference,
   pageTranscriptLines,
+  searchTranscriptLines,
   transcriptLineKey,
+  transcriptTimeline,
   transcriptLineStats,
   transcriptLines,
   transcriptTableStats,
@@ -161,6 +163,79 @@ describe("pageTranscriptLines", () => {
     const page = pageTranscriptLines(lines, { atSeconds: 47 }, 4);
     expect(texts(page)).toEqual(["line 3", "line 4", "line 5", "line 6"]);
     expect(page).toMatchObject({ hasBefore: true, hasAfter: true });
+  });
+
+  it("opens around a line's key", () => {
+    const page = pageTranscriptLines(lines, { around: transcriptLineKey(lines[6]) }, 4);
+    expect(texts(page)).toEqual(["line 5", "line 6", "line 7", "line 8"]);
+  });
+});
+
+describe("searchTranscriptLines", () => {
+  const lines: TranscriptLine[] = ["The flour mill", "nothing here", "FLOUR sacks", "flour"].map(
+    (text, index) => ({
+      id: `s${index}:0000`,
+      timestamp: new Date(Date.UTC(2026, 0, 1, 0, 0, index * 30)).toISOString(),
+      userId: "user-1",
+      speaker: "Alice",
+      characterName: null,
+      text,
+    }),
+  );
+
+  it("finds lines containing the query, ignoring case", () => {
+    const result = searchTranscriptLines(lines, " Flour ", 10);
+    expect(result.total).toBe(3);
+    expect(result.matches).toEqual([
+      { key: transcriptLineKey(lines[0]), seconds: 0 },
+      { key: transcriptLineKey(lines[2]), seconds: 60 },
+      { key: transcriptLineKey(lines[3]), seconds: 90 },
+    ]);
+  });
+
+  it("caps the matches but counts them all", () => {
+    const result = searchTranscriptLines(lines, "flour", 2);
+    expect(result).toMatchObject({ total: 3 });
+    expect(result.matches).toHaveLength(2);
+    expect(searchTranscriptLines(lines, "  ", 2)).toEqual({ matches: [], total: 0 });
+  });
+});
+
+const timelineLine = (
+  seconds: number,
+  userId: string,
+  text = "a few words here",
+): TranscriptLine => ({
+  id: `s${seconds}:0000`,
+  timestamp: new Date(Date.UTC(2026, 0, 1, 0, 0, seconds)).toISOString(),
+  userId,
+  speaker: userId,
+  characterName: null,
+  text,
+});
+
+describe("transcriptTimeline", () => {
+  it("gives each stretch to whoever said the most and merges neighbours", () => {
+    const timeline = transcriptTimeline(
+      [
+        timelineLine(0, "dm"),
+        timelineLine(10, "dm"),
+        timelineLine(40, "kess"),
+        timelineLine(55, "kess", "hi"),
+        timelineLine(100, "dm"),
+      ],
+      4,
+    );
+    expect(timeline.durationSeconds).toBe(100);
+    expect(timeline.bands).toEqual([
+      { userId: "dm", from: 0, to: 25 },
+      { userId: "kess", from: 25, to: 75 },
+      { userId: "dm", from: 75, to: 100 },
+    ]);
+  });
+
+  it("is empty without lines", () => {
+    expect(transcriptTimeline([], 10)).toEqual({ durationSeconds: 0, bands: [] });
   });
 });
 
