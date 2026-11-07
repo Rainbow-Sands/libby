@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
-  formatTranscriptForDisplay,
   formatTranscriptForInference,
+  pageTranscriptLines,
+  transcriptLineKey,
+  transcriptLineStats,
+  transcriptLines,
   transcriptTableStats,
   type Transcript,
+  type TranscriptLine,
   type TranscriptSegment,
 } from "./transcript.ts";
 
@@ -24,83 +28,139 @@ function transcriptOf(...segments: TranscriptSegment[]): Transcript {
   return { version: 1, segments };
 }
 
-describe("formatTranscriptForDisplay", () => {
-  it("returns chronologically ordered turns with timestamps and character names", () => {
+describe("transcriptLines", () => {
+  it("orders utterances by when they were said, across clips", () => {
+    // Alice's clip stays open while Bob answers in the middle of it.
     const alice = makeSegment({
       segmentId: "a",
       userId: "user-a",
       username: "Alice",
       timestamp: "2026-01-01T00:00:00.000Z",
-      whisper: { segments: [{ start: 8, text: "Alice's words", no_speech_prob: 0.1 }] },
+      whisper: {
+        segments: [
+          { start: 0, text: " A ", no_speech_prob: 0.1 },
+          { start: 5, text: "C", no_speech_prob: 0.1 },
+        ],
+      },
     });
     const bob = makeSegment({
       segmentId: "b",
       userId: "user-b",
       username: "Bob",
-      timestamp: "2026-01-01T00:00:02.000Z",
-      whisper: { segments: [{ start: 0, text: "Bob's words", no_speech_prob: 0.1 }] },
+      timestamp: "2026-01-01T00:00:03.000Z",
+      whisper: { segments: [{ start: 0, text: "B", no_speech_prob: 0.1 }] },
     });
 
-    const result = formatTranscriptForDisplay(transcriptOf(alice, bob), [
-      { userId: "user-a", username: "Alice", characterName: "Thorin" },
-    ]);
+    const result = transcriptLines(
+      [alice, bob],
+      [{ userId: "user-a", username: "Alice", characterName: "Thorin" }],
+    );
 
-    expect(result).toEqual([
-      {
-        timestamp: "2026-01-01T00:00:02.000Z",
-        userId: "user-b",
-        speaker: "Bob",
-        characterName: null,
-        text: "Bob's words",
-      },
-      {
-        timestamp: "2026-01-01T00:00:08.000Z",
-        userId: "user-a",
-        speaker: "Alice",
-        characterName: "Thorin",
-        text: "Alice's words",
-      },
+    expect(result.map((line) => [line.speaker, line.text, line.timestamp])).toEqual([
+      ["Alice", "A", "2026-01-01T00:00:00.000Z"],
+      ["Bob", "B", "2026-01-01T00:00:03.000Z"],
+      ["Alice", "C", "2026-01-01T00:00:05.000Z"],
     ]);
+    expect(result[0]).toMatchObject({ id: "a:0000", characterName: "Thorin" });
+    expect(result[1].characterName).toBeNull();
   });
 
-  it("groups consecutive utterances by user while preserving the first timestamp", () => {
-    const segment = makeSegment({
-      timestamp: "2026-01-01T00:00:00.000Z",
-      whisper: {
-        segments: [
-          { start: 2, text: " first part ", no_speech_prob: 0.1 },
-          { start: 5, text: "second part", no_speech_prob: 0.1 },
-        ],
-      },
+  it("falls back to the whole clip and drops empty text", () => {
+    const whole = makeSegment({ segmentId: "a", text: " whole clip " });
+    const empty = makeSegment({
+      segmentId: "b",
+      whisper: { segments: [{ start: 0, text: "  ", no_speech_prob: 0.1 }] },
     });
 
-    expect(formatTranscriptForDisplay(transcriptOf(segment), [])).toEqual([
-      {
-        timestamp: "2026-01-01T00:00:02.000Z",
-        userId: "user-1",
-        speaker: "Alice",
-        characterName: null,
-        text: "first part second part",
-      },
-    ]);
+    expect(transcriptLines([whole, empty], []).map((line) => line.text)).toEqual(["whole clip"]);
   });
 
-  it("keeps adjacent users separate even when their display names match", () => {
-    const first = makeSegment({
-      segmentId: "a",
-      userId: "user-a",
-      username: "Player",
-      whisper: { segments: [{ start: 0, text: "one", no_speech_prob: 0.1 }] },
-    });
+  it("counts turns and speakers, keeping same-named users apart", () => {
+    const first = makeSegment({ segmentId: "a", userId: "user-a", username: "Player" });
     const second = makeSegment({
       segmentId: "b",
       userId: "user-b",
       username: "Player",
       timestamp: "2026-01-01T00:00:01.000Z",
-      whisper: { segments: [{ start: 0, text: "two", no_speech_prob: 0.1 }] },
+    });
+    const third = makeSegment({
+      segmentId: "c",
+      userId: "user-b",
+      username: "Player",
+      timestamp: "2026-01-01T00:00:02.000Z",
     });
 
-    expect(formatTranscriptForDisplay(transcriptOf(first, second), [])).toHaveLength(2);
+    expect(transcriptLineStats(transcriptLines([first, second, third], []))).toEqual({
+      turns: 2,
+      speakers: [
+        { userId: "user-a", speaker: "Player" },
+        { userId: "user-b", speaker: "Player" },
+      ],
+    });
+  });
+});
+
+const texts = (page: { lines: TranscriptLine[] }) => page.lines.map((line) => line.text);
+
+describe("pageTranscriptLines", () => {
+  // One line every 10 seconds, two speakers taking turns.
+  const lines: TranscriptLine[] = Array.from({ length: 10 }, (_, index) => ({
+    id: `s${index}:0000`,
+    timestamp: new Date(Date.UTC(2026, 0, 1, 0, 0, index * 10)).toISOString(),
+    userId: `user-${index % 2}`,
+    speaker: "Alice",
+    characterName: null,
+    text: `line ${index}`,
+  }));
+
+  it("pages from the start and from the end", () => {
+    expect(pageTranscriptLines(lines, {}, 3)).toMatchObject({ hasBefore: false, hasAfter: true });
+    expect(texts(pageTranscriptLines(lines, {}, 3))).toEqual(["line 0", "line 1", "line 2"]);
+    const end = pageTranscriptLines(lines, { end: true }, 3);
+    expect(texts(end)).toEqual(["line 7", "line 8", "line 9"]);
+    expect(end).toMatchObject({ hasBefore: true, hasAfter: false });
+  });
+
+  it("pages before and after a line's key", () => {
+    const key = transcriptLineKey(lines[5]);
+    expect(texts(pageTranscriptLines(lines, { before: key }, 3))).toEqual([
+      "line 2",
+      "line 3",
+      "line 4",
+    ]);
+    expect(texts(pageTranscriptLines(lines, { after: key }, 3))).toEqual([
+      "line 6",
+      "line 7",
+      "line 8",
+    ]);
+    expect(pageTranscriptLines(lines, { before: transcriptLineKey(lines[1]) }, 3)).toMatchObject({
+      hasBefore: false,
+      hasAfter: true,
+    });
+  });
+
+  it("starts a window at the beginning of a speaker's turn", () => {
+    const turns = lines.map((line, index) => ({
+      ...line,
+      userId: index < 5 ? "user-1" : "user-2",
+    }));
+    const end = pageTranscriptLines(turns, { end: true }, 7);
+    expect(texts(end)[0]).toBe("line 0");
+    expect(end).toMatchObject({ hasBefore: false, hasAfter: false });
+    expect(texts(pageTranscriptLines(turns, { before: transcriptLineKey(turns[5]) }, 2))).toEqual([
+      "line 0",
+      "line 1",
+      "line 2",
+      "line 3",
+      "line 4",
+    ]);
+  });
+
+  it("opens around a cited moment with some context before it", () => {
+    // 47 seconds in falls within line 4 (40s).
+    const page = pageTranscriptLines(lines, { atSeconds: 47 }, 4);
+    expect(texts(page)).toEqual(["line 3", "line 4", "line 5", "line 6"]);
+    expect(page).toMatchObject({ hasBefore: true, hasAfter: true });
   });
 });
 

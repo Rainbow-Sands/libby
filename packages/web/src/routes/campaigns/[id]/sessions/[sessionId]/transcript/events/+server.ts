@@ -1,11 +1,15 @@
 import { error } from "@sveltejs/kit";
 import {
+  compareTranscriptLines,
   getCampaignAccess,
   getCampaignCast,
   getSessionDetail,
   getSessionStatus,
-  listLiveTranscriptSegments,
+  listTranscribedSegments,
+  transcriptLines,
+  type TranscriptLine,
 } from "@rainbot/db";
+import { statsWithCharacters, withCharacters } from "$lib/server/transcript-lines";
 import type { RequestHandler } from "./$types";
 
 const encoder = new TextEncoder();
@@ -31,7 +35,9 @@ function wait(milliseconds: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-export const GET: RequestHandler = async ({ params, locals, request }) => {
+// Streams lines from clips transcribed at or after `since` (the cursor the
+// lines endpoint returned), one batch per poll, with whole-session stats.
+export const GET: RequestHandler = async ({ params, locals, request, url }) => {
   if (!locals.user) throw error(401, "Please log in to view this transcript.");
 
   const [session, access, cast] = await Promise.all([
@@ -42,59 +48,80 @@ export const GET: RequestHandler = async ({ params, locals, request }) => {
   if (!session || session.campaignId !== params.id) throw error(404, "Session not found.");
   if (!access.canAccess) throw error(403, "You cannot view this campaign.");
 
-  const characterByUserId = new Map(cast.map((member) => [member.userId, member.characterName]));
+  const sinceParam = url.searchParams.get("since");
+  const since = sinceParam ? new Date(sinceParam) : undefined;
+  if (since && Number.isNaN(since.getTime())) throw error(400, "Invalid since.");
 
   let cancelled = false;
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      const sent = new Set<string>();
+      const known = new Set<string>();
+      let all: TranscriptLine[] = [];
       let cursor: Date | undefined;
       let lastStatus: string | null = null;
 
+      // Lines not seen before, folded into the whole-session list.
+      const take = (lines: TranscriptLine[]): TranscriptLine[] => {
+        const fresh = lines.filter((line) => !known.has(line.id));
+        for (const line of fresh) known.add(line.id);
+        if (fresh.length > 0) all = [...all, ...fresh].toSorted(compareTranscriptLines);
+        return fresh;
+      };
+      const advance = (latest: Date | null) => {
+        if (latest && (!cursor || latest > cursor)) cursor = latest;
+      };
+
       void (async () => {
         try {
+          // Everything so far, for the stats, then what the client has not seen.
+          const [everything, missed] = await Promise.all([
+            listTranscribedSegments(session.id),
+            since ? listTranscribedSegments(session.id, since) : null,
+          ]);
+          take(transcriptLines(everything.segments, []));
+          advance(everything.latestTranscribedAt);
+          let pending = missed ? transcriptLines(missed.segments, []) : [];
+
           while (true) {
             if (cancelled || request.signal.aborted) return;
-            const [segments, status] = await Promise.all([
-              listLiveTranscriptSegments(session.id, cursor),
-              getSessionStatus(session.id),
-            ]);
-
-            if (cancelled || request.signal.aborted) return;
-            for (const segment of segments) {
-              const id = `${segment.runId}:${segment.segmentId}`;
-              if (sent.has(id)) continue;
-              sent.add(id);
+            if (pending.length > 0) {
               controller.enqueue(
-                event(
-                  "snippet",
-                  {
-                    id,
-                    timestamp: segment.timestamp,
-                    userId: segment.userId,
-                    speaker: segment.username ?? segment.userId,
-                    characterName: characterByUserId.get(segment.userId) ?? null,
-                    text: segment.text,
-                  },
-                  id,
-                ),
+                event("lines", {
+                  lines: withCharacters(pending, cast),
+                  stats: statsWithCharacters(all, cast),
+                }),
               );
             }
-            const latest = segments.at(-1)?.transcribedAt;
-            if (latest && (!cursor || latest > cursor)) cursor = latest;
+
+            await wait(1_000, request.signal);
+            if (cancelled || request.signal.aborted) return;
+            const [segments, status] = await Promise.all([
+              listTranscribedSegments(session.id, cursor),
+              getSessionStatus(session.id),
+            ]);
+            if (cancelled || request.signal.aborted) return;
+            pending = take(transcriptLines(segments.segments, []));
+            advance(segments.latestTranscribedAt);
 
             if (status !== lastStatus) {
               lastStatus = status;
               controller.enqueue(event("status", { status }));
             }
             if (!status || TERMINAL_STATUSES.has(status)) {
+              if (pending.length > 0) {
+                controller.enqueue(
+                  event("lines", {
+                    lines: withCharacters(pending, cast),
+                    stats: statsWithCharacters(all, cast),
+                  }),
+                );
+              }
               controller.enqueue(event("complete", { status }));
               controller.close();
               return;
             }
 
             controller.enqueue(encoder.encode(": keepalive\n\n"));
-            await wait(1_000, request.signal);
           }
         } catch (streamError) {
           if (!cancelled && !request.signal.aborted) controller.error(streamError);
