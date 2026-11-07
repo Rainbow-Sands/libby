@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { getActiveSession, setActiveSession } from "./recording.ts";
 import { finishActiveActivations, type FinalizableActivation } from "./session-shutdown.ts";
 import { CHANNELS, SAMPLE_RATE, spawnClipEncoder } from "./clip-encoder.ts";
+import { OpusGapFiller } from "./gap-filler.ts";
 import {
   beginSessionShutdown,
   completeAudioSegment,
@@ -57,6 +58,9 @@ function startActivation(
   // The receiver drops this user's subscription when the stream closes, so a
   // new activation can subscribe from then on.
   const listening = new Promise<void>((resolve) => audioStream.once("close", () => resolve()));
+  // Keeps the clip in step with the real clock across short pauses, so
+  // Whisper's in-clip timestamps place each utterance correctly.
+  const gapFiller = new OpusGapFiller();
 
   const ffmpegProcess = spawnClipEncoder(outputPath, `${ref.userId}, ${ref.segmentId}`);
 
@@ -93,6 +97,7 @@ function startActivation(
     });
     opusDecoder.on("error", (err) => {
       console.error(`opus decode error (${ref.userId}), skipping packet:`, err);
+      gapFiller.unpipe(opusDecoder as any);
       opusDecoder.unpipe(ffmpegProcess.stdin! as any);
       opusDecoder.destroy();
       if (finishing) {
@@ -103,7 +108,7 @@ function startActivation(
         ffmpegProcess.stdin.write(SILENT_FRAME);
       }
       wireDecoder();
-      audioStream.pipe(opusDecoder as any);
+      gapFiller.pipe(opusDecoder as any);
     });
     // Ending ffmpeg's stdin is handled separately (below), since decoders get
     // swapped out mid-activation and shouldn't each end the shared stdin.
@@ -118,18 +123,20 @@ function startActivation(
     if (!finishing) {
       finishing = true;
       audioStream.pause();
-      audioStream.unpipe(opusDecoder as any);
+      audioStream.unpipe(gapFiller);
+      gapFiller.stopFilling();
 
       let packet: Buffer | null;
       while ((packet = audioStream.read() as Buffer | null) !== null) {
-        opusDecoder.write(packet);
+        gapFiller.write(packet);
       }
 
       audioStream.destroy();
       if (opusDecoder.destroyed) {
         endFfmpegInput();
       } else {
-        opusDecoder.end();
+        // Ends the decoder through the pipe once queued packets are through.
+        gapFiller.end();
       }
     }
     return completed;
@@ -148,7 +155,8 @@ function startActivation(
     if (!finishing) void finish();
   });
 
-  audioStream.pipe(opusDecoder! as any);
+  audioStream.pipe(gapFiller);
+  gapFiller.pipe(opusDecoder! as any);
 
   // Used only when finalizing has overrun its deadline. A killed ffmpeg
   // closes with a signal, so the clip takes the discard path below.

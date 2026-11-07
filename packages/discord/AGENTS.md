@@ -61,6 +61,12 @@ skipped rather than sent late. Claiming also assigns recap duty, and
   stuck clip can't keep the bot in voice.
 - ffmpeg's stderr must always be read (`clip-encoder.ts`). An unread pipe fills
   on a long clip and ffmpeg then blocks forever.
+- Discord stops sending packets while a speaker is quiet, and a clip only ends
+  after 2s without packets. `OpusGapFiller` (`gap-filler.ts`) inserts Opus
+  silence packets when a clip falls more than 200ms behind the real clock, so
+  Whisper's in-clip offsets line up with real time and the transcript keeps
+  other speakers' replies in order. Don't pipe the receiver straight into the
+  decoder.
 - Bots in the voice channel (music bots) are never recorded.
 - The transcript speaker label is the **account username** resolved from the
   guild member cache (`session.ts`), falling back to the user id. It is joined to
