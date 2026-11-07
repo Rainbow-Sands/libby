@@ -187,9 +187,9 @@ describe("searchTranscriptLines", () => {
     const result = searchTranscriptLines(lines, " Flour ", 10);
     expect(result.total).toBe(3);
     expect(result.matches).toEqual([
-      { key: transcriptLineKey(lines[0]), seconds: 0 },
-      { key: transcriptLineKey(lines[2]), seconds: 60 },
-      { key: transcriptLineKey(lines[3]), seconds: 90 },
+      { key: transcriptLineKey(lines[0]), seconds: 0, userId: "user-1", text: "The flour mill" },
+      { key: transcriptLineKey(lines[2]), seconds: 60, userId: "user-1", text: "FLOUR sacks" },
+      { key: transcriptLineKey(lines[3]), seconds: 90, userId: "user-1", text: "flour" },
     ]);
   });
 

@@ -73,6 +73,15 @@
   // A divider marks each half hour of a finished session.
   const DIVIDER_SECONDS = 30 * 60;
   const SEARCH_DELAY_MS = 250;
+  const SCROLL_KEYS = new Set([
+    "ArrowUp",
+    "ArrowDown",
+    "PageUp",
+    "PageDown",
+    "Home",
+    "End",
+    " ",
+  ]);
 
   // The loaded window of lines, sorted by when they were said.
   let lines = $state<TranscriptLine[]>([]);
@@ -91,8 +100,21 @@
   // At the newest lines, so new ones scroll into view.
   let following = $state(true);
   let unseen = $state(0);
-  // Seconds into the session at the top of the viewport, for the timeline.
+  // Seconds into the session where you are reading (the turn at the
+  // reading line), and when the next turn starts.
   let position = $state(0);
+  let reach = $state(0);
+  // The timeline item you clicked stays current until you scroll yourself.
+  let pinnedMarker = $state<number | null>(null);
+  // What the pointer is over on the timeline's bar.
+  let tip = $state<{
+    top: number;
+    title: string;
+    detail: string | null;
+    time: string;
+    parts: { text: string; match: boolean }[] | null;
+  } | null>(null);
+  let markerList = $state<HTMLOListElement>();
   // The turn whose link was just copied.
   let copied = $state<string | null>(null);
 
@@ -180,7 +202,11 @@
     for (const ruling of sections.rulings) add("Ruling", ruling.ruling, ruling.at);
     return result.toSorted((a, b) => a.seconds - b.seconds);
   });
-  let currentMarker = $derived(markers.findLastIndex((marker) => marker.seconds <= position));
+  // The last item at or before the turn you are reading, or the one you
+  // clicked.
+  let currentMarker = $derived(
+    pinnedMarker ?? markers.findLastIndex((marker) => marker.seconds < reach),
+  );
 
   // Turns, with half-hour dividers and the recap's epic moments between them.
   let rows = $derived.by(() => {
@@ -214,23 +240,18 @@
   });
 
   let showTimeline = $derived(!live && Boolean(timeline?.length) && durationSeconds > 0);
-  let timelineGradient = $derived.by(() => {
-    if (!timeline || durationSeconds <= 0) return "none";
-    const stops = timeline.map((band) => {
-      const from = (band.from / durationSeconds) * 100;
-      const to = (band.to / durationSeconds) * 100;
-      return `hsl(${speakerHue(band.userId)} 48% 42%) ${from.toFixed(2)}% ${to.toFixed(2)}%`;
-    });
-    return `linear-gradient(${stops.join(", ")})`;
-  });
+  function percent(seconds: number): number {
+    return durationSeconds > 0 ? Math.min(100, Math.max(0, (seconds / durationSeconds) * 100)) : 0;
+  }
   // Search matches on the timeline, one dot per half percent at most.
   let matchDots = $derived.by(() => {
     if (!search || durationSeconds <= 0) return [];
-    const dots = new Set<number>();
-    for (const match of search.matches) {
-      dots.add(Math.round((match.seconds / durationSeconds) * 200) / 2);
-    }
-    return [...dots];
+    const dots = new Map<number, number>();
+    search.matches.forEach((match, index) => {
+      const top = Math.round(percent(match.seconds) * 2) / 2;
+      if (!dots.has(top)) dots.set(top, index);
+    });
+    return [...dots].map(([top, index]) => ({ top, index }));
   });
 
   let matchKeys = $derived(new Set(search?.matches.map((match) => match.key) ?? []));
@@ -242,6 +263,57 @@
   let speakers = $derived(
     stats.speakers.toSorted((a, b) => Number(b.userId === dmUserId) - Number(a.userId === dmUserId)),
   );
+
+  // How a speaker is named on the timeline: their character, else their
+  // name; the player (or the DM's name) underneath.
+  function speakerLabel(userId: string): { name: string; player: string | null } {
+    const speaker = stats.speakers.find((entry) => entry.userId === userId);
+    if (userId === dmUserId) return { name: "DM", player: speaker?.speaker ?? null };
+    if (speaker?.characterName) return { name: speaker.characterName, player: speaker.speaker };
+    return { name: speaker?.speaker ?? "Someone", player: null };
+  }
+
+  function showBandTip(band: TranscriptTimelineBand) {
+    const { name, player } = speakerLabel(band.userId);
+    tip = {
+      top: percent((band.from + band.to) / 2),
+      title: name,
+      detail: player ? `${player} · mostly talking` : "mostly talking",
+      time: `${formatElapsed(band.from)} – ${formatElapsed(band.to)}`,
+      parts: null,
+    };
+  }
+
+  // A stretch of the matching line around the first match.
+  function excerpt(text: string, query: string): string {
+    const at = text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase());
+    if (at === -1 || text.length <= 140) return text;
+    const from = Math.max(0, at - 60);
+    const to = Math.min(text.length, at + query.length + 60);
+    return `${from > 0 ? "…" : ""}${text.slice(from, to).trim()}${to < text.length ? "…" : ""}`;
+  }
+
+  function showMatchTip(index: number) {
+    const match = search?.matches[index];
+    if (!search || !match) return;
+    tip = {
+      top: percent(match.seconds),
+      title: `${speakerLabel(match.userId).name} · match ${(index + 1).toLocaleString("en-CA")} of ${search.total.toLocaleString("en-CA")}`,
+      detail: null,
+      time: formatElapsed(match.seconds),
+      parts: splitMatches(excerpt(match.text, search.query), search.query),
+    };
+  }
+
+  function showNotchTip() {
+    tip = {
+      top: percent(position),
+      title: "You are here",
+      detail: null,
+      time: formatElapsed(position),
+      parts: null,
+    };
+  }
 
   // Streamed lines outside the loaded window would leave a gap; the page
   // that reaches them loads them instead.
@@ -309,8 +381,19 @@
     unseen = 0;
   }
 
+  // A third of the way down what the header and find bar leave visible: the
+  // line you are reading at, and where jumps put their turn.
+  function readingLine(): number {
+    const header =
+      parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--header-height")) || 0;
+    const top = header + (findBar?.offsetHeight ?? 0);
+    return top + (window.innerHeight - top) / 3;
+  }
+
   function scrollToTurn(id: string | null | undefined) {
-    if (id) turnElement(id)?.scrollIntoView({ block: "center" });
+    const element = id ? turnElement(id) : null;
+    if (!element) return;
+    window.scrollTo({ top: window.scrollY + element.getBoundingClientRect().top - readingLine() + 4 });
   }
 
   function updateFollowing() {
@@ -322,17 +405,40 @@
     if (following) unseen = 0;
   }
 
-  // The turn at the top of the viewport, for the timeline's notch.
+  // The turn at the reading line, for the timeline's notch and current item.
   function updatePosition() {
     if (!list) return;
-    const top = headerOffset();
-    for (const element of list.querySelectorAll<HTMLElement>("[data-seconds]")) {
-      if (element.getBoundingClientRect().bottom > top) {
-        position = Number(element.dataset.seconds);
-        return;
-      }
-    }
+    const line = readingLine();
+    const elements = [...list.querySelectorAll<HTMLElement>("[data-seconds]")];
+    const index = elements.findIndex((element) => element.getBoundingClientRect().bottom > line);
+    const current = elements[index === -1 ? elements.length - 1 : index];
+    if (!current) return;
+    position = Number(current.dataset.seconds);
+    const next = index === -1 ? undefined : elements[index + 1];
+    reach = next ? Number(next.dataset.seconds) : hasAfter ? position + 1 : durationSeconds + 1;
   }
+
+  // Keep the current timeline item in view in its own scrolling list,
+  // without scrolling the page.
+  $effect(() => {
+    const index = currentMarker;
+    const container = markerList;
+    if (!container) return;
+    if (index < 0) {
+      container.scrollTop = 0;
+      return;
+    }
+    const item = container.children[index] as HTMLElement | undefined;
+    if (!item) return;
+    const top = item.offsetTop;
+    const bottom = top + item.offsetHeight;
+    if (top >= container.scrollTop && bottom <= container.scrollTop + container.clientHeight) return;
+    const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    container.scrollTo({
+      top: Math.max(0, top - container.clientHeight / 3),
+      behavior: smooth ? "smooth" : "auto",
+    });
+  });
 
   // Replace the loaded window: the start, the newest lines, the stretch
   // around a cited moment, or the stretch around one line.
@@ -417,7 +523,12 @@
     const known = new Set(search.matches.map((match) => match.key));
     const fresh = incoming
       .filter((line) => !known.has(lineKey(line)) && line.text.toLocaleLowerCase().includes(needle))
-      .map((line) => ({ key: lineKey(line), seconds: Math.floor(elapsed(line.timestamp)) }));
+      .map((line) => ({
+        key: lineKey(line),
+        seconds: Math.floor(elapsed(line.timestamp)),
+        userId: line.userId,
+        text: line.text,
+      }));
     if (fresh.length === 0) return;
     const current = search.matches[matchIndex]?.key;
     const matches = [...search.matches, ...fresh].toSorted((a, b) => a.key.localeCompare(b.key));
@@ -571,11 +682,23 @@
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(updatePosition);
     };
+    // Scrolling yourself lets go of a clicked timeline item.
+    const unpin = (event: Event) => {
+      if (event instanceof KeyboardEvent && !SCROLL_KEYS.has(event.key)) return;
+      if (event.target instanceof Node && markerList?.contains(event.target)) return;
+      pinnedMarker = null;
+    };
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onScroll, { passive: true });
+    window.addEventListener("wheel", unpin, { passive: true });
+    window.addEventListener("touchmove", unpin, { passive: true });
+    window.addEventListener("keydown", unpin);
     return () => {
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
+      window.removeEventListener("wheel", unpin);
+      window.removeEventListener("touchmove", unpin);
+      window.removeEventListener("keydown", unpin);
       cancelAnimationFrame(frame);
       root.style.overflowAnchor = anchoring;
       source?.close();
@@ -803,20 +926,70 @@
           <span>{formatElapsed(durationSeconds)}</span>
         </div>
         <div class="timeline-body">
-          <div class="bar" style={`background: ${timelineGradient}`} aria-hidden="true">
-            {#each matchDots as dot (dot)}
-              <span class="match-dot" style={`top: ${dot}%`}></span>
+          <!-- The marker list is the accessible way through; the bar is for pointers. -->
+          <div class="track" aria-hidden="true" onpointerleave={() => (tip = null)}>
+            {#each timeline ?? [] as band (band.from)}
+              <a
+                class="band"
+                href="#at-{band.from}"
+                aria-label="{speakerLabel(band.userId).name} from {formatElapsed(band.from)}"
+                tabindex="-1"
+                style={`top: ${percent(band.from)}%; height: ${percent(band.to) - percent(band.from)}%; background: hsl(${speakerHue(band.userId)} 48% 42%)`}
+                onpointerenter={() => showBandTip(band)}
+                onclick={() => (pinnedMarker = null)}
+              ></a>
             {/each}
+            {#each markers as marker, index (index)}
+              <span
+                class="tick"
+                class:here={index === currentMarker}
+                style={`top: ${percent(marker.seconds)}%`}
+              ></span>
+            {/each}
+            {#each matchDots as dot (dot.top)}
+              <button
+                type="button"
+                class="match-dot"
+                aria-label="Search match at {formatElapsed(search?.matches[dot.index]?.seconds ?? 0)}"
+                class:current={dot.index === matchIndex}
+                tabindex="-1"
+                style={`top: ${dot.top}%`}
+                onpointerenter={() => showMatchTip(dot.index)}
+                onclick={() => {
+                  pinnedMarker = null;
+                  void goToMatch(dot.index);
+                }}
+              ></button>
+            {/each}
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
             <span
               class="notch"
-              style={`top: ${Math.min(100, (position / durationSeconds) * 100)}%`}
+              style={`top: ${percent(position)}%`}
+              onpointerenter={showNotchTip}
             ></span>
+            {#if tip}
+              <div class="tip" style={`top: ${tip.top}%`}>
+                <span class="tip-head"><span>{tip.title}</span><span>{tip.time}</span></span>
+                {#if tip.detail}<span class="tip-detail">{tip.detail}</span>{/if}
+                {#if tip.parts}
+                  <span class="tip-text"
+                    >“{#each tip.parts as part, index (index)}{#if part.match}<mark>{part.text}</mark
+                        >{:else}{part.text}{/if}{/each}”</span
+                  >
+                {/if}
+              </div>
+            {/if}
           </div>
           {#if markers.length}
-            <ol class="markers">
+            <ol class="markers" bind:this={markerList}>
               {#each markers as marker, index (index)}
                 <li>
-                  <a href="#at-{marker.seconds}" class:here={index === currentMarker}>
+                  <a
+                    href="#at-{marker.seconds}"
+                    class:here={index === currentMarker}
+                    aria-current={index === currentMarker ? "location" : undefined}
+                    onclick={() => (pinnedMarker = index)}
+                  >
                     <span class="marker-meta"
                       ><span class="marker-kind">{marker.kind}</span><span
                         >{formatElapsed(marker.seconds)}</span
@@ -831,10 +1004,6 @@
             <p class="timeline-empty">The recap has no moments placed in time.</p>
           {/if}
         </div>
-        <p class="timeline-note">
-          Colour shows who was talking. The notch is where you are{#if matchDots.length}; gold
-            dots are search matches{/if}. Markers come from the recap.
-        </p>
       </aside>
     {/if}
   </div>
@@ -1192,9 +1361,6 @@
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
-  .narration .turn-text {
-    font-style: italic;
-  }
   .turn-text mark {
     padding: 0 1px;
     color: inherit;
@@ -1326,16 +1492,20 @@
     stroke-linecap: round;
     stroke-linejoin: round;
   }
+  /* One screen tall and still: the bar always shows the whole session and
+     only the item list scrolls. */
   .timeline {
     position: sticky;
     top: calc(var(--header-height, 0px) + 1rem);
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-    max-height: calc(100vh - var(--header-height, 0px) - 2rem);
+    height: calc(100vh - var(--header-height, 0px) - 2rem);
+    height: calc(100dvh - var(--header-height, 0px) - 2rem);
+    max-height: 60rem;
+    min-height: 20rem;
     box-sizing: border-box;
-    padding: 1rem 1.1rem;
-    overflow-y: auto;
+    padding: 1rem 0.9rem 0.6rem 1.1rem;
     background: var(--surface);
     border: 1px solid var(--edge);
     border-radius: 4px;
@@ -1344,6 +1514,7 @@
     display: flex;
     justify-content: space-between;
     align-items: baseline;
+    padding-right: 0.2rem;
   }
   .timeline-head h3 {
     margin: 0;
@@ -1358,45 +1529,128 @@
     color: var(--ink-soft);
   }
   .timeline-body {
+    flex: 1;
+    min-height: 0;
     display: grid;
-    grid-template-columns: 1.5rem minmax(0, 1fr);
-    gap: 0 0.6rem;
-    min-height: 12rem;
+    grid-template-columns: 1.9rem minmax(0, 1fr);
+    gap: 0 0.5rem;
   }
-  .bar {
+  .track {
     position: relative;
+    margin: 0.35rem 0;
+  }
+  .band {
+    position: absolute;
+    left: 0.6rem;
     width: 6px;
-    margin-left: 0.6rem;
-    border-radius: 3px;
+    min-height: 1px;
+    cursor: pointer;
+  }
+  .band:first-child {
+    border-radius: 3px 3px 0 0;
+  }
+  .band:hover {
+    left: calc(0.6rem - 2px);
+    width: 10px;
+    border-radius: 2px;
+  }
+  .tick {
+    position: absolute;
+    left: calc(0.6rem + 9px);
+    width: 6px;
+    height: 2px;
+    margin-top: -1px;
+    background: var(--ink-soft);
+    border-radius: 1px;
+    pointer-events: none;
+  }
+  .tick.here {
+    width: 9px;
+    background: var(--gold);
+  }
+  .match-dot {
+    position: absolute;
+    left: 0;
+    width: 7px;
+    height: 7px;
+    margin-top: -3.5px;
+    padding: 0;
+    background: var(--gold);
+    border: 0;
+    border-radius: 50%;
+    cursor: pointer;
+  }
+  .match-dot.current,
+  .match-dot:hover {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--gold) 35%, transparent);
   }
   .notch {
     position: absolute;
-    left: -7px;
+    left: calc(0.6rem - 7px);
     width: 20px;
     height: 3px;
     margin-top: -1.5px;
     background: var(--ink);
     border-radius: 2px;
-    transition: top 0.15s ease-out;
+    /* A wider invisible edge makes the thin notch easy to point at. */
+    border: 4px solid transparent;
+    border-width: 4px 0;
+    background-clip: padding-box;
+    box-sizing: content-box;
+    transform: translateY(-4px);
   }
-  @media (prefers-reduced-motion: reduce) {
-    .notch {
-      transition: none;
-    }
-  }
-  .match-dot {
+  .tip {
     position: absolute;
-    left: -10px;
-    width: 5px;
-    height: 5px;
-    margin-top: -2.5px;
+    right: calc(100% + 0.5rem);
+    z-index: 5;
+    display: grid;
+    gap: 0.15rem;
+    width: 15rem;
+    padding: 0.5rem 0.65rem;
+    transform: translateY(-50%);
+    font-size: 0.88rem;
+    line-height: 1.35;
+    color: var(--surface);
+    background: var(--ink);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px var(--shadow);
+    pointer-events: none;
+  }
+  .tip-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-family: var(--font-display);
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .tip-head span:last-child {
+    font-family: var(--font-mono);
+    font-weight: 400;
+    opacity: 0.8;
+  }
+  .tip-detail {
+    opacity: 0.85;
+  }
+  .tip-text mark {
+    padding: 0 1px;
+    color: var(--ink);
     background: var(--gold);
-    border-radius: 50%;
+    border-radius: 2px;
   }
   .markers {
+    position: relative;
+    min-height: 0;
     margin: 0;
-    padding: 0;
+    padding: 0 0.2rem 0 0;
+    overflow-y: auto;
     list-style: none;
+    overscroll-behavior: contain;
+    mask-image: linear-gradient(#000 calc(100% - 2.5rem), transparent);
+  }
+  .markers li:last-child {
+    padding-bottom: 2rem;
   }
   .markers a {
     display: flex;
@@ -1413,6 +1667,7 @@
   }
   .markers a.here {
     background: color-mix(in srgb, var(--gold) 18%, transparent);
+    box-shadow: inset 3px 0 0 var(--gold);
   }
   .marker-meta {
     display: flex;
@@ -1434,8 +1689,7 @@
     line-clamp: 2;
     -webkit-box-orient: vertical;
   }
-  .timeline-empty,
-  .timeline-note {
+  .timeline-empty {
     margin: 0;
     font-size: 0.82rem;
     line-height: 1.4;
